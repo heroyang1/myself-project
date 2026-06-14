@@ -1,0 +1,309 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.backstage.system.mapper.internalmember.InternalMemberStudyMapper">
+
+    <sql id="SectionTotalSubQuery">
+        select
+            cs.course_id,
+            count(1) as total_section_count
+        from osh_course_section cs
+        where cs.delete_flag = 0
+          and cs.status = 1
+        group by cs.course_id
+    </sql>
+
+    <sql id="CourseLearnProgressAggSubQuery">
+        select
+            lp.user_id,
+            lp.course_id,
+            count(distinct lp.section_id) as learned_section_count,
+            coalesce(section_total.total_section_count, c.sub_count, 0) as total_section_count,
+            round(
+                case
+                    when coalesce(section_total.total_section_count, c.sub_count, 0) > 0
+                        then sum(coalesce(lp.progress, 0)) / coalesce(section_total.total_section_count, c.sub_count, 0)
+                    else 0
+                end,
+                2
+            ) as progress_percent,
+            case
+                when coalesce(section_total.total_section_count, c.sub_count, 0) > 0
+                     and count(distinct case when coalesce(lp.finish_time, null) is not null or coalesce(lp.progress, 0) >= 100 then lp.section_id end) >= coalesce(section_total.total_section_count, c.sub_count, 0)
+                    then 1
+                else 0
+            end as is_completed,
+            min(lp.create_time) as first_learn_time,
+            max(coalesce(lp.finish_time, lp.update_time, lp.create_time)) as last_learn_time,
+            max(case when lp.status = 2 then 1 else 0 end) as has_paused
+        from osh_user_learn_progress lp
+        left join osh_course c
+            on c.id = lp.course_id
+           and c.delete_flag = 0
+        left join (
+            <include refid="SectionTotalSubQuery"/>
+        ) section_total
+            on section_total.course_id = lp.course_id
+        where lp.delete_flag = 0
+        group by lp.user_id, lp.course_id, section_total.total_section_count, c.sub_count
+    </sql>
+
+    <select id="selectPaidMemberStudyOverview" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberStudyOverviewVO">
+        select
+            u.id as userId,
+            u.username as username,
+            u.email as email,
+            u.avatar as avatar,
+            latest.member_type as memberType,
+            case latest.member_type
+                when 'vip' then 'VIP Member'
+                when 'small_class' then 'Small Class Member'
+                else latest.member_type
+            end as memberTypeName,
+            latest.plan_name_snapshot as planName,
+            case
+                when latest.expire_time is not null and latest.expire_time > now() then 1
+                else 0
+            end as memberActive,
+            date_format(latest.expire_time, '%Y-%m-%d %H:%i:%s') as memberExpireTime,
+            coalesce(course_total.total_course_count, 0) as totalCourseCount,
+            coalesce(progress_summary.started_course_count, 0) as startedCourseCount,
+            coalesce(progress_summary.completed_course_count, 0) as completedCourseCount,
+            case
+                when coalesce(course_total.total_course_count, 0) > 0
+                    then round(coalesce(progress_summary.total_progress_percent, 0) / course_total.total_course_count, 2)
+                else 0.00
+            end as overallProgress,
+            case
+                when coalesce(course_total.total_course_count, 0) > 0
+                    then round(coalesce(progress_summary.started_course_count, 0) * 100.00 / course_total.total_course_count, 2)
+                else 0.00
+            end as startRate,
+            case
+                when coalesce(course_total.total_course_count, 0) > 0
+                    then round(coalesce(progress_summary.completed_course_count, 0) * 100.00 / course_total.total_course_count, 2)
+                else 0.00
+            end as completionRate,
+            date_format(progress_summary.last_learn_time, '%Y-%m-%d %H:%i:%s') as lastLearnTime
+        from osh_user u
+        inner join (
+            select mo.user_id,
+                   mo.member_type,
+                   mo.plan_name_snapshot,
+                   mo.expire_time
+            from osh_member_order mo
+            inner join (
+                select user_id, max(id) as max_id
+                from osh_member_order
+                where pay_status = 1
+                  and delete_flag = 0
+                group by user_id
+            ) latest_order on latest_order.max_id = mo.id
+        ) latest on latest.user_id = u.id
+        left join (
+            select t.user_id, count(distinct t.course_id) as total_course_count
+            from (
+                select ocb.user_id, ocb.course_id
+                from osh_course_buy ocb
+                where ocb.pay_status = 'paid'
+                  and ocb.delete_flag = 0
+                union all
+                select agg.user_id, agg.course_id
+                from (
+                    <include refid="CourseLearnProgressAggSubQuery"/>
+                ) agg
+            ) t
+            group by t.user_id
+        ) course_total on course_total.user_id = u.id
+        left join (
+            select
+                agg.user_id,
+                count(1) as started_course_count,
+                sum(coalesce(agg.progress_percent, 0)) as total_progress_percent,
+                sum(case when coalesce(agg.is_completed, 0) = 1 then 1 else 0 end) as completed_course_count,
+                max(agg.last_learn_time) as last_learn_time
+            from (
+                <include refid="CourseLearnProgressAggSubQuery"/>
+            ) agg
+            group by agg.user_id
+        ) progress_summary on progress_summary.user_id = u.id
+        where u.delete_flag = 0
+        <if test="query != null and query.keyword != null and query.keyword != ''">
+            and (u.username like concat('%', #{query.keyword}, '%')
+                or u.email like concat('%', #{query.keyword}, '%'))
+        </if>
+        <if test="query != null and query.memberType != null and query.memberType != ''">
+            and latest.member_type = #{query.memberType}
+        </if>
+        <if test="query != null and query.activeOnly != null and query.activeOnly">
+            and latest.expire_time is not null
+            and latest.expire_time > now()
+        </if>
+        order by
+            case when latest.expire_time is not null and latest.expire_time > now() then 1 else 0 end desc,
+            progress_summary.last_learn_time desc,
+            latest.expire_time desc,
+            u.id desc
+    </select>
+
+    <select id="selectMemberStudySummary" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberStudySummaryVO">
+        select
+            u.id as userId,
+            u.username as username,
+            u.email as email,
+            u.avatar as avatar,
+            latest.member_type as memberType,
+            case latest.member_type
+                when 'vip' then 'VIP Member'
+                when 'small_class' then 'Small Class Member'
+                else latest.member_type
+            end as memberTypeName,
+            latest.plan_name_snapshot as planName,
+            case
+                when latest.expire_time is not null and latest.expire_time > now() then 1
+                else 0
+            end as memberActive,
+            date_format(latest.expire_time, '%Y-%m-%d %H:%i:%s') as memberExpireTime,
+            coalesce(course_total.total_course_count, 0) as totalCourseCount,
+            coalesce(progress_summary.started_course_count, 0) as startedCourseCount,
+            coalesce(progress_summary.completed_course_count, 0) as completedCourseCount,
+            greatest(coalesce(course_total.total_course_count, 0) - coalesce(progress_summary.started_course_count, 0), 0) as unstartedCourseCount,
+            case
+                when coalesce(course_total.total_course_count, 0) > 0
+                    then round(coalesce(progress_summary.total_progress_percent, 0) / course_total.total_course_count, 2)
+                else 0.00
+            end as overallProgress,
+            case
+                when coalesce(course_total.total_course_count, 0) > 0
+                    then round(coalesce(progress_summary.started_course_count, 0) * 100.00 / course_total.total_course_count, 2)
+                else 0.00
+            end as startRate,
+            case
+                when coalesce(course_total.total_course_count, 0) > 0
+                    then round(coalesce(progress_summary.completed_course_count, 0) * 100.00 / course_total.total_course_count, 2)
+                else 0.00
+            end as completionRate,
+            date_format(progress_summary.first_learn_time, '%Y-%m-%d %H:%i:%s') as firstLearnTime,
+            date_format(progress_summary.last_learn_time, '%Y-%m-%d %H:%i:%s') as lastLearnTime
+        from osh_user u
+        inner join (
+            select mo.user_id,
+                   mo.member_type,
+                   mo.plan_name_snapshot,
+                   mo.expire_time
+            from osh_member_order mo
+            inner join (
+                select user_id, max(id) as max_id
+                from osh_member_order
+                where pay_status = 1
+                  and delete_flag = 0
+                group by user_id
+            ) latest_order on latest_order.max_id = mo.id
+        ) latest on latest.user_id = u.id
+        left join (
+            select t.user_id, count(distinct t.course_id) as total_course_count
+            from (
+                select ocb.user_id, ocb.course_id
+                from osh_course_buy ocb
+                where ocb.pay_status = 'paid'
+                  and ocb.delete_flag = 0
+                union all
+                select agg.user_id, agg.course_id
+                from (
+                    <include refid="CourseLearnProgressAggSubQuery"/>
+                ) agg
+            ) t
+            group by t.user_id
+        ) course_total on course_total.user_id = u.id
+        left join (
+            select
+                agg.user_id,
+                count(1) as started_course_count,
+                sum(coalesce(agg.progress_percent, 0)) as total_progress_percent,
+                sum(case when coalesce(agg.is_completed, 0) = 1 then 1 else 0 end) as completed_course_count,
+                min(agg.first_learn_time) as first_learn_time,
+                max(agg.last_learn_time) as last_learn_time
+            from (
+                <include refid="CourseLearnProgressAggSubQuery"/>
+            ) agg
+            group by agg.user_id
+        ) progress_summary on progress_summary.user_id = u.id
+        where u.delete_flag = 0
+          and u.id = #{userId}
+        limit 1
+    </select>
+
+    <select id="selectMemberCourseProgressList" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberCourseProgressVO">
+        select
+            c.id as courseId,
+            c.title as courseTitle,
+            c.cover as courseCover,
+            case when bought.course_id is not null then 1 else 0 end as purchasedFlag,
+            case when p.course_id is not null then 1 else 0 end as startedFlag,
+            coalesce(p.learned_section_count, 0) as learnedSectionCount,
+            coalesce(p.total_section_count, 0) as totalSectionCount,
+            coalesce(p.progress_percent, 0.00) as progressPercent,
+            coalesce(p.is_completed, 0) as completedFlag,
+            case
+                when coalesce(p.is_completed, 0) = 1 then 3
+                when coalesce(p.has_paused, 0) = 1 then 2
+                when p.course_id is not null then 1
+                else 0
+            end as progressStatus,
+            case
+                when coalesce(p.is_completed, 0) = 1 then 'Completed'
+                when coalesce(p.has_paused, 0) = 1 then 'Paused'
+                when p.course_id is not null then 'Learning'
+                else 'Not Started'
+            end as progressStatusName,
+            date_format(bought.purchase_time, '%Y-%m-%d %H:%i:%s') as purchaseTime,
+            date_format(p.first_learn_time, '%Y-%m-%d %H:%i:%s') as startLearnTime,
+            date_format(p.last_learn_time, '%Y-%m-%d %H:%i:%s') as lastLearnTime
+        from (
+            select base.course_id,
+                   min(base.purchase_time) as purchase_time
+            from (
+                select ocb.course_id, ocb.pay_time as purchase_time
+                from osh_course_buy ocb
+                where ocb.user_id = #{userId}
+                  and ocb.pay_status = 'paid'
+                  and ocb.delete_flag = 0
+                union all
+                select lp.course_id, min(lp.create_time) as purchase_time
+                from osh_user_learn_progress lp
+                where lp.user_id = #{userId}
+                  and lp.delete_flag = 0
+                group by lp.course_id
+            ) base
+            group by base.course_id
+        ) bought
+        inner join osh_course c
+            on c.id = bought.course_id
+           and c.delete_flag = 0
+        left join (
+            select agg.*
+            from (
+                <include refid="CourseLearnProgressAggSubQuery"/>
+            ) agg
+            where agg.user_id = #{userId}
+        ) p
+            on p.course_id = bought.course_id
+        where 1 = 1
+        <if test="query == null or query.includeUnstarted == null or !query.includeUnstarted">
+            and p.course_id is not null
+        </if>
+        <if test="query != null and query.keyword != null and query.keyword != ''">
+            and c.title like concat('%', #{query.keyword}, '%')
+        </if>
+        order by coalesce(p.last_learn_time, bought.purchase_time) desc, c.id desc
+    </select>
+
+    <select id="countPaidMemberByUserId" resultType="int">
+        select count(1)
+        from osh_member_order
+        where user_id = #{userId}
+          and pay_status = 1
+          and delete_flag = 0
+    </select>
+</mapper>

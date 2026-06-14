@@ -1,0 +1,424 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.backstage.system.mapper.internalmember.InternalMemberMapper">
+
+    <select id="selectPaidMemberStudyOverview" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberStudyOverviewVO">
+        select
+            u.id as userId,
+            u.username as username,
+            u.email as email,
+            u.avatar as avatar,
+            latest.member_type as memberType,
+            case latest.member_type
+                when 'vip' then 'VIP Member'
+                when 'small_class' then 'Small Class Member'
+                else latest.member_type
+            end as memberTypeName,
+            latest.plan_name_snapshot as planName,
+            case
+                when latest.expire_time is not null and latest.expire_time > now() then 1
+                else 0
+            end as memberActive,
+            date_format(latest.expire_time, '%Y-%m-%d %H:%i:%s') as memberExpireTime,
+            coalesce(course_total.total_course_count, 0) as totalCourseCount,
+            coalesce(progress_summary.started_course_count, 0) as startedCourseCount,
+            coalesce(progress_summary.completed_course_count, 0) as completedCourseCount,
+            case
+                when coalesce(course_total.total_course_count, 0) > 0
+                    then round(coalesce(progress_summary.total_progress_percent, 0) / course_total.total_course_count, 2)
+                else 0.00
+            end as overallProgress,
+            case
+                when coalesce(course_total.total_course_count, 0) > 0
+                    then round(coalesce(progress_summary.started_course_count, 0) * 100.00 / course_total.total_course_count, 2)
+                else 0.00
+            end as startRate,
+            case
+                when coalesce(course_total.total_course_count, 0) > 0
+                    then round(coalesce(progress_summary.completed_course_count, 0) * 100.00 / course_total.total_course_count, 2)
+                else 0.00
+            end as completionRate,
+            date_format(progress_summary.last_learn_time, '%Y-%m-%d %H:%i:%s') as lastLearnTime
+        from osh_user u
+        inner join (
+            select mo.user_id,
+                   mo.member_type,
+                   mo.plan_name_snapshot,
+                   mo.expire_time
+            from osh_member_order mo
+            inner join (
+                select user_id, max(id) as max_id
+                from osh_member_order
+                where pay_status = 1
+                  and delete_flag = 0
+                group by user_id
+            ) latest_order on latest_order.max_id = mo.id
+        ) latest on latest.user_id = u.id
+        left join (
+            select t.user_id, count(distinct t.course_id) as total_course_count
+            from (
+                select ocb.user_id, ocb.course_id
+                from osh_course_buy ocb
+                where ocb.pay_status = 'paid'
+                  and ocb.delete_flag = 0
+                union all
+                select oucp.user_id, oucp.course_id
+                from osh_user_course_progress oucp
+                where oucp.delete_flag = 0
+            ) t
+            group by t.user_id
+        ) course_total on course_total.user_id = u.id
+        left join (
+            select user_id,
+                   count(distinct course_id) as started_course_count,
+                   sum(coalesce(progress_percent, 0)) as total_progress_percent,
+                   sum(case when coalesce(is_completed, 0) = 1 then 1 else 0 end) as completed_course_count,
+                   max(last_learn_time) as last_learn_time
+            from osh_user_course_progress
+            where delete_flag = 0
+            group by user_id
+        ) progress_summary on progress_summary.user_id = u.id
+        where u.delete_flag = 0
+        <if test="query != null and query.keyword != null and query.keyword != ''">
+            and (u.username like concat('%', #{query.keyword}, '%')
+                or u.email like concat('%', #{query.keyword}, '%'))
+        </if>
+        <if test="query != null and query.memberType != null and query.memberType != ''">
+            and latest.member_type = #{query.memberType}
+        </if>
+        <if test="query != null and query.activeOnly != null and query.activeOnly">
+            and latest.expire_time is not null
+            and latest.expire_time > now()
+        </if>
+        order by
+            case when latest.expire_time is not null and latest.expire_time > now() then 1 else 0 end desc,
+            progress_summary.last_learn_time desc,
+            latest.expire_time desc,
+            u.id desc
+    </select>
+
+    <select id="selectMemberStudySummary" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberStudySummaryVO">
+        select
+            u.id as userId,
+            u.username as username,
+            u.email as email,
+            u.avatar as avatar,
+            latest.member_type as memberType,
+            case latest.member_type
+                when 'vip' then 'VIP Member'
+                when 'small_class' then 'Small Class Member'
+                else latest.member_type
+            end as memberTypeName,
+            latest.plan_name_snapshot as planName,
+            case
+                when latest.expire_time is not null and latest.expire_time > now() then 1
+                else 0
+            end as memberActive,
+            date_format(latest.expire_time, '%Y-%m-%d %H:%i:%s') as memberExpireTime,
+            coalesce(course_total.total_course_count, 0) as totalCourseCount,
+            coalesce(progress_summary.started_course_count, 0) as startedCourseCount,
+            coalesce(progress_summary.completed_course_count, 0) as completedCourseCount,
+            greatest(coalesce(course_total.total_course_count, 0) - coalesce(progress_summary.started_course_count, 0), 0) as unstartedCourseCount,
+            case
+                when coalesce(course_total.total_course_count, 0) > 0
+                    then round(coalesce(progress_summary.total_progress_percent, 0) / course_total.total_course_count, 2)
+                else 0.00
+            end as overallProgress,
+            case
+                when coalesce(course_total.total_course_count, 0) > 0
+                    then round(coalesce(progress_summary.started_course_count, 0) * 100.00 / course_total.total_course_count, 2)
+                else 0.00
+            end as startRate,
+            case
+                when coalesce(course_total.total_course_count, 0) > 0
+                    then round(coalesce(progress_summary.completed_course_count, 0) * 100.00 / course_total.total_course_count, 2)
+                else 0.00
+            end as completionRate,
+            date_format(progress_summary.first_learn_time, '%Y-%m-%d %H:%i:%s') as firstLearnTime,
+            date_format(progress_summary.last_learn_time, '%Y-%m-%d %H:%i:%s') as lastLearnTime
+        from osh_user u
+        inner join (
+            select mo.user_id,
+                   mo.member_type,
+                   mo.plan_name_snapshot,
+                   mo.expire_time
+            from osh_member_order mo
+            inner join (
+                select user_id, max(id) as max_id
+                from osh_member_order
+                where pay_status = 1
+                  and delete_flag = 0
+                group by user_id
+            ) latest_order on latest_order.max_id = mo.id
+        ) latest on latest.user_id = u.id
+        left join (
+            select t.user_id, count(distinct t.course_id) as total_course_count
+            from (
+                select ocb.user_id, ocb.course_id
+                from osh_course_buy ocb
+                where ocb.pay_status = 'paid'
+                  and ocb.delete_flag = 0
+                union all
+                select oucp.user_id, oucp.course_id
+                from osh_user_course_progress oucp
+                where oucp.delete_flag = 0
+            ) t
+            group by t.user_id
+        ) course_total on course_total.user_id = u.id
+        left join (
+            select user_id,
+                   count(distinct course_id) as started_course_count,
+                   sum(coalesce(progress_percent, 0)) as total_progress_percent,
+                   sum(case when coalesce(is_completed, 0) = 1 then 1 else 0 end) as completed_course_count,
+                   min(create_time) as first_learn_time,
+                   max(last_learn_time) as last_learn_time
+            from osh_user_course_progress
+            where delete_flag = 0
+            group by user_id
+        ) progress_summary on progress_summary.user_id = u.id
+        where u.delete_flag = 0
+          and u.id = #{userId}
+        limit 1
+    </select>
+
+    <select id="selectMemberCourseProgressList" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberCourseProgressVO">
+        select
+            c.id as courseId,
+            c.title as courseTitle,
+            c.cover as courseCover,
+            case when bought.course_id is not null then 1 else 0 end as purchasedFlag,
+            case when p.course_id is not null then 1 else 0 end as startedFlag,
+            coalesce(p.learned_section_count, 0) as learnedSectionCount,
+            coalesce(p.total_section_count, 0) as totalSectionCount,
+            coalesce(p.progress_percent, 0.00) as progressPercent,
+            coalesce(p.is_completed, 0) as completedFlag,
+            case
+                when coalesce(p.is_completed, 0) = 1 then 3
+                when coalesce(section_status.has_paused, 0) = 1 then 2
+                when p.course_id is not null then 1
+                else 0
+            end as progressStatus,
+            case
+                when coalesce(p.is_completed, 0) = 1 then 'Completed'
+                when coalesce(section_status.has_paused, 0) = 1 then 'Paused'
+                when p.course_id is not null then 'Learning'
+                else 'Not Started'
+            end as progressStatusName,
+            date_format(bought.purchase_time, '%Y-%m-%d %H:%i:%s') as purchaseTime,
+            date_format(p.create_time, '%Y-%m-%d %H:%i:%s') as startLearnTime,
+            date_format(p.last_learn_time, '%Y-%m-%d %H:%i:%s') as lastLearnTime
+        from (
+            select base.course_id,
+                   min(base.purchase_time) as purchase_time
+            from (
+                select ocb.course_id, ocb.pay_time as purchase_time
+                from osh_course_buy ocb
+                where ocb.user_id = #{userId}
+                  and ocb.pay_status = 'paid'
+                  and ocb.delete_flag = 0
+                union all
+                select oucp.course_id, oucp.create_time as purchase_time
+                from osh_user_course_progress oucp
+                where oucp.user_id = #{userId}
+                  and oucp.delete_flag = 0
+            ) base
+            group by base.course_id
+        ) bought
+        inner join osh_course c on c.id = bought.course_id and c.delete_flag = 0
+        left join osh_user_course_progress p
+            on p.user_id = #{userId}
+           and p.course_id = bought.course_id
+           and p.delete_flag = 0
+        left join (
+            select user_id,
+                   course_id,
+                   max(case when status = 2 then 1 else 0 end) as has_paused
+            from osh_user_learn_progress
+            where user_id = #{userId}
+              and delete_flag = 0
+            group by user_id, course_id
+        ) section_status
+            on section_status.user_id = #{userId}
+           and section_status.course_id = bought.course_id
+        where 1 = 1
+        <if test="query == null or query.includeUnstarted == null or !query.includeUnstarted">
+            and p.course_id is not null
+        </if>
+        <if test="query != null and query.keyword != null and query.keyword != ''">
+            and c.title like concat('%', #{query.keyword}, '%')
+        </if>
+        order by coalesce(p.last_learn_time, bought.purchase_time) desc, c.id desc
+    </select>
+
+    <select id="selectEmploymentProfileByUserId" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentProfileVO">
+        select
+            p.user_id as userId,
+            p.job_status as jobStatus,
+            p.job_status_name as jobStatusName,
+            p.company_name as companyName,
+            p.position_name as positionName,
+            p.city as city,
+            p.salary_before as salaryBefore,
+            p.salary_after as salaryAfter,
+            p.target_salary as targetSalary,
+            case
+                when p.salary_before is not null and p.salary_after is not null
+                    then round(p.salary_after - p.salary_before, 2)
+                else null
+            end as salaryIncrease,
+            date_format(p.entry_time, '%Y-%m-%d %H:%i:%s') as entryTime,
+            p.case_eligible as caseEligible,
+            p.remark as remark,
+            p.update_by as updateBy,
+            date_format(p.update_time, '%Y-%m-%d %H:%i:%s') as updateTime
+        from osh_internal_member_employment_profile p
+        where p.user_id = #{userId}
+          and p.delete_flag = 0
+        limit 1
+    </select>
+
+    <insert id="insertEmploymentProfile">
+        insert into osh_internal_member_employment_profile (
+            user_id, job_status, job_status_name, company_name, position_name, city,
+            salary_before, salary_after, target_salary, entry_time, case_eligible, remark,
+            create_by, create_time, update_by, update_time, delete_flag
+        ) values (
+            #{userId}, #{dto.jobStatus}, #{dto.jobStatusName}, #{dto.companyName}, #{dto.positionName}, #{dto.city},
+            #{dto.salaryBefore}, #{dto.salaryAfter}, #{dto.targetSalary}, str_to_date(#{dto.entryTime}, '%Y-%m-%d %H:%i:%s'),
+            #{dto.caseEligible}, #{dto.remark}, #{operatorId}, now(), #{operatorId}, now(), 0
+        )
+    </insert>
+
+    <update id="updateEmploymentProfile">
+        update osh_internal_member_employment_profile
+        set job_status = #{dto.jobStatus},
+            job_status_name = #{dto.jobStatusName},
+            company_name = #{dto.companyName},
+            position_name = #{dto.positionName},
+            city = #{dto.city},
+            salary_before = #{dto.salaryBefore},
+            salary_after = #{dto.salaryAfter},
+            target_salary = #{dto.targetSalary},
+            entry_time = str_to_date(#{dto.entryTime}, '%Y-%m-%d %H:%i:%s'),
+            case_eligible = #{dto.caseEligible},
+            remark = #{dto.remark},
+            update_by = #{operatorId},
+            update_time = now()
+        where user_id = #{userId}
+          and delete_flag = 0
+    </update>
+
+    <select id="selectFollowRecordListByUserId" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberFollowRecordVO">
+        select
+            r.id as id,
+            r.user_id as userId,
+            r.follow_type as followType,
+            r.content as content,
+            r.operator_id as operatorId,
+            u.username as operatorName,
+            date_format(r.next_follow_time, '%Y-%m-%d %H:%i:%s') as nextFollowTime,
+            date_format(r.create_time, '%Y-%m-%d %H:%i:%s') as createTime
+        from osh_internal_member_follow_record r
+        left join osh_user u on u.id = r.operator_id
+        where r.user_id = #{userId}
+          and r.delete_flag = 0
+        order by r.create_time desc, r.id desc
+    </select>
+
+    <insert id="insertFollowRecord">
+        insert into osh_internal_member_follow_record (
+            user_id, follow_type, content, next_follow_time, operator_id, create_time, update_time, delete_flag
+        ) values (
+            #{userId}, #{followType}, #{content}, str_to_date(#{nextFollowTime}, '%Y-%m-%d %H:%i:%s'),
+            #{operatorId}, now(), now(), 0
+        )
+    </insert>
+
+    <select id="selectOutcomeList" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberOutcomeVO">
+        select
+            u.id as userId,
+            u.username as username,
+            u.email as email,
+            u.avatar as avatar,
+            latest.member_type as memberType,
+            case latest.member_type
+                when 'vip' then 'VIP Member'
+                when 'small_class' then 'Small Class Member'
+                else latest.member_type
+            end as memberTypeName,
+            p.job_status as jobStatus,
+            p.job_status_name as jobStatusName,
+            p.company_name as companyName,
+            p.position_name as positionName,
+            p.city as city,
+            p.salary_before as salaryBefore,
+            p.salary_after as salaryAfter,
+            p.target_salary as targetSalary,
+            case
+                when p.salary_before is not null and p.salary_after is not null
+                    then round(p.salary_after - p.salary_before, 2)
+                else null
+            end as salaryIncrease,
+            date_format(p.entry_time, '%Y-%m-%d %H:%i:%s') as entryTime,
+            p.case_eligible as caseEligible,
+            date_format(follow_summary.last_follow_time, '%Y-%m-%d %H:%i:%s') as lastFollowTime,
+            date_format(follow_summary.next_follow_time, '%Y-%m-%d %H:%i:%s') as nextFollowTime
+        from osh_user u
+        inner join (
+            select mo.user_id,
+                   mo.member_type,
+                   mo.expire_time
+            from osh_member_order mo
+            inner join (
+                select user_id, max(id) as max_id
+                from osh_member_order
+                where pay_status = 1
+                  and delete_flag = 0
+                group by user_id
+            ) latest_order on latest_order.max_id = mo.id
+        ) latest on latest.user_id = u.id
+        left join osh_internal_member_employment_profile p
+            on p.user_id = u.id
+           and p.delete_flag = 0
+        left join (
+            select user_id,
+                   max(create_time) as last_follow_time,
+                   max(next_follow_time) as next_follow_time
+            from osh_internal_member_follow_record
+            where delete_flag = 0
+            group by user_id
+        ) follow_summary on follow_summary.user_id = u.id
+        where u.delete_flag = 0
+        <if test="query != null and query.keyword != null and query.keyword != ''">
+            and (u.username like concat('%', #{query.keyword}, '%')
+                or u.email like concat('%', #{query.keyword}, '%')
+                or p.company_name like concat('%', #{query.keyword}, '%')
+                or p.position_name like concat('%', #{query.keyword}, '%'))
+        </if>
+        <if test="query != null and query.jobStatus != null">
+            and p.job_status = #{query.jobStatus}
+        </if>
+        <if test="query != null and query.minSalaryIncrease != null">
+            and p.salary_before is not null
+            and p.salary_after is not null
+            and (p.salary_after - p.salary_before) &gt;= #{query.minSalaryIncrease}
+        </if>
+        <if test="query != null and query.caseEligible != null">
+            and p.case_eligible = #{query.caseEligible}
+        </if>
+        order by
+            case when p.case_eligible = 1 then 1 else 0 end desc,
+            p.update_time desc,
+            u.id desc
+    </select>
+
+    <select id="countPaidMemberByUserId" resultType="int">
+        select count(1)
+        from osh_member_order
+        where user_id = #{userId}
+          and pay_status = 1
+          and delete_flag = 0
+    </select>
+</mapper>
