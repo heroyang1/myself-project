@@ -11,9 +11,14 @@ import com.backstage.system.domain.internalmember.dto.InternalMemberFollowRecord
 import com.backstage.system.domain.internalmember.dto.InternalMemberOutcomeQueryDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberPageQueryDTO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberCourseProgressVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberExamSummaryVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentProfileVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberFollowRecordVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberInterviewSummaryVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberOutcomeVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberResumeSummaryVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberSalarySummaryVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberStudyAttitudeVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberStudyOverviewVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberStudySummaryVO;
 import com.backstage.system.service.internalmember.IInternalMemberService;
@@ -34,7 +39,7 @@ import org.springframework.web.bind.annotation.RestController;
 import javax.annotation.Resource;
 import java.util.List;
 
-@Api(tags = "内部成员模块-管理后台接口")
+@Api(tags = "Internal Member Admin APIs")
 @RestController
 @RequestMapping("/pc/admin/internal-member")
 public class InternalMemberAdminController extends BaseController {
@@ -43,7 +48,7 @@ public class InternalMemberAdminController extends BaseController {
     @Resource
     private IInternalMemberStudyService internalMemberStudyService;
 
-    @ApiOperation("分页查询付费成员学习总览列表")
+    @ApiOperation("Paid member overview page")
     @PreAuthorize("hasAuthority('internal:member:list')")
     @GetMapping("/page")
     public TableDataInfo page(InternalMemberPageQueryDTO query) {
@@ -53,7 +58,7 @@ public class InternalMemberAdminController extends BaseController {
         return getDataTable(list);
     }
 
-    @ApiOperation("分页查询成员就业结果统计列表")
+    @ApiOperation("Paid member outcome page")
     @PreAuthorize("hasAuthority('internal:member:list')")
     @GetMapping("/outcome/page")
     public TableDataInfo outcomePage(InternalMemberOutcomeQueryDTO query) {
@@ -63,20 +68,20 @@ public class InternalMemberAdminController extends BaseController {
         return getDataTable(list);
     }
 
-    @ApiOperation("查询单个付费成员学习汇总信息")
+    @ApiOperation("Member study summary")
     @PreAuthorize("hasAuthority('internal:member:detail')")
     @GetMapping("/{userId}/summary")
     public R<InternalMemberStudySummaryVO> summary(
-            @ApiParam(value = "付费成员用户ID", required = true) @PathVariable("userId") Long userId) {
+            @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId) {
         ensureAdmin();
         return R.ok(internalMemberStudyService.selectMemberStudySummary(userId));
     }
 
-    @ApiOperation("分页查询单个付费成员课程学习进度明细")
+    @ApiOperation("Member course progress list")
     @PreAuthorize("hasAuthority('internal:member:detail')")
     @GetMapping("/{userId}/courses")
     public TableDataInfo courseDetail(
-            @ApiParam(value = "付费成员用户ID", required = true) @PathVariable("userId") Long userId,
+            @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId,
             InternalMemberCourseDetailQueryDTO query) {
         ensureAdmin();
         startPage();
@@ -84,44 +89,89 @@ public class InternalMemberAdminController extends BaseController {
         return getDataTable(list);
     }
 
-    @ApiOperation("查询成员就业档案详情")
+    @ApiOperation("Employment profile detail")
     @PreAuthorize("hasAuthority('internal:member:detail')")
     @GetMapping("/{userId}/employment-profile")
     public R<InternalMemberEmploymentProfileVO> employmentProfile(
-            @ApiParam(value = "付费成员用户ID", required = true) @PathVariable("userId") Long userId) {
+            @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId) {
         ensureAdmin();
         return R.ok(internalMemberService.selectEmploymentProfile(userId));
     }
 
-    @ApiOperation("新增或更新成员就业档案")
+    @ApiOperation("Create or update employment profile")
     @PreAuthorize("hasAuthority('internal:member:detail')")
     @PutMapping("/{userId}/employment-profile")
     public R<Void> saveEmploymentProfile(
-            @ApiParam(value = "付费成员用户ID", required = true) @PathVariable("userId") Long userId,
+            @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId,
             @RequestBody InternalMemberEmploymentProfileSaveDTO dto) {
         ensureAdmin();
         internalMemberService.saveEmploymentProfile(userId, dto, currentOperatorId());
         return R.ok();
     }
 
-    @ApiOperation("查询成员跟进记录列表")
+    @ApiOperation("Follow records")
     @PreAuthorize("hasAuthority('internal:member:detail')")
     @GetMapping("/{userId}/follow-records")
     public R<List<InternalMemberFollowRecordVO>> followRecords(
-            @ApiParam(value = "付费成员用户ID", required = true) @PathVariable("userId") Long userId) {
+            @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId) {
         ensureAdmin();
         return R.ok(internalMemberService.selectFollowRecordList(userId));
     }
 
-    @ApiOperation("新增成员跟进记录")
+    @ApiOperation("Add follow record")
     @PreAuthorize("hasAuthority('internal:member:detail')")
     @PostMapping("/{userId}/follow-records")
     public R<Void> addFollowRecord(
-            @ApiParam(value = "付费成员用户ID", required = true) @PathVariable("userId") Long userId,
+            @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId,
             @RequestBody InternalMemberFollowRecordSaveDTO dto) {
         ensureAdmin();
         internalMemberService.addFollowRecord(userId, dto, currentOperatorId());
         return R.ok();
+    }
+
+    @ApiOperation("Exam summary")
+    @PreAuthorize("hasAuthority('internal:member:detail')")
+    @GetMapping("/{userId}/exam-summary")
+    public R<InternalMemberExamSummaryVO> examSummary(
+            @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId) {
+        ensureAdmin();
+        return R.ok(internalMemberService.selectExamSummary(userId));
+    }
+
+    @ApiOperation("Study attitude")
+    @PreAuthorize("hasAuthority('internal:member:detail')")
+    @GetMapping("/{userId}/study-attitude")
+    public R<InternalMemberStudyAttitudeVO> studyAttitude(
+            @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId) {
+        ensureAdmin();
+        return R.ok(internalMemberStudyService.selectStudyAttitude(userId));
+    }
+
+    @ApiOperation("Salary summary")
+    @PreAuthorize("hasAuthority('internal:member:detail')")
+    @GetMapping("/{userId}/salary-summary")
+    public R<InternalMemberSalarySummaryVO> salarySummary(
+            @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId) {
+        ensureAdmin();
+        return R.ok(internalMemberService.selectSalarySummary(userId));
+    }
+
+    @ApiOperation("Resume delivery summary")
+    @PreAuthorize("hasAuthority('internal:member:detail')")
+    @GetMapping("/{userId}/resume-summary")
+    public R<InternalMemberResumeSummaryVO> resumeSummary(
+            @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId) {
+        ensureAdmin();
+        return R.ok(internalMemberService.selectResumeSummary(userId));
+    }
+
+    @ApiOperation("Interview summary")
+    @PreAuthorize("hasAuthority('internal:member:detail')")
+    @GetMapping("/{userId}/interview-summary")
+    public R<InternalMemberInterviewSummaryVO> interviewSummary(
+            @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId) {
+        ensureAdmin();
+        return R.ok(internalMemberService.selectInterviewSummary(userId));
     }
 
     private Long currentOperatorId() {

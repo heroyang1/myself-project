@@ -8,9 +8,14 @@ import com.backstage.system.domain.internalmember.dto.InternalMemberFollowRecord
 import com.backstage.system.domain.internalmember.dto.InternalMemberOutcomeQueryDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberPageQueryDTO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberCourseProgressVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberExamItemVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberExamSummaryVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentProfileVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberFollowRecordVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberInterviewSummaryVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberOutcomeVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberResumeSummaryVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberSalarySummaryVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberStudyOverviewVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberStudySummaryVO;
 import com.backstage.system.mapper.internalmember.InternalMemberMapper;
@@ -19,6 +24,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 
 @Service
@@ -52,6 +59,53 @@ public class InternalMemberServiceImpl implements IInternalMemberService {
     public InternalMemberEmploymentProfileVO selectEmploymentProfile(Long userId) {
         ensurePaidMember(userId);
         return internalMemberMapper.selectEmploymentProfileByUserId(userId);
+    }
+
+    @Override
+    public InternalMemberResumeSummaryVO selectResumeSummary(Long userId) {
+        ensurePaidMember(userId);
+        InternalMemberResumeSummaryVO summary = internalMemberMapper.selectResumeSummaryByUserId(userId);
+        if (summary == null) {
+            summary = new InternalMemberResumeSummaryVO();
+            summary.setUserId(userId);
+        }
+        return summary;
+    }
+
+    @Override
+    public InternalMemberInterviewSummaryVO selectInterviewSummary(Long userId) {
+        ensurePaidMember(userId);
+        InternalMemberInterviewSummaryVO summary = internalMemberMapper.selectInterviewSummaryByUserId(userId);
+        if (summary == null) {
+            summary = new InternalMemberInterviewSummaryVO();
+            summary.setUserId(userId);
+        }
+        return summary;
+    }
+
+    @Override
+    public InternalMemberSalarySummaryVO selectSalarySummary(Long userId) {
+        ensurePaidMember(userId);
+        InternalMemberEmploymentProfileVO profile = internalMemberMapper.selectEmploymentProfileByUserId(userId);
+        InternalMemberSalarySummaryVO summary = new InternalMemberSalarySummaryVO();
+        summary.setUserId(userId);
+        if (profile == null) {
+            return summary;
+        }
+        summary.setJobStatus(profile.getJobStatus());
+        summary.setJobStatusName(profile.getJobStatusName());
+        summary.setCompanyName(profile.getCompanyName());
+        summary.setPositionName(profile.getPositionName());
+        summary.setSalaryBefore(profile.getSalaryBefore());
+        summary.setSalaryAfter(profile.getSalaryAfter());
+        summary.setTargetSalary(profile.getTargetSalary());
+        summary.setSalaryIncrease(profile.getSalaryIncrease());
+        summary.setEntryTime(profile.getEntryTime());
+        summary.setCaseEligible(profile.getCaseEligible());
+        summary.setUpdateTime(profile.getUpdateTime());
+        summary.setSalaryIncreaseRate(calculateIncreaseRate(profile.getSalaryBefore(), profile.getSalaryAfter()));
+        summary.setGapToTargetSalary(calculateGapToTarget(profile.getTargetSalary(), profile.getSalaryAfter()));
+        return summary;
     }
 
     @Override
@@ -100,6 +154,40 @@ public class InternalMemberServiceImpl implements IInternalMemberService {
         return internalMemberMapper.selectOutcomeList(query);
     }
 
+    @Override
+    public InternalMemberExamSummaryVO selectExamSummary(Long userId) {
+        ensurePaidMember(userId);
+        List<InternalMemberExamItemVO> exams = internalMemberMapper.selectExamListByUserId(userId);
+        InternalMemberExamSummaryVO summary = new InternalMemberExamSummaryVO();
+        summary.setExams(exams);
+        summary.setReportedCount(exams.size());
+        int passedCount = 0;
+        int failedCount = 0;
+        int pendingReadCount = 0;
+        int inProgressCount = 0;
+        String lastExamTime = null;
+        for (InternalMemberExamItemVO exam : exams) {
+            if (lastExamTime == null) {
+                lastExamTime = exam.getReportTime();
+            }
+            if ("passed".equals(exam.getResult())) {
+                passedCount++;
+            } else if ("failed".equals(exam.getResult())) {
+                failedCount++;
+            } else if ("pending_read".equals(exam.getResult())) {
+                pendingReadCount++;
+            } else if ("in_progress".equals(exam.getResult())) {
+                inProgressCount++;
+            }
+        }
+        summary.setPassedCount(passedCount);
+        summary.setFailedCount(failedCount);
+        summary.setPendingReadCount(pendingReadCount);
+        summary.setInProgressCount(inProgressCount);
+        summary.setLastExamTime(lastExamTime);
+        return summary;
+    }
+
     private void ensurePaidMember(Long userId) {
         if (userId == null) {
             throw new ServiceException("User id cannot be null");
@@ -107,5 +195,21 @@ public class InternalMemberServiceImpl implements IInternalMemberService {
         if (internalMemberMapper.countPaidMemberByUserId(userId) <= 0) {
             throw new ServiceException("The user is not a paid member or has no valid paid record");
         }
+    }
+
+    private BigDecimal calculateIncreaseRate(BigDecimal salaryBefore, BigDecimal salaryAfter) {
+        if (salaryBefore == null || salaryAfter == null || BigDecimal.ZERO.compareTo(salaryBefore) == 0) {
+            return null;
+        }
+        return salaryAfter.subtract(salaryBefore)
+                .multiply(BigDecimal.valueOf(100))
+                .divide(salaryBefore, 2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateGapToTarget(BigDecimal targetSalary, BigDecimal salaryAfter) {
+        if (targetSalary == null || salaryAfter == null) {
+            return null;
+        }
+        return targetSalary.subtract(salaryAfter).setScale(2, RoundingMode.HALF_UP);
     }
 }

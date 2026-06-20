@@ -5,40 +5,64 @@ import io.swagger.annotations.ApiModelProperty;
 
 import java.math.BigDecimal;
 
-@ApiModel("成员就业档案保存参数")
+@ApiModel("Internal member employment profile save request")
 public class InternalMemberEmploymentProfileSaveDTO {
-    @ApiModelProperty("就业状态：0未就业 1求职中 2已就业")
+    @ApiModelProperty("Job status: 0-unemployed 1-looking 2-employed")
     private Integer jobStatus;
 
-    @ApiModelProperty("就业状态名称，如 未就业、求职中、已就业")
+    @ApiModelProperty("Job status display name")
     private String jobStatusName;
 
-    @ApiModelProperty("公司名称")
+    @ApiModelProperty("Company name")
     private String companyName;
 
-    @ApiModelProperty("岗位名称")
+    @ApiModelProperty("Position name")
     private String positionName;
 
-    @ApiModelProperty("所在城市")
+    @ApiModelProperty("City")
     private String city;
 
-    @ApiModelProperty("学习前薪资")
+    @ApiModelProperty("Salary before study")
     private BigDecimal salaryBefore;
 
-    @ApiModelProperty("当前薪资")
+    @ApiModelProperty("Current salary")
     private BigDecimal salaryAfter;
 
-    @ApiModelProperty("目标薪资")
+    @ApiModelProperty("Target salary")
     private BigDecimal targetSalary;
 
-    @ApiModelProperty("入职时间，格式：yyyy-MM-dd HH:mm:ss")
+    @ApiModelProperty("Entry time, format: yyyy-MM-dd HH:mm:ss")
     private String entryTime;
 
-    @ApiModelProperty("是否适合做案例：0否 1是")
+    @ApiModelProperty("Case eligible: 0-no 1-yes")
     private Integer caseEligible;
 
-    @ApiModelProperty("备注")
+    @ApiModelProperty("Remark")
     private String remark;
+
+    @ApiModelProperty("Resume delivery count")
+    private Integer resumeDeliveryCount;
+
+    @ApiModelProperty("Interviewed company count")
+    private Integer interviewCompanyCount;
+
+    @ApiModelProperty("Pending interview company count")
+    private Integer pendingInterviewCount;
+
+    @ApiModelProperty("Completed interview company count")
+    private Integer completedInterviewCount;
+
+    @ApiModelProperty("Interview round count")
+    private Integer interviewRoundCount;
+
+    @ApiModelProperty("Interview status")
+    private String interviewStatus;
+
+    @ApiModelProperty("Interview result")
+    private String interviewResult;
+
+    @ApiModelProperty("Last interview time, format: yyyy-MM-dd HH:mm:ss")
+    private String lastInterviewTime;
 
     public Integer getJobStatus() {
         return jobStatus;
@@ -126,5 +150,69 @@ public class InternalMemberEmploymentProfileSaveDTO {
 
     public void setRemark(String remark) {
         this.remark = remark;
+    }
+
+    public Integer getResumeDeliveryCount() {
+        return resumeDeliveryCount;
+    }
+
+    public void setResumeDeliveryCount(Integer resumeDeliveryCount) {
+        this.resumeDeliveryCount = resumeDeliveryCount;
+    }
+
+    public Integer getInterviewCompanyCount() {
+        return interviewCompanyCount;
+    }
+
+    public void setInterviewCompanyCount(Integer interviewCompanyCount) {
+        this.interviewCompanyCount = interviewCompanyCount;
+    }
+
+    public Integer getPendingInterviewCount() {
+        return pendingInterviewCount;
+    }
+
+    public void setPendingInterviewCount(Integer pendingInterviewCount) {
+        this.pendingInterviewCount = pendingInterviewCount;
+    }
+
+    public Integer getCompletedInterviewCount() {
+        return completedInterviewCount;
+    }
+
+    public void setCompletedInterviewCount(Integer completedInterviewCount) {
+        this.completedInterviewCount = completedInterviewCount;
+    }
+
+    public Integer getInterviewRoundCount() {
+        return interviewRoundCount;
+    }
+
+    public void setInterviewRoundCount(Integer interviewRoundCount) {
+        this.interviewRoundCount = interviewRoundCount;
+    }
+
+    public String getInterviewStatus() {
+        return interviewStatus;
+    }
+
+    public void setInterviewStatus(String interviewStatus) {
+        this.interviewStatus = interviewStatus;
+    }
+
+    public String getInterviewResult() {
+        return interviewResult;
+    }
+
+    public void setInterviewResult(String interviewResult) {
+        this.interviewResult = interviewResult;
+    }
+
+    public String getLastInterviewTime() {
+        return lastInterviewTime;
+    }
+
+    public void setLastInterviewTime(String lastInterviewTime) {
+        this.lastInterviewTime = lastInterviewTime;
     }
 }

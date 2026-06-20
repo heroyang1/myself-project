@@ -271,7 +271,43 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             date_format(p.entry_time, '%Y-%m-%d %H:%i:%s') as entryTime,
             p.case_eligible as caseEligible,
             p.remark as remark,
+            p.resume_delivery_count as resumeDeliveryCount,
+            p.interview_company_count as interviewCompanyCount,
+            p.pending_interview_count as pendingInterviewCount,
+            p.completed_interview_count as completedInterviewCount,
+            p.interview_round_count as interviewRoundCount,
+            p.interview_status as interviewStatus,
+            p.interview_result as interviewResult,
+            date_format(p.last_interview_time, '%Y-%m-%d %H:%i:%s') as lastInterviewTime,
             p.update_by as updateBy,
+            date_format(p.update_time, '%Y-%m-%d %H:%i:%s') as updateTime
+        from osh_internal_member_employment_profile p
+        where p.user_id = #{userId}
+          and p.delete_flag = 0
+        limit 1
+    </select>
+
+    <select id="selectResumeSummaryByUserId" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberResumeSummaryVO">
+        select
+            p.user_id as userId,
+            p.resume_delivery_count as resumeDeliveryCount,
+            date_format(p.update_time, '%Y-%m-%d %H:%i:%s') as updateTime
+        from osh_internal_member_employment_profile p
+        where p.user_id = #{userId}
+          and p.delete_flag = 0
+        limit 1
+    </select>
+
+    <select id="selectInterviewSummaryByUserId" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberInterviewSummaryVO">
+        select
+            p.user_id as userId,
+            p.interview_company_count as interviewCompanyCount,
+            p.pending_interview_count as pendingInterviewCount,
+            p.completed_interview_count as completedInterviewCount,
+            p.interview_round_count as interviewRoundCount,
+            p.interview_status as interviewStatus,
+            p.interview_result as interviewResult,
+            date_format(p.last_interview_time, '%Y-%m-%d %H:%i:%s') as lastInterviewTime,
             date_format(p.update_time, '%Y-%m-%d %H:%i:%s') as updateTime
         from osh_internal_member_employment_profile p
         where p.user_id = #{userId}
@@ -283,11 +319,16 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         insert into osh_internal_member_employment_profile (
             user_id, job_status, job_status_name, company_name, position_name, city,
             salary_before, salary_after, target_salary, entry_time, case_eligible, remark,
+            resume_delivery_count, interview_company_count, pending_interview_count, completed_interview_count,
+            interview_round_count, interview_status, interview_result, last_interview_time,
             create_by, create_time, update_by, update_time, delete_flag
         ) values (
             #{userId}, #{dto.jobStatus}, #{dto.jobStatusName}, #{dto.companyName}, #{dto.positionName}, #{dto.city},
             #{dto.salaryBefore}, #{dto.salaryAfter}, #{dto.targetSalary}, str_to_date(#{dto.entryTime}, '%Y-%m-%d %H:%i:%s'),
-            #{dto.caseEligible}, #{dto.remark}, #{operatorId}, now(), #{operatorId}, now(), 0
+            #{dto.caseEligible}, #{dto.remark}, #{dto.resumeDeliveryCount}, #{dto.interviewCompanyCount},
+            #{dto.pendingInterviewCount}, #{dto.completedInterviewCount}, #{dto.interviewRoundCount},
+            #{dto.interviewStatus}, #{dto.interviewResult}, str_to_date(#{dto.lastInterviewTime}, '%Y-%m-%d %H:%i:%s'),
+            #{operatorId}, now(), #{operatorId}, now(), 0
         )
     </insert>
 
@@ -304,6 +345,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             entry_time = str_to_date(#{dto.entryTime}, '%Y-%m-%d %H:%i:%s'),
             case_eligible = #{dto.caseEligible},
             remark = #{dto.remark},
+            resume_delivery_count = #{dto.resumeDeliveryCount},
+            interview_company_count = #{dto.interviewCompanyCount},
+            pending_interview_count = #{dto.pendingInterviewCount},
+            completed_interview_count = #{dto.completedInterviewCount},
+            interview_round_count = #{dto.interviewRoundCount},
+            interview_status = #{dto.interviewStatus},
+            interview_result = #{dto.interviewResult},
+            last_interview_time = str_to_date(#{dto.lastInterviewTime}, '%Y-%m-%d %H:%i:%s'),
             update_by = #{operatorId},
             update_time = now()
         where user_id = #{userId}
@@ -412,6 +461,39 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             case when p.case_eligible = 1 then 1 else 0 end desc,
             p.update_time desc,
             u.id desc
+    </select>
+
+    <select id="selectExamListByUserId" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberExamItemVO">
+        select
+            r.id as recordId,
+            r.exam_id as examId,
+            e.title as examTitle,
+            e.resource_type as resourceType,
+            e.resource_id as resourceId,
+            r.score as score,
+            e.total_score as totalScore,
+            e.pass_score as passScore,
+            r.answer_status as answerStatus,
+            r.read_status as readStatus,
+            case
+                when r.answer_status = 0 then 'in_progress'
+                when r.answer_status = 1 and r.read_status = 0 then 'pending_read'
+                when r.answer_status = 1 and e.pass_score is not null and coalesce(r.score, 0) &gt;= e.pass_score then 'passed'
+                else 'failed'
+            end as result,
+            date_format(r.create_time, '%Y-%m-%d %H:%i:%s') as reportTime
+        from osh_user_exam_record r
+        inner join (
+            select exam_id, max(id) as max_id
+            from osh_user_exam_record
+            where user_id = #{userId}
+              and delete_flag = 0
+            group by exam_id
+        ) latest on latest.max_id = r.id
+        left join osh_examination e
+            on e.id = r.exam_id
+           and e.delete_flag = 0
+        order by r.create_time desc, r.id desc
     </select>
 
     <select id="countPaidMemberByUserId" resultType="int">
