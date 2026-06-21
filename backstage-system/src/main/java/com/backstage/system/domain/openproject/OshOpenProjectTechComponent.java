@@ -13,6 +13,7 @@ public class OshOpenProjectTechComponent extends OSHBaseEntity implements Serial
 
     @TableId(type = IdType.AUTO)
     private Long id;
+    private String no;
     private String componentName;
     private String componentCode;
     private String componentDesc;
@@ -21,6 +22,8 @@ public class OshOpenProjectTechComponent extends OSHBaseEntity implements Serial
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
+    public String getNo() { return no; }
+    public void setNo(String no) { this.no = no; }
     public String getComponentName() { return componentName; }
     public void setComponentName(String componentName) { this.componentName = componentName; }
     public String getComponentCode() { return componentCode; }
