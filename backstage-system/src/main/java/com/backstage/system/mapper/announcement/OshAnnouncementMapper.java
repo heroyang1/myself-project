@@ -14,22 +14,48 @@ public interface OshAnnouncementMapper {
     // ==================== 公告跑马灯（按模块查询） ====================
 
     /**
-     * 按模块 + 栏目查询公告跑马灯（status=4 已发布）。
-     * <p>module 由调用方通过 {@code AnnouncementModuleEnum} 传入，不在 SQL 中写死。
-     * 排序口径与秒杀公告一致：sort 倒序 → create_time 倒序。</p>
+     * 按模块 + 栏目查询公告跑马灯。
+     * <p>当前线上 osh_announcement 通过 resource_type 标识模块归属，
+     * 图标字段使用 icon_code，不存在 module / icon / color 字段。</p>
      *
      * @param module  归属模块关键字（见 AnnouncementModuleEnum）
      * @param channel 栏目：1-公告 2-动态
      * @param limit   返回条数上限
      */
-    @Select("SELECT id, title, icon, color, channel, create_time AS createTime " +
+    @Select("SELECT id, title, link, icon_code AS icon, '' AS color, channel, create_time AS createTime " +
             "FROM osh_announcement " +
-            "WHERE delete_flag = 0 AND status = 4 AND module = #{module} AND channel = #{channel} " +
+            "WHERE delete_flag = 0 AND status = 4 AND resource_type = #{module} AND channel = #{channel} " +
             "ORDER BY sort DESC, create_time DESC " +
             "LIMIT #{limit}")
     List<AnnouncementMarqueeVO> selectMarqueeByModuleAndChannel(@Param("module") String module,
                                                                 @Param("channel") int channel,
                                                                 @Param("limit") int limit);
+
+    /**
+     * 插入反馈模块公告。
+     * <p>线上表结构使用 resource_type / icon_code 字段，这里直接按真实结构落库。</p>
+     *
+     * @param title      公告标题
+     * @param link       跳转链接
+     * @param iconCode   图标编码
+     * @param resourceId 反馈 ID
+     * @param sort       排序值
+     * @param operator   操作人
+     * @return 影响行数
+     */
+    @Insert("INSERT INTO osh_announcement " +
+            "(title, link, icon_code, channel, resource_type, resource_id, sort, status, source, source_module, " +
+            " delete_flag, create_by, create_time, update_by, update_time) " +
+            "VALUES " +
+            "(#{title}, #{link}, #{iconCode}, #{channel}, 'feedback', #{resourceId}, #{sort}, 4, 'module', 'feedback', " +
+            " 0, #{operator}, NOW(), #{operator}, NOW())")
+    int insertFeedbackAnnouncement(@Param("title") String title,
+                                   @Param("link") String link,
+                                   @Param("iconCode") String iconCode,
+                                   @Param("channel") int channel,
+                                   @Param("resourceId") Long resourceId,
+                                   @Param("sort") int sort,
+                                   @Param("operator") String operator);
 
     // ==================== 秒杀公告/动态 ====================
 
