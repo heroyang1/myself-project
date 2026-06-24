@@ -10,8 +10,7 @@ import java.util.Date;
  * 公告跑马灯条目通用 VO。
  * <p>
  * 对应统一公告表 osh_announcement 的展示型投影，不绑定具体业务模块，
- * 供任何"跑马灯式公告"场景复用。前端固定渲染为不可点击的纯文本，
- * 因此不下发 link 字段，避免误用为可跳转入口。
+ * 供任何"跑马灯式公告"场景复用。
  *
  * @author backstage
  */
@@ -26,6 +25,9 @@ public class AnnouncementMarqueeVO {
 
     @ApiModelProperty("文案前缀 emoji 图标")
     private String icon;
+
+    @ApiModelProperty("点击跳转链接")
+    private String link;
 
     @ApiModelProperty("圆点 / 文字色调 hex")
     private String color;
@@ -59,6 +61,14 @@ public class AnnouncementMarqueeVO {
 
     public void setIcon(String icon) {
         this.icon = icon;
+    }
+
+    public String getLink() {
+        return link;
+    }
+
+    public void setLink(String link) {
+        this.link = link;
     }
 
     public String getColor() {
