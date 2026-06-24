@@ -14,6 +14,8 @@ import com.backstage.common.utils.StringUtils;
 import com.backstage.system.domain.user.*;
 import com.backstage.system.domain.user.vo.OshUserCardVO;
 import com.backstage.system.domain.user.vo.OshUserLoginVO;
+import com.backstage.system.domain.vo.tool.ToolQuotaCurrentVO;
+import com.backstage.system.mapper.tool.OshToolQuotaMapper;
 import com.backstage.system.mapper.user.*;
 import com.backstage.system.mapper.user.OshUserInvitationMapper;
 import com.backstage.system.request.UserListRequest;
@@ -45,6 +47,7 @@ import java.util.stream.Collectors;
 public class OshUserServiceImpl implements IOshUserService {
     private static final int ASSET_INCOME = 0;
     private static final int ASSET_EXPENSE = 1;
+    private static final int DEFAULT_INIT_TOOL_QUOTA = 10;
     private static final String DEFAULT_ROLE_NAME = "普通用户";
     private static final String DEFAULT_ROLE_CODE = "user";
     private static final String DEFAULT_ROLE_LEVEL = "1";
@@ -67,6 +70,8 @@ public class OshUserServiceImpl implements IOshUserService {
     private OshUserInvitationMapper oshUserInvitationMapper;
     @Autowired
     private UserManageMapper userManageMapper;
+    @Autowired
+    private OshToolQuotaMapper oshToolQuotaMapper;
 
     @Override
     public R<OshUserLoginVO> login(String username, String password) {
@@ -175,6 +180,7 @@ public class OshUserServiceImpl implements IOshUserService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public R<String> registerVerity(String uniqueId) {
         Map<String,String> userMap = redisCache.getCacheObject(OshUserConstants.UNIQUE_ID + uniqueId);
         if(userMap == null) return R.fail("唯一标识错误或已过期");
@@ -195,6 +201,7 @@ public class OshUserServiceImpl implements IOshUserService {
         oshUserAsset.setPoints(188L);
         oshUserAsset.setUserId(oshUser.getId());
         oshUserAssetMapper.insert(oshUserAsset);
+        initUserToolQuotaIfAbsent(oshUser.getId(), oshUser.getUsername());
         // 记录邀请关系
         String inviteCode = userMap.get(OshUserConstants.INVITE_CODE);
         if (StringUtils.isNotEmpty(inviteCode)) {
@@ -212,6 +219,14 @@ public class OshUserServiceImpl implements IOshUserService {
         }
         redisCache.deleteObject(OshUserConstants.UNIQUE_ID + uniqueId);
         return R.ok(ResultCode.SUCCESS.getMsg());
+    }
+
+    private void initUserToolQuotaIfAbsent(Long userId, String operator) {
+        ToolQuotaCurrentVO quota = oshToolQuotaMapper.selectUserQuotaByUserId(userId);
+        if (quota != null) {
+            return;
+        }
+        oshToolQuotaMapper.insertUserQuota(userId, DEFAULT_INIT_TOOL_QUOTA, operator);
     }
 
     /**
