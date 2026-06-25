@@ -248,18 +248,46 @@ public class OshCourseServiceImpl implements IOshCourseService {
 
     @Override
     public String getCourseSectionContent(Long sectionId, Long userId) {
+        return resolveSectionDocContent(sectionId);
+    }
+
+    @Override
+    public String getCourseSectionEditContent(Long sectionId) {
+        return resolveSectionDocContent(sectionId, false);
+    }
+
+    /**
+     * 优先返回小节绑定的主文档内容；无文档时 text 回退 text_content，video 在 allowVideoMediaFallback=true 时回退 media_url。
+     */
+    private String resolveSectionDocContent(Long sectionId) {
+        return resolveSectionDocContent(sectionId, true);
+    }
+
+    private String resolveSectionDocContent(Long sectionId, boolean allowVideoMediaFallback) {
         OshCourseSection section = oshCourseMapper.selectCourseSectionById(sectionId);
         if (section == null || section.getDeleteFlag() == null || section.getDeleteFlag() != CourseSectionConstants.DELETE_FLAG_NORMAL) {
             return "";
         }
-        if (CourseSectionConstants.TYPE_TEXT.equalsIgnoreCase(section.getType())) {
-            String content = oshDocMapper.selectPrimaryDocContentBySectionId(sectionId);
-            return StringUtils.defaultString(content, "");
+        String docContent = oshDocMapper.selectPrimaryDocContentBySectionId(sectionId);
+        if (StringUtils.isNotBlank(docContent)) {
+            return docContent;
         }
-        if (CourseSectionConstants.TYPE_VIDEO.equalsIgnoreCase(section.getType())) {
+        // 与 save 写入 osh_course_section.text_content 同源回退
+        if (StringUtils.isNotBlank(section.getTextContent())) {
+            return section.getTextContent();
+        }
+        if (allowVideoMediaFallback && CourseSectionConstants.TYPE_VIDEO.equalsIgnoreCase(section.getType())) {
             return StringUtils.defaultString(section.getMediaUrl(), "");
         }
         return "";
+    }
+
+    @Override
+    public List<OshCourseSectionVo> getCourseSectionOutlineForEdit(Long courseId) {
+        if (courseId == null) {
+            return new ArrayList<>();
+        }
+        return buildSectionTree(oshCourseMapper.selectCourseSectionList(courseId));
     }
 
     @Override
@@ -656,6 +684,7 @@ public class OshCourseServiceImpl implements IOshCourseService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Long createCourseVideoSection(CourseVideoSectionCreateRequest request, OshUser operator) {
         // 有 id → 更新
         if (request.getId() != null) {
@@ -1216,9 +1245,6 @@ public class OshCourseServiceImpl implements IOshCourseService {
     }
 
     private boolean isBindExistingDocMode(CourseTextSectionCreateRequest request) {
-        if (request.getDocId() != null) {
-            return true;
-        }
         return StringUtils.equalsIgnoreCase(DOC_MODE_BIND_EXISTING, request.getDocMode());
     }
 
@@ -1263,7 +1289,8 @@ public class OshCourseServiceImpl implements IOshCourseService {
         Date now = new Date();
         Long currentDocId = oshDocMapper.selectPrimaryDocIdBySectionId(sectionId);
         boolean bindExisting = isBindExistingDocMode(request);
-        boolean hasTextUpdate = StringUtils.isNotBlank(request.getTextContent()) || StringUtils.isNotBlank(request.getDocTitle());
+        boolean hasContentUpdate = StringUtils.isNotBlank(request.getTextContent());
+        boolean hasTitleUpdate = StringUtils.isNotBlank(request.getDocTitle()) || StringUtils.isNotBlank(request.getTitle());
         String docTitle = StringUtils.defaultIfBlank(request.getDocTitle(), request.getTitle());
         Long docId;
 
@@ -1282,17 +1309,19 @@ public class OshCourseServiceImpl implements IOshCourseService {
 
         if (currentDocId != null) {
             docId = currentDocId;
-            if (hasTextUpdate) {
+            if (hasContentUpdate || hasTitleUpdate) {
                 OshDoc updateDoc = new OshDoc();
                 updateDoc.setId(currentDocId);
                 updateDoc.setTitle(docTitle);
-                updateDoc.setContent(StringUtils.defaultString(request.getTextContent(), ""));
+                if (hasContentUpdate) {
+                    updateDoc.setContent(StringUtils.defaultString(request.getTextContent(), ""));
+                }
                 updateDoc.setContentFormat("html");
                 updateDoc.setUpdateBy(operatorName);
                 updateDoc.setUpdateTime(now);
                 oshDocMapper.updateDocContent(updateDoc);
             }
-        } else {
+        } else if (hasContentUpdate) {
             OshDoc newDoc = new OshDoc();
             newDoc.setId(GenerateUtil.generateSnowflakeId());
             newDoc.setTitle(StringUtils.defaultIfBlank(docTitle, "Section#" + sectionId));
@@ -1308,6 +1337,8 @@ public class OshCourseServiceImpl implements IOshCourseService {
             newDoc.setUpdateTime(now);
             oshDocMapper.insertDoc(newDoc);
             docId = newDoc.getId();
+        } else {
+            return;
         }
 
         ensureSectionDocRef(sectionId, docId, request, operatorName, now);
