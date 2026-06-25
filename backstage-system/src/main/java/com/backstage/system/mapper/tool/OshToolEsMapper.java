@@ -181,6 +181,7 @@ public class OshToolEsMapper {
         tool.setRoutePath(document.getRoutePath());
         tool.setIframeUrl(document.getIframeUrl());
         tool.setGithubUrl(document.getGithubUrl());
+        tool.setBackgroundImage(document.getBackgroundImage());
         tool.setResourceType(document.getResourceType());
         tool.setQuotaCost(document.getQuotaCost());
         tool.setLevel(document.getLevel());

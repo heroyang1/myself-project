@@ -39,6 +39,7 @@ CREATE TABLE `osh_tool` (
   `route_path` varchar(255) COLLATE utf8mb4_0900_as_cs DEFAULT NULL COMMENT '站内工具前端路由',
   `iframe_url` varchar(500) COLLATE utf8mb4_0900_as_cs DEFAULT NULL COMMENT '第三方iframe地址',
   `github_url` varchar(500) COLLATE utf8mb4_0900_as_cs DEFAULT NULL COMMENT 'GitHub地址',
+  `background_image` varchar(500) COLLATE utf8mb4_0900_as_cs DEFAULT NULL COMMENT '工具展开背景图OSS相对路径',
   `quota_cost` int NOT NULL DEFAULT '0' COMMENT '单次消耗工具点数',
   `status` tinyint NOT NULL DEFAULT '2' COMMENT '状态：2-待审核，4-上架，6-下架',
   `good_count` int NOT NULL DEFAULT '0' COMMENT '好评数',

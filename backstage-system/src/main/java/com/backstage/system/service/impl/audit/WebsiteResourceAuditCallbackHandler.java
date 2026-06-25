@@ -8,6 +8,7 @@ import com.backstage.system.domain.user.OshUser;
 import com.backstage.system.domain.websocket.WsNotifyMessage;
 import com.backstage.system.mapper.audit.ResourceAuditMapper;
 import com.backstage.system.mapper.user.OshUserMapper;
+import com.backstage.system.service.audit.AuditAnnouncementPublisher;
 import com.backstage.system.service.audit.ResourceAuditCallbackContext;
 import com.backstage.system.service.audit.ResourceAuditCallbackHandler;
 import com.backstage.system.service.website.IWebsiteAnnouncementService;
@@ -43,6 +44,9 @@ public class WebsiteResourceAuditCallbackHandler implements ResourceAuditCallbac
     @Resource
     private IWebsiteAnnouncementService websiteAnnouncementService;
 
+    @Resource
+    private AuditAnnouncementPublisher auditAnnouncementPublisher;
+
     @Override
     public List<ResourceTypeEnum> resourceTypes() {
         return Collections.singletonList(ResourceTypeEnum.WEBSITE);
@@ -65,7 +69,9 @@ public class WebsiteResourceAuditCallbackHandler implements ResourceAuditCallbac
         // 通知提交人
         notifyCreator(resource, context.getResourceId(), context.getResourceStatus(), websiteName);
 
-        // 审核通过才写公告
+        auditAnnouncementPublisher.publishResult(ResourceTypeEnum.WEBSITE, context.getResourceId(), websiteName, context.getResourceStatus(), "/website");
+
+        // 审核通过才写网站模块公告
         if (ResourceStatusEnum.isPublished(context.getResourceStatus())) {
             websiteAnnouncementService.insertWebsiteNotice(context.getResourceId(), websiteName);
         }

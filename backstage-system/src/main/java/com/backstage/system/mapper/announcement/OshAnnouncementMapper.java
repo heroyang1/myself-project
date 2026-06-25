@@ -54,6 +54,23 @@ public interface OshAnnouncementMapper {
                                   @Param("channel") int channel);
 
     /**
+     * 插入一条审核模块公告记录，供各资源审核通过后展示在审核页公告栏。
+     */
+    @Insert("INSERT INTO osh_announcement " +
+            "(title, link, icon_code, channel, resource_type, resource_id, " +
+            " sort, status, source, source_module, delete_flag, create_by, create_time, update_by, update_time) " +
+            "VALUES " +
+            "(#{title}, #{link}, #{icon}, #{channel}, #{resourceType}, #{resourceId}, " +
+            " 0, 4, 'system', 'audit', 0, #{operator}, NOW(), #{operator}, NOW())")
+    int insertAuditAnnouncement(@Param("title") String title,
+                                @Param("link") String link,
+                                @Param("icon") String icon,
+                                @Param("resourceType") String resourceType,
+                                @Param("resourceId") Long resourceId,
+                                @Param("channel") int channel,
+                                @Param("operator") String operator);
+
+    /**
      * 查询秒杀公告栏（channel=1），按 sort 降序、create_time 降序
      */
     @Select("SELECT id, title, link, icon_code AS icon, channel, create_time AS createTime " +

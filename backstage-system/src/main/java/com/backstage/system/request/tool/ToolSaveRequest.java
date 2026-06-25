@@ -36,6 +36,9 @@ public class ToolSaveRequest {
     @ApiModelProperty(value = "GitHub地址", example = "https://github.com/example/tool")
     private String githubUrl;
 
+    @ApiModelProperty(value = "工具展开背景图OSS相对路径", example = "common/image/toolCover/temp/202606/bg.png")
+    private String backgroundImage;
+
     @ApiModelProperty(value = "状态：2-待审核，4-上架，6-下架", example = "2")
     private Integer status;
 
@@ -105,6 +108,14 @@ public class ToolSaveRequest {
 
     public void setGithubUrl(String githubUrl) {
         this.githubUrl = StringUtils.trimToNull(githubUrl);
+    }
+
+    public String getBackgroundImage() {
+        return backgroundImage;
+    }
+
+    public void setBackgroundImage(String backgroundImage) {
+        this.backgroundImage = StringUtils.trimToNull(backgroundImage);
     }
 
     public Integer getStatus() {

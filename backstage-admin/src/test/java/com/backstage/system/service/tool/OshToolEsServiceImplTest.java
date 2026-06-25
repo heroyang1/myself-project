@@ -44,6 +44,7 @@ public class OshToolEsServiceImplTest {
         tool.setId(10001L);
         tool.setToolName("图片转PDF");
         tool.setNo("tlAb12Cd");
+        tool.setBackgroundImage("common/image/toolCover/10001/202606/bg.png");
         tool.setStatus(4);
         tool.setDeleteFlag(0);
 
@@ -60,6 +61,7 @@ public class OshToolEsServiceImplTest {
         assertEquals(1, count);
         assertEquals("tlAb12Cd", message.getNo());
         assertEquals("图片转PDF", message.getToolName());
+        assertEquals("common/image/toolCover/10001/202606/bg.png", message.getBackgroundImage());
         assertEquals(ToolIndexEventType.TOOL_INDEX_UPDATE, message.getEventType());
     }
 }

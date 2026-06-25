@@ -48,6 +48,9 @@ public interface OshToolMapper {
 
     int countByNo(@Param("no") String no);
 
+    int countActiveByToolName(@Param("toolName") String toolName,
+                              @Param("excludeId") Long excludeId);
+
     int deleteToolsByIds(@Param("ids") List<Long> ids, @Param("operator") String operator);
 
     int increaseCollectionCount(@Param("toolId") Long toolId);
