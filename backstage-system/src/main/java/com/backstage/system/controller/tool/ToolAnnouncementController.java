@@ -21,6 +21,20 @@ public class ToolAnnouncementController {
     @Autowired
     private IToolAnnouncementService toolAnnouncementService;
 
+    @ApiOperation("查询工具模块系统公告")
+    @GetMapping("/notice")
+    @Anonymous
+    public R<List<ToolAnnouncementVO>> listNoticeAnnouncements() {
+        return R.ok(toolAnnouncementService.listNoticeAnnouncements());
+    }
+
+    @ApiOperation("查询工具模块业务动态")
+    @GetMapping("/dynamic")
+    @Anonymous
+    public R<List<ToolAnnouncementVO>> listDynamicAnnouncements() {
+        return R.ok(toolAnnouncementService.listDynamicAnnouncements());
+    }
+
     @ApiOperation("查询工具模块系统通知")
     @GetMapping("/systemNotice/latest")
     @Anonymous

@@ -45,6 +45,10 @@ PUT /osh_tool_search
         "type": "keyword",
         "ignore_above": 512
       },
+      "backgroundImage": {
+        "type": "keyword",
+        "ignore_above": 512
+      },
       "resourceType": {
         "type": "keyword",
         "ignore_above": 64

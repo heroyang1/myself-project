@@ -9,6 +9,7 @@ import com.backstage.system.mapper.tool.OshToolEsMapper;
 import com.backstage.system.mapper.tool.OshToolMapper;
 import com.backstage.system.mapper.tool.OshToolTagMapper;
 import com.backstage.system.request.tool.ToolSearchRequest;
+import com.backstage.system.service.common.OssService;
 import com.backstage.system.service.tool.IOshToolEsService;
 import com.backstage.system.service.tool.ToolIndexEventType;
 import com.backstage.system.service.tool.ToolIndexMessage;
@@ -43,6 +44,9 @@ public class OshToolEsServiceImpl implements IOshToolEsService {
     @Autowired
     private OshToolCollectionMapper oshToolCollectionMapper;
 
+    @Autowired
+    private OssService ossService;
+
     @Override
     public PageResponse<OshTool> searchTools(ToolSearchRequest request, Long userId) {
         try {
@@ -54,6 +58,7 @@ public class OshToolEsServiceImpl implements IOshToolEsService {
                 response = oshToolEsMapper.searchTools(request, null);
             }
             fillUserState(response.getRows(), userId);
+            fillBackgroundImageUrls(response.getRows());
             log.debug("从es中查出: {} 条数据", response.getRows().size());
             return response;
         } catch (Exception ex) {
@@ -190,6 +195,7 @@ public class OshToolEsServiceImpl implements IOshToolEsService {
         message.setRoutePath(tool.getRoutePath());
         message.setIframeUrl(tool.getIframeUrl());
         message.setGithubUrl(tool.getGithubUrl());
+        message.setBackgroundImage(tool.getBackgroundImage());
         message.setResourceType(tool.getResourceType());
         message.setQuotaCost(tool.getQuotaCost() == null ? 0 : tool.getQuotaCost());
         message.setLevel(tool.getLevel());
@@ -237,5 +243,22 @@ public class OshToolEsServiceImpl implements IOshToolEsService {
             builder.append(' ');
         }
         builder.append(value.trim());
+    }
+
+    private void fillBackgroundImageUrls(List<OshTool> rows) {
+        if (StringUtils.isEmpty(rows)) {
+            return;
+        }
+        for (OshTool row : rows) {
+            if (row == null || StringUtils.isEmpty(row.getBackgroundImage())) {
+                continue;
+            }
+            String backgroundImage = row.getBackgroundImage();
+            if (backgroundImage.startsWith("http://") || backgroundImage.startsWith("https://")) {
+                row.setBackgroundImageUrl(backgroundImage);
+                continue;
+            }
+            row.setBackgroundImageUrl(ossService.getLimitedUrl(backgroundImage, 1440));
+        }
     }
 }

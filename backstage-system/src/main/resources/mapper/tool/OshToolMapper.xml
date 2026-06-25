@@ -13,6 +13,7 @@
         <result property="routePath" column="route_path"/>
         <result property="iframeUrl" column="iframe_url"/>
         <result property="githubUrl" column="github_url"/>
+        <result property="backgroundImage" column="background_image"/>
         <result property="quotaCost" column="quota_cost"/>
         <result property="status" column="status"/>
         <result property="goodCount" column="good_count"/>
@@ -38,6 +39,7 @@
     <select id="pageQuerySearchTool" resultMap="OshToolResult">
         select distinct
                t.id, t.tool_name, t.no, t.description, t.access_type, t.route_path, t.iframe_url, t.github_url,
+               t.background_image,
                t.quota_cost, t.status, t.good_count, t.neutral_count, t.bad_count,
                t.view_count, t.total_usage, t.collection_count, t.remark, t.resource_type, t.level, t.create_by,
                t.create_time, t.update_by, t.update_time, t.delete_flag,
@@ -104,6 +106,7 @@
     <select id="selectAllToolsForEsSync" resultMap="OshToolResult">
         select
                t.id, t.tool_name, t.no, t.description, t.access_type, t.route_path, t.iframe_url, t.github_url,
+               t.background_image,
                t.quota_cost, t.status, t.good_count, t.neutral_count, t.bad_count,
                t.view_count, t.total_usage, t.collection_count, t.remark, t.resource_type, t.level, t.create_by,
                t.create_time, t.update_by, t.update_time, t.delete_flag,
@@ -118,6 +121,7 @@
     <select id="selectRecommendTools" resultMap="OshToolResult">
         select
                t.id, t.tool_name, t.no, t.description, t.access_type, t.route_path, t.iframe_url, t.github_url,
+               t.background_image,
                t.quota_cost, t.status, t.good_count, t.neutral_count, t.bad_count,
                t.view_count, t.total_usage, t.collection_count, t.remark, t.resource_type, t.level, t.create_by,
                t.create_time, t.update_by, t.update_time, t.delete_flag,
@@ -155,6 +159,7 @@
 
     <select id="selectToolById" resultMap="OshToolResult">
         select id, tool_name, no, description, access_type, route_path, iframe_url, github_url,
+               background_image,
                quota_cost, status, good_count, neutral_count, bad_count,
                view_count, total_usage, collection_count, remark, resource_type, level, create_by, create_time,
                update_by, update_time, delete_flag,
@@ -169,6 +174,7 @@
 
     <select id="selectToolsWithMissingNo" resultMap="OshToolResult">
         select id, tool_name, no, description, access_type, route_path, iframe_url, github_url,
+               background_image,
                quota_cost, status, good_count, neutral_count, bad_count,
                view_count, total_usage, collection_count, remark, resource_type, level, create_by, create_time,
                update_by, update_time, delete_flag,
@@ -248,11 +254,11 @@
     <insert id="insertTool" parameterType="com.backstage.system.domain.tool.OshTool"
             useGeneratedKeys="true" keyProperty="id">
         insert into osh_tool (
-            tool_name, no, description, access_type, route_path, iframe_url, github_url,
+            tool_name, no, description, access_type, route_path, iframe_url, github_url, background_image,
             quota_cost, status, remark, resource_type, level,
             create_by, create_time, update_by, update_time, delete_flag
         ) values (
-            #{toolName}, #{no}, #{description}, #{accessType}, #{routePath}, #{iframeUrl}, #{githubUrl},
+            #{toolName}, #{no}, #{description}, #{accessType}, #{routePath}, #{iframeUrl}, #{githubUrl}, #{backgroundImage},
             #{quotaCost}, #{status}, #{remark}, #{resourceType}, #{level},
             #{createBy}, now(), #{updateBy}, now(), 0
         )
@@ -266,6 +272,7 @@
             <if test="description != null">description = #{description},</if>
             <if test="accessType != null">access_type = #{accessType}, route_path = #{routePath}, iframe_url = #{iframeUrl},</if>
             <if test="githubUrl != null">github_url = #{githubUrl},</if>
+            background_image = #{backgroundImage},
             <if test="quotaCost != null">quota_cost = #{quotaCost},</if>
             <if test="status != null">status = #{status},</if>
             <if test="remark != null">remark = #{remark},</if>
@@ -291,6 +298,16 @@
         select count(1)
         from osh_tool
         where no = #{no}
+    </select>
+
+    <select id="countActiveByToolName" resultType="int">
+        select count(1)
+        from osh_tool
+        where tool_name = #{toolName}
+          and delete_flag = 0
+        <if test="excludeId != null">
+          and id != #{excludeId}
+        </if>
     </select>
 
     <update id="deleteToolsByIds">

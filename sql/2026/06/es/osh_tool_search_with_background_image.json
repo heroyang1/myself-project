@@ -1,0 +1,133 @@
+// 可选：如果保留现有索引，只追加字段 mapping
+PUT /osh_tool_search/_mapping
+{
+  "properties": {
+    "backgroundImage": {
+      "type": "keyword",
+      "ignore_above": 512
+    }
+  }
+}
+
+// 新建索引版本：如果要重建索引，可先创建新索引，再调用 /pc/tool/esSync/all 全量同步
+PUT /osh_tool_search_v2
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0
+  },
+  "mappings": {
+    "dynamic": false,
+    "properties": {
+      "id": {
+        "type": "long"
+      },
+      "toolName": {
+        "type": "text",
+        "analyzer": "ik_max_word",
+        "search_analyzer": "ik_smart",
+        "fields": {
+          "keyword": {
+            "type": "keyword",
+            "ignore_above": 256
+          }
+        }
+      },
+      "no": {
+        "type": "keyword",
+        "ignore_above": 64
+      },
+      "description": {
+        "type": "text",
+        "analyzer": "ik_max_word",
+        "search_analyzer": "ik_smart"
+      },
+      "searchText": {
+        "type": "text",
+        "analyzer": "ik_max_word",
+        "search_analyzer": "ik_smart"
+      },
+      "accessType": {
+        "type": "integer"
+      },
+      "routePath": {
+        "type": "keyword",
+        "ignore_above": 256
+      },
+      "iframeUrl": {
+        "type": "keyword",
+        "ignore_above": 512
+      },
+      "githubUrl": {
+        "type": "keyword",
+        "ignore_above": 512
+      },
+      "backgroundImage": {
+        "type": "keyword",
+        "ignore_above": 512
+      },
+      "resourceType": {
+        "type": "keyword",
+        "ignore_above": 64
+      },
+      "quotaCost": {
+        "type": "integer"
+      },
+      "level": {
+        "type": "integer"
+      },
+      "status": {
+        "type": "integer"
+      },
+      "deleteFlag": {
+        "type": "integer"
+      },
+      "tagIds": {
+        "type": "long"
+      },
+      "tagNames": {
+        "type": "keyword",
+        "ignore_above": 128
+      },
+      "tagNamesText": {
+        "type": "text",
+        "analyzer": "ik_max_word",
+        "search_analyzer": "ik_smart"
+      },
+      "viewCount": {
+        "type": "long"
+      },
+      "totalUsage": {
+        "type": "long"
+      },
+      "collectionCount": {
+        "type": "integer"
+      },
+      "goodCount": {
+        "type": "integer"
+      },
+      "badCount": {
+        "type": "integer"
+      },
+      "hotScore": {
+        "type": "double"
+      },
+      "createBy": {
+        "type": "keyword",
+        "ignore_above": 128
+      },
+      "updateBy": {
+        "type": "keyword",
+        "ignore_above": 128
+      },
+      "createTime": {
+        "type": "date",
+        "format": "yyyy-MM-dd HH:mm:ss||yyyy-MM-dd HH:mm:ss.SSS||strict_date_optional_time||epoch_millis"
+      },
+      "updateTime": {
+        "type": "date",
+        "format": "yyyy-MM-dd HH:mm:ss||yyyy-MM-dd HH:mm:ss.SSS||strict_date_optional_time||epoch_millis"
+      }
+    }
+  }
+}
