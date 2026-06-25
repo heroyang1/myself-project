@@ -1,5 +1,6 @@
 package com.backstage.system.service.impl.audit;
 
+import com.alibaba.fastjson2.JSON;
 import com.backstage.common.enums.AnnouncementChannelEnum;
 import com.backstage.common.enums.ResourceStatusEnum;
 import com.backstage.common.enums.ResourceTypeEnum;
@@ -19,7 +20,9 @@ import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 工具资源审核回调处理器
@@ -29,7 +32,8 @@ public class ToolResourceAuditCallbackHandler implements ResourceAuditCallbackHa
 
     private static final Logger log = LoggerFactory.getLogger(ToolResourceAuditCallbackHandler.class);
     private static final String TOOL_AUDIT_RESULT = "TOOL_AUDIT_RESULT";
-    private static final String TOOL_USER_NOTICE_REFRESH = "TOOL_USER_NOTICE_REFRESH";
+    private static final String ANNOUNCEMENT_REFRESH = "ANNOUNCEMENT_REFRESH";
+    private static final String TOOL_MODULE = "tool";
     private static final String SYSTEM_OPERATOR = "system";
 
     @Resource
@@ -94,15 +98,16 @@ public class ToolResourceAuditCallbackHandler implements ResourceAuditCallbackHa
                 title,
                 jumpUrl,
                 AnnouncementChannelEnum.SYSTEM_NOTICE.getCode(),
+                "online",
                 SYSTEM_OPERATOR
         );
 
         WsNotifyMessage broadcast = new WsNotifyMessage();
-        broadcast.setType(TOOL_USER_NOTICE_REFRESH);
-        broadcast.setTitle(title);
-        broadcast.setContent("新工具已上线，点击可前往查看。");
+        broadcast.setType(ANNOUNCEMENT_REFRESH);
+        broadcast.setTitle("工具模块公告刷新");
+        broadcast.setContent(buildAnnouncementRefreshContent());
         broadcast.setJumpUrl(jumpUrl);
-        broadcast.setBizId(String.valueOf(toolId));
+        broadcast.setBizId(TOOL_MODULE);
         webSocketNotifyService.broadcast(broadcast);
     }
 
@@ -124,5 +129,15 @@ public class ToolResourceAuditCallbackHandler implements ResourceAuditCallbackHa
             OshUser user = oshUserMapper.getUserByUsername(createBy);
             return user == null ? null : user.getId();
         }
+    }
+
+    private String buildAnnouncementRefreshContent() {
+        Map<String, Object> content = new HashMap<>();
+        content.put("module", TOOL_MODULE);
+        content.put("action", "refresh");
+        content.put("refresh", true);
+        content.put("noticeApi", "/pc/tool/announcement/notice");
+        content.put("dynamicApi", "/pc/tool/announcement/dynamic");
+        return JSON.toJSONString(content);
     }
 }

@@ -47,6 +47,21 @@ public class ToolAnnouncementControllerTest {
     }
 
     @Test
+    public void shouldReturnNoticeAnnouncements() throws Exception {
+        ToolAnnouncementVO item = new ToolAnnouncementVO();
+        item.setId(1L);
+        item.setTitle("系统公告");
+        when(toolAnnouncementService.listNoticeAnnouncements()).thenReturn(Collections.singletonList(item));
+
+        mockMvc.perform(get("/pc/tool/announcement/notice"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data[0].title").value("系统公告"));
+
+        verify(toolAnnouncementService).listNoticeAnnouncements();
+    }
+
+    @Test
     public void shouldReturnLatestUserNotices() throws Exception {
         ToolAnnouncementVO item = new ToolAnnouncementVO();
         item.setId(2L);
@@ -59,5 +74,20 @@ public class ToolAnnouncementControllerTest {
                 .andExpect(jsonPath("$.data[0].title").value("业务公告"));
 
         verify(toolAnnouncementService).listLatestUserNotices();
+    }
+
+    @Test
+    public void shouldReturnDynamicAnnouncements() throws Exception {
+        ToolAnnouncementVO item = new ToolAnnouncementVO();
+        item.setId(2L);
+        item.setTitle("业务动态");
+        when(toolAnnouncementService.listDynamicAnnouncements()).thenReturn(Collections.singletonList(item));
+
+        mockMvc.perform(get("/pc/tool/announcement/dynamic"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data[0].title").value("业务动态"));
+
+        verify(toolAnnouncementService).listDynamicAnnouncements();
     }
 }

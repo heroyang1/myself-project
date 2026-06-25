@@ -45,6 +45,11 @@ public enum AnnouncementModuleEnum {
 //    void SERIAL("serial", "开源项目公告"),
 
     /**
+     * 统一审核模块
+     */
+    AUDIT("audit", "审核公告"),
+
+    /**
      * 首页模块公告栏
      */
     HOMEPAGE("homepage", "首页公告");
