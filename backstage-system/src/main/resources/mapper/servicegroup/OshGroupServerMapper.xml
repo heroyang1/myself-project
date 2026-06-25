@@ -528,4 +528,116 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         )
     </insert>
 
+    <!-- ==================== 定时任务 + 安全校验 SQL ==================== -->
+
+    <!-- 批量更新订单状态（用于超时取消） -->
+    <update id="batchUpdateOrderStatus">
+        UPDATE osh_group_order
+        SET status = #{status},
+            updated_time = #{updateTime}
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          AND status = 'pending'
+    </update>
+
+    <!-- 查询所有进行中的拼团活动（status=1） -->
+    <select id="selectAllActiveActivities" resultType="com.backstage.system.domain.servergroup.OshGroupActivity">
+        SELECT id, title, current_num, group_min_num, group_max_num, status,
+               start_time, server_start_time, server_end_time
+        FROM osh_group_activity
+        WHERE status = 1 AND delete_flag = 0
+    </select>
+
+    <!-- 统计指定活动的有效参团人数（group_status IN (0,1)） -->
+    <select id="countGroupWorkByActivityId" resultType="int">
+        SELECT COUNT(*)
+        FROM osh_group_work
+        WHERE group_activity_id = #{activityId}
+          AND group_status IN (0, 1)
+    </select>
+
+    <!-- 直接更新活动的 current_num（用于数据同步任务） -->
+    <update id="updateActivityCurrentNum">
+        UPDATE osh_group_activity
+        SET current_num = #{currentNum},
+            update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <!-- 原子递增活动 current_num（CAS 模式，防超卖） -->
+    <update id="atomicIncrementCurrentNum">
+        UPDATE osh_group_activity
+        SET current_num = current_num + 1,
+            update_time = NOW()
+        WHERE id = #{id}
+          AND current_num &lt; group_max_num
+    </update>
+
+    <!-- 查询即将到期的参团记录（用于到期前提醒） -->
+    <select id="selectExpiringWorks" resultType="com.backstage.system.domain.servergroup.OshGroupWork">
+        SELECT gw.id, gw.group_activity_id, gw.user_id, gw.server_expire_time
+        FROM osh_group_work gw
+        WHERE gw.group_status = 1
+          AND gw.server_expire_time IS NOT NULL
+          AND gw.server_expire_time &gt;= #{startExpire}
+          AND gw.server_expire_time &lt;= #{endExpire}
+    </select>
+
+    <!-- 查询长期未成团且已过期的组团活动 -->
+    <select id="selectExpiredUnformedActivities" resultType="com.backstage.system.domain.servergroup.OshGroupActivity">
+        SELECT id, title, current_num, group_min_num, group_max_num, status, start_time
+        FROM osh_group_activity
+        WHERE status = 1
+          AND create_time &lt; #{expireBefore}
+          AND current_num &lt; group_min_num
+    </select>
+
+    <!-- 校验用户是否为某个拼团的成员（安全校验用） -->
+    <select id="isUserInGroup" resultType="int">
+        SELECT COUNT(*) FROM (
+            SELECT user_id FROM osh_group_work
+            WHERE group_activity_id = #{activityId} AND user_id = #{userId}
+            UNION ALL
+            SELECT user_id FROM osh_group_user_initiated
+            WHERE id = #{activityId} AND user_id = #{userId} AND delete_flag = 0
+        ) AS combined
+    </select>
+
+    <!-- 校验用户是否为指定订单的所有者 -->
+    <select id="checkOrderOwnership" resultType="int">
+        SELECT COUNT(*)
+        FROM osh_group_order
+        WHERE order_no = #{orderNo}
+          AND user_id = #{userId}
+          AND delete_flag = 0
+    </select>
+
+    <!-- 统计指定状态的订单数量 -->
+    <select id="countOrdersByStatus" resultType="int">
+        SELECT COUNT(*)
+        FROM osh_group_order
+        WHERE status = #{status}
+          AND delete_flag = 0
+    </select>
+
+    <!-- 统计拼团活动总数 -->
+    <select id="countActivities" resultType="int">
+        SELECT COUNT(*)
+        FROM osh_group_activity
+        WHERE delete_flag = 0
+        <if test="status != null">
+            AND status = #{status}
+        </if>
+    </select>
+
+    <!-- 更新拼团活动状态（通用方法） -->
+    <update id="updateGroupActivityStatus">
+        UPDATE osh_group_activity
+        SET status = #{status},
+            update_time = #{updateTime}
+        WHERE id = #{id}
+    </update>
+
 </mapper>

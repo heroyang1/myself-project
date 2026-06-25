@@ -104,5 +104,31 @@ public interface OshGroupUserInitiatedMapper {
      */
     @MapKey("id")
     java.util.Map<String, Object> selectActivityDetail(@Param("activityId") Long activityId);
+
+    // ==================== 定时任务相关方法 ====================
+
+    /**
+     * 查询已过招募期且状态仍为招募中的用户发起拼团记录
+     *
+     * @param expireBefore 过期截止时间
+     * @return 过期的发起记录列表
+     */
+    List<OshGroupUserInitiated> selectExpiredInitiatedGroups(@Param("expireBefore") LocalDateTime expireBefore);
+
+    /**
+     * 批量更新用户发起拼团记录的状态
+     *
+     * @param ids         记录ID列表
+     * @param groupStatus 目标状态
+     * @return 影响行数
+     */
+    int batchUpdateGroupStatus(@Param("ids") List<Long> ids, @Param("groupStatus") Integer groupStatus);
+
+    /**
+     * 统计进行中的用户发起拼团数量（group_status=0, delete_flag=0）
+     *
+     * @return 数量
+     */
+    int countActiveInitiatedGroups();
 }
 

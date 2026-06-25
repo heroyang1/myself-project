@@ -2,6 +2,7 @@ package com.backstage.system.service.servergroup.impl;
 
 import com.backstage.common.exception.ServiceException;
 import com.backstage.common.utils.DateUtils;
+import com.backstage.common.utils.DesensitizedUtil;
 import com.backstage.common.utils.StringUtils;
 import com.backstage.common.utils.uuid.IdUtils;
 import com.backstage.system.domain.dto.GroupCreateDTO;
@@ -31,6 +32,7 @@ import com.backstage.system.utils.OssUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +44,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 服务器拼团Service实现类
@@ -53,6 +56,12 @@ import java.util.Map;
 public class OshGroupServerServiceImpl implements IOshGroupServerService {
     
     private static final Logger logger = LoggerFactory.getLogger(OshGroupServerServiceImpl.class);
+
+    // ==================== Redis 缓存 Key 常量 ====================
+    private static final String CACHE_ACTIVITY_LIST_PREFIX = "group:activity:list:";
+    private static final String CACHE_ACTIVITY_DETAIL_PREFIX = "group:activity:detail:";
+    private static final long CACHE_ACTIVITY_LIST_TTL = 5;   // 活动列表缓存 5 分钟
+    private static final long CACHE_ACTIVITY_DETAIL_TTL = 10; // 活动详情缓存 10 分钟
     
     @Autowired
     private OshGroupServerMapper groupServerMapper;
@@ -69,16 +78,31 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
 
     @Autowired
     private OssUtil ossUtil;
+
+    @Autowired
+    private RedisTemplate<Object, Object> redisTemplate;
     
     /**
      * 查询拼团活动列表
      */
     @Override
     public List<GroupActivityListVO> selectGroupActivityList(Integer status) {
-        // 查询数据
+        // 1. 尝试从 Redis 缓存获取
+        String cacheKey = CACHE_ACTIVITY_LIST_PREFIX + (status == null ? "all" : status);
+        try {
+            Object cached = redisTemplate.opsForValue().get(cacheKey);
+            if (cached != null) {
+                logger.debug("【拼团缓存】命中活动列表缓存，key={}", cacheKey);
+                return (List<GroupActivityListVO>) cached;
+            }
+        } catch (Exception e) {
+            logger.warn("【拼团缓存】读取缓存失败，降级为DB查询", e);
+        }
+
+        // 2. 查询数据库
         List<GroupActivityListVO> list = groupServerMapper.selectGroupActivityList(status);
         
-        // 处理计算字段
+        // 3. 处理计算字段
         for (GroupActivityListVO vo : list) {
             // 计算isSuccess：current_num >= group_min_num
             vo.setIsSuccess(vo.getCurrentNum() >= vo.getGroupMinNum());
@@ -93,6 +117,13 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
             
             // 计算价格和剩余时间
             calculatePriceAndTime(vo);
+        }
+
+        // 4. 写入缓存
+        try {
+            redisTemplate.opsForValue().set(cacheKey, list, CACHE_ACTIVITY_LIST_TTL, TimeUnit.MINUTES);
+        } catch (Exception e) {
+            logger.warn("【拼团缓存】写入缓存失败，key={}", cacheKey, e);
         }
         
         return list;
@@ -229,10 +260,12 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
         }
 
         Long activityId = initiated.getActivityId();
+        logger.info("【拼团详情】initiatedId={}, 查到的activityId={}", initiatedId, activityId);
         // 通过 activity_id 查询拼团活动模板
         OshGroupActivity activity = groupServerMapper.selectGroupActivityById(activityId);
         if (activity == null) {
-            throw new ServiceException("拼团活动模板不存在");
+            logger.error("【拼团详情】活动模板不存在，activityId={}, initiatedId={}", activityId, initiatedId);
+            throw new ServiceException("拼团活动模板不存在，activityId=" + activityId);
         }
         
         // 构建详情VO（优先使用用户发起记录的数据）
@@ -528,30 +561,9 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
             throw new ServiceException("您已参与该拼团活动");
         }
         
-        // 计算实际价格和剩余时间
-        BigDecimal actualPrice;
-        BigDecimal remainingMonths;
-        LocalDateTime serverStartTime = null;
-        LocalDateTime serverExpireTime = null;
-        int newCurrentNum = activity.getCurrentNum() + 1;
-        
-        // 判断是否达到最低人数（触发成团）
-        boolean willSuccess = newCurrentNum >= activity.getGroupMinNum();
-        
-        if (willSuccess) {
-            // 成团：计算服务器使用时间
-            serverStartTime = LocalDateTime.now();
-            serverExpireTime = serverStartTime.plusMonths(activity.getTotalDuration());
-            remainingMonths = new BigDecimal(activity.getTotalDuration());
-        } else {
-            // 未成团：按预计时间计算
-            remainingMonths = new BigDecimal(activity.getTotalDuration());
-        }
-        
-        // 计算实际价格
-        actualPrice = activity.getBasePrice()
-                .multiply(remainingMonths)
-                .divide(new BigDecimal(activity.getTotalDuration()), 2, RoundingMode.HALF_UP);
+        // 计算实际价格和剩余时间（CAS 模式下价格按基础价计算，成团后按实际剩余时间调整）
+        BigDecimal remainingMonths = new BigDecimal(activity.getTotalDuration());
+        BigDecimal actualPrice = activity.getBasePrice();
         
         // 生成订单号
         String orderNo = "GP" + DateUtils.dateTime() + IdUtils.fastSimpleUUID().substring(0, 8);
@@ -572,7 +584,7 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
             throw new ServiceException("创建订单失败");
         }
         
-        // 创建参团记录
+        // 创建参团记录（初始状态为进行中，CAS 后根据最新人数判断是否成团）
         OshGroupWork work = new OshGroupWork();
         work.setGroupActivityId(activityId);
         work.setUserId(userId);
@@ -580,14 +592,7 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
         work.setActualPrice(actualPrice);
         work.setRemainingMonths(remainingMonths);
         work.setJoinTime(LocalDateTime.now());
-        
-        if (willSuccess) {
-            work.setGroupStatus(1); // 已成团
-            work.setServerStartTime(serverStartTime);
-            work.setServerExpireTime(serverExpireTime);
-        } else {
-            work.setGroupStatus(0); // 进行中
-        }
+        work.setGroupStatus(0); // 默认进行中，成团后由后续逻辑更新
         
         int workResult = groupServerMapper.insertGroupWork(work);
         if (workResult <= 0) {
@@ -597,36 +602,36 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
         // 更新订单关联的参团ID
         order.setGroupWorkId(work.getId());
         
-        // 更新拼团活动人数
-        int updateResult;
-        if (willSuccess) {
-            // 成团：更新人数、状态、服务器时间
-            updateResult = groupServerMapper.updateGroupActivityWithLock(
-                    activityId,
-                    newCurrentNum,
-                    2, // 拼团成功
-                    serverStartTime,
-                    serverExpireTime,
-                    LocalDateTime.now()
-            );
-        } else {
-            // 未成团：只更新人数
-            updateResult = groupServerMapper.incrementGroupActivityCurrentNum(
-                    activityId,
-                    newCurrentNum,
-                    activity.getStatus(),
-                    LocalDateTime.now()
-            );
-        }
-        
+        // 使用 CAS 原子递增更新拼团活动人数（防并发超卖）
+        int updateResult = groupServerMapper.atomicIncrementCurrentNum(activityId);
         if (updateResult <= 0) {
-            throw new ServiceException("更新拼团活动失败，可能是并发冲突");
+            throw new ServiceException("该拼团人数已满，请选择其他活动");
         }
         
-        // 如果达到人数上限，更新状态为已结束
-        if (newCurrentNum >= activity.getGroupMaxNum()) {
-            groupServerMapper.updateGroupActivityStatusEnded(activityId, LocalDateTime.now());
+        // 原子递增成功后，重新读取活动判断是否成团/满员
+        OshGroupActivity latestActivity = groupServerMapper.selectGroupActivityById(activityId);
+        if (latestActivity != null) {
+            int latestNum = latestActivity.getCurrentNum();
+            
+            if (latestNum >= activity.getGroupMaxNum()) {
+                // 达到人数上限：更新状态为已结束
+                groupServerMapper.updateGroupActivityStatusEnded(activityId, LocalDateTime.now());
+            } else if (latestNum >= activity.getGroupMinNum()) {
+                // 达到最低成团人数：更新状态为拼团成功
+                LocalDateTime srvStartTime = LocalDateTime.now();
+                LocalDateTime srvExpireTime = srvStartTime.plusMonths(activity.getTotalDuration());
+                groupServerMapper.updateGroupActivityWithLock(
+                        activityId, latestNum, 2,
+                        srvStartTime, srvExpireTime, LocalDateTime.now());
+                // 更新本次参团记录的服务器时间
+                groupServerMapper.updateGroupWorkServerTime(work.getId(), srvStartTime, srvExpireTime);
+                // 同时更新参团记录状态为已成团
+                groupServerMapper.updateGroupWorkStatus(work.getId(), 1);
+            }
         }
+        
+        // 清除活动缓存（人数/状态已变更）
+        evictActivityCache(activityId);
         
         logger.info("用户{}成功参与系统活动拼团{}，订单号：{}", userId, activityId, orderNo);
         
@@ -795,6 +800,27 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
             return "****";
         }
         return contact.substring(0, 3) + "****" + contact.substring(contact.length() - 2);
+    }
+
+    /**
+     * 清除活动相关缓存（列表 + 详情）
+     * 在活动状态变更、人数变更、支付成功时调用
+     */
+    private void evictActivityCache(Long activityId) {
+        try {
+            // 清除列表缓存（所有状态）
+            redisTemplate.delete(CACHE_ACTIVITY_LIST_PREFIX + "all");
+            redisTemplate.delete(CACHE_ACTIVITY_LIST_PREFIX + "1");
+            redisTemplate.delete(CACHE_ACTIVITY_LIST_PREFIX + "2");
+            redisTemplate.delete(CACHE_ACTIVITY_LIST_PREFIX + "3");
+            // 清除详情缓存
+            if (activityId != null) {
+                redisTemplate.delete(CACHE_ACTIVITY_DETAIL_PREFIX + activityId);
+            }
+            logger.debug("【拼团缓存】已清除活动缓存，activityId={}", activityId);
+        } catch (Exception e) {
+            logger.warn("【拼团缓存】清除缓存失败，activityId={}", activityId, e);
+        }
     }
     
     /**
@@ -1243,7 +1269,7 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
         // 1. 查询订单
         OshGroupOrder order = groupServerMapper.selectGroupOrderByOrderNo(orderNo);
         if (order == null) {
-            logger.warn("【拼团支付回调】订单不存在，orderNo={}", orderNo);
+            logger.warn("【拼团支付回调】订单不存在，orderNo={}", DesensitizedUtil.maskOrderNo(orderNo));
             return false;
         }
         
@@ -1257,26 +1283,48 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
         LocalDateTime now = LocalDateTime.now();
         int updateOrder = groupServerMapper.updateOrderStatus(order.getId(), "paid", now);
         if (updateOrder <= 0) {
-            logger.error("【拼团支付回调】更新订单状态失败，orderNo={}", orderNo);
+            logger.error("【拼团支付回调】更新订单状态失败，orderNo={}", DesensitizedUtil.maskOrderNo(orderNo));
             return false;
         }
         logger.info("【拼团支付回调】订单状态已更新为已支付，orderNo={}", orderNo);
+
+        // 4. 同步更新 osh_order 状态（保持双表一致）
+        try {
+            oshOrderMapper.updatePendingToPaid(orderNo, now);
+            logger.info("【拼团支付回调】osh_order 状态已同步更新，orderNo={}", orderNo);
+        } catch (Exception e) {
+            logger.warn("【拼团支付回调】osh_order 状态同步失败（非致命），orderNo={}", DesensitizedUtil.maskOrderNo(orderNo), e);
+        }
         
-        // 4. 获取参团记录（group_work_id 存储的是 osh_group_user_initiated 表ID）
+        // 5. 获取参团记录（group_work_id 存储的是 osh_group_user_initiated 表ID 或 osh_group_work 表ID）
         Long groupWorkId = order.getGroupWorkId();
         if (groupWorkId == null) {
             logger.warn("【拼团支付回调】参团记录ID为空，orderNo={}", orderNo);
             return true; // 非参团订单（如发起拼团订单），直接返回成功
         }
         
-        // 5. 查询用户发起拼团记录
+        // 6. 判断数据源：优先查询用户发起拼团记录
         OshGroupUserInitiated initiated = userInitiatedMapper.selectById(groupWorkId);
-        if (initiated == null) {
-            logger.warn("【拼团支付回调】用户发起拼团记录不存在，groupWorkId={}", groupWorkId);
-            return true; // 可能是系统活动模板订单，直接返回
+        if (initiated != null) {
+            // 数据源1：用户发起的拼团
+            handleUserInitiatedPayment(initiated, order, now);
+        } else {
+            // 数据源2：系统活动模板
+            handleSystemActivityPayment(groupWorkId, order, now);
         }
         
-        // 6. 判断是否达到成团条件
+        // 清除活动缓存（支付成功后状态/人数变更）
+        evictActivityCache(order.getGroupActivityId());
+        
+        logger.info("【拼团支付回调】处理完成，orderNo={}", orderNo);
+        return true;
+    }
+
+    /**
+     * 处理用户发起拼团的支付成功逻辑
+     */
+    private void handleUserInitiatedPayment(OshGroupUserInitiated initiated, OshGroupOrder order, LocalDateTime now) {
+        Long groupWorkId = initiated.getId();
         Integer currentNum = initiated.getCurrentNum();
         Integer minNum = initiated.getMinNum();
         Integer duration = initiated.getDuration();
@@ -1289,11 +1337,10 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
             // 更新用户发起拼团记录状态为已成团
             userInitiatedMapper.updateGroupStatus(groupWorkId, 1);
             userInitiatedMapper.updateServerTime(groupWorkId, serverStartTime, serverExpireTime);
-            logger.info("【拼团支付回调】拼团已成团，initiatedId={}, currentNum={}, minNum={}", 
+            logger.info("【拼团支付回调】用户发起拼团已成团，initiatedId={}, currentNum={}, minNum={}", 
                     groupWorkId, currentNum, minNum);
             
             // 查找并更新对应的 osh_group_work 记录
-            // groupWorkId 同时也是 osh_group_user_initiated 的 ID，groupActivityId 才是 osh_group_work 的 ID
             OshGroupWork work = groupServerMapper.selectGroupWorkByActivityAndUser(groupWorkId, order.getUserId());
             if (work != null) {
                 groupServerMapper.updateGroupWorkStatus(work.getId(), 1);
@@ -1301,9 +1348,62 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
                 logger.info("【拼团支付回调】参团记录已更新，workId={}", work.getId());
             }
         }
-        
-        logger.info("【拼团支付回调】处理完成，orderNo={}", orderNo);
-        return true;
+    }
+
+    /**
+     * 处理系统活动模板拼团的支付成功逻辑
+     *
+     * 当 group_work_id 不在 osh_group_user_initiated 中时，说明是系统活动模板的参团记录，
+     * 需要查询 osh_group_work 并更新状态。
+     */
+    private void handleSystemActivityPayment(Long groupWorkId, OshGroupOrder order, LocalDateTime now) {
+        logger.info("【拼团支付回调】处理系统活动模板支付，groupWorkId={}", groupWorkId);
+
+        // 尝试通过 group_work_id 和 userId 查找参团记录
+        // 注意：groupWorkId 在系统活动模板场景下可能是 osh_group_work 的 ID
+        OshGroupWork work = groupServerMapper.selectGroupWorkByActivityAndUser(
+                order.getGroupActivityId(), order.getUserId());
+
+        if (work == null) {
+            logger.warn("【拼团支付回调】系统活动参团记录不存在，groupActivityId={}, userId={}",
+                    order.getGroupActivityId(), order.getUserId());
+            return;
+        }
+
+        // 更新 osh_group_work 状态为已成团
+        groupServerMapper.updateGroupWorkStatus(work.getId(), 1);
+        logger.info("【拼团支付回调】系统活动参团记录已更新，workId={}", work.getId());
+
+        // 查询活动信息，判断是否达到成团条件
+        OshGroupActivity activity = groupServerMapper.selectGroupActivityById(order.getGroupActivityId());
+        if (activity == null) {
+            logger.warn("【拼团支付回调】活动不存在，activityId={}", order.getGroupActivityId());
+            return;
+        }
+
+        // 使用原子递增更新 current_num（防并发超卖）
+        int updatedRows = groupServerMapper.atomicIncrementCurrentNum(activity.getId());
+        if (updatedRows > 0) {
+            int newNum = activity.getCurrentNum() + 1;
+            // 检查是否成团
+            if (newNum >= activity.getGroupMinNum()) {
+                LocalDateTime serverStartTime = now;
+                LocalDateTime serverExpireTime = serverStartTime.plusMonths(activity.getTotalDuration());
+
+                // 更新活动状态为拼团成功
+                groupServerMapper.updateGroupActivityWithLock(
+                        activity.getId(), newNum, 2,
+                        serverStartTime, serverExpireTime, now);
+
+                // 更新本次参团记录的服务器时间
+                groupServerMapper.updateGroupWorkServerTime(work.getId(), serverStartTime, serverExpireTime);
+
+                logger.info("【拼团支付回调】系统活动拼团已成团！activityId={}, newNum={}, minNum={}",
+                        activity.getId(), newNum, activity.getGroupMinNum());
+            }
+        } else {
+            logger.warn("【拼团支付回调】原子递增失败（可能已满员），activityId={}", activity.getId());
+        }
     }
     
     /**
@@ -1388,7 +1488,7 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
         // 插入支付流水记录
         int result = groupServerMapper.insertGroupPayment(paymentNo, orderNo, orderId, amountDecimal, clientIp);
         if (result <= 0) {
-            logger.warn("【拼团支付】创建支付流水失败，orderNo={}, paymentNo={}", orderNo, paymentNo);
+            logger.warn("【拼团支付】创建支付流水失败，orderNo={}, paymentNo={}", DesensitizedUtil.maskOrderNo(orderNo), DesensitizedUtil.maskOrderNo(paymentNo));
         } else {
             logger.info("【拼团支付】创建支付流水成功，orderNo={}, paymentNo={}, amount={}", orderNo, paymentNo, amount);
         }
@@ -1442,5 +1542,236 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
         } else {
             logger.warn("【拼团支付】写入 osh_order 影响行数为 0，orderNo={}", orderNo);
         }
+    }
+
+    // ==================== 定时任务业务方法实现 ====================
+
+    /**
+     * 取消超时未支付的 pending 订单（每5分钟执行）
+     * 仅释放名额，不退款。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int cancelExpiredOrders() {
+        // 超时阈值：默认30分钟
+        LocalDateTime timeoutTime = LocalDateTime.now().minusMinutes(30);
+        List<OshGroupOrder> timeoutOrders = groupServerMapper.selectTimeoutOrders(timeoutTime);
+
+        if (timeoutOrders == null || timeoutOrders.isEmpty()) {
+            return 0;
+        }
+
+        // 提取订单ID列表
+        List<Long> orderIds = new ArrayList<>();
+        for (OshGroupOrder order : timeoutOrders) {
+            orderIds.add(order.getId());
+        }
+
+        // 批量更新订单状态为 cancelled
+        int cancelledCount = groupServerMapper.batchUpdateOrderStatus(orderIds, "cancelled", LocalDateTime.now());
+        logger.info("【拼团定时任务】取消超时订单 {} 条（共扫描 {} 条）", cancelledCount, timeoutOrders.size());
+
+        // TODO: 释放对应拼团名额（current_num - 1），后续可配合 osh_group_work 状态联动
+        return cancelledCount;
+    }
+
+    /**
+     * 关闭已过招募期的用户发起拼团（每天凌晨2点执行）
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int expireInitiatedGroups() {
+        LocalDateTime expireBefore = LocalDateTime.now();
+        List<OshGroupUserInitiated> expiredList = userInitiatedMapper.selectExpiredInitiatedGroups(expireBefore);
+
+        if (expiredList == null || expiredList.isEmpty()) {
+            return 0;
+        }
+
+        List<Long> ids = new ArrayList<>();
+        for (OshGroupUserInitiated initiated : expiredList) {
+            ids.add(initiated.getId());
+        }
+
+        // 批量更新为已结束（group_status = 2）
+        int updatedCount = userInitiatedMapper.batchUpdateGroupStatus(ids, 2);
+        logger.info("【拼团定时任务】过期用户发起拼团 {} 条", updatedCount);
+        return updatedCount;
+    }
+
+    /**
+     * 自动更新拼团活动状态（每天凌晨2:30执行）
+     * 1进行中 → 2拼团成功 → 3已结束
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int autoUpdateActivityStatus() {
+        List<OshGroupActivity> activeList = groupServerMapper.selectAllActiveActivities();
+        if (activeList == null || activeList.isEmpty()) {
+            return 0;
+        }
+
+        int updatedCount = 0;
+        LocalDateTime now = LocalDateTime.now();
+
+        for (OshGroupActivity activity : activeList) {
+            int currentNum = activity.getCurrentNum();
+            int minNum = activity.getGroupMinNum();
+            int maxNum = activity.getGroupMaxNum();
+
+            // 判断是否需要更新状态
+            int newStatus = activity.getStatus();
+            if (currentNum >= maxNum) {
+                newStatus = 3; // 已结束
+            } else if (currentNum >= minNum) {
+                newStatus = 2; // 拼团成功
+            }
+
+            if (newStatus != activity.getStatus()) {
+                groupServerMapper.updateGroupActivityStatus(activity.getId(), newStatus, now);
+                evictActivityCache(activity.getId());
+                updatedCount++;
+                logger.info("【拼团定时任务】活动 {} 状态更新: {} → {}", activity.getId(), activity.getStatus(), newStatus);
+            }
+        }
+        logger.info("【拼团定时任务】自动更新活动状态 {} 条", updatedCount);
+        return updatedCount;
+    }
+
+    /**
+     * 同步活动当前参与人数（每10分钟执行）
+     * 基于 osh_group_work 表刷新 osh_group_activity.current_num
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int refreshActivityCurrentNum() {
+        List<OshGroupActivity> activeList = groupServerMapper.selectAllActiveActivities();
+        if (activeList == null || activeList.isEmpty()) {
+            return 0;
+        }
+
+        int syncCount = 0;
+        for (OshGroupActivity activity : activeList) {
+            int actualNum = groupServerMapper.countGroupWorkByActivityId(activity.getId());
+            if (actualNum != activity.getCurrentNum()) {
+                groupServerMapper.updateActivityCurrentNum(activity.getId(), actualNum);
+                evictActivityCache(activity.getId());
+                syncCount++;
+                logger.info("【拼团定时任务】活动 {} 人数同步: {} → {}", activity.getId(), activity.getCurrentNum(), actualNum);
+            }
+        }
+        logger.info("【拼团定时任务】同步活动人数 {} 条", syncCount);
+        return syncCount;
+    }
+
+    /**
+     * 服务器到期前提醒（每天9点执行）
+     * 根据 osh.group.expire.notify_days 配置（默认7天），在到期前N天提醒用户
+     */
+    @Override
+    public int notifyExpiringServers() {
+        // 默认提前7天提醒
+        int notifyDays = 7;
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime startExpire = now;
+        LocalDateTime endExpire = now.plusDays(notifyDays);
+
+        List<OshGroupWork> expiringWorks = groupServerMapper.selectExpiringWorks(startExpire, endExpire);
+        if (expiringWorks == null || expiringWorks.isEmpty()) {
+            logger.info("【拼团定时任务】无即将到期的服务器");
+            return 0;
+        }
+
+        int notifyCount = 0;
+        for (OshGroupWork work : expiringWorks) {
+            // TODO: 接入站内信/微信模板消息推送
+            logger.info("【拼团定时任务】服务器即将到期 - userId={}, activityId={}, expireTime={}",
+                    work.getUserId(), work.getGroupActivityId(), work.getServerExpireTime());
+            notifyCount++;
+        }
+        logger.info("【拼团定时任务】到期提醒 {} 条", notifyCount);
+        return notifyCount;
+    }
+
+    /**
+     * 清理长期未成团且已过期的组团（每天凌晨3点执行）
+     * 清理创建超过30天且未成团的活动
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int cleanupExpiredGroups() {
+        LocalDateTime expireBefore = LocalDateTime.now().minusDays(30);
+        List<OshGroupActivity> expiredList = groupServerMapper.selectExpiredUnformedActivities(expireBefore);
+
+        if (expiredList == null || expiredList.isEmpty()) {
+            return 0;
+        }
+
+        int cleanedCount = 0;
+        LocalDateTime now = LocalDateTime.now();
+        for (OshGroupActivity activity : expiredList) {
+            // 标记为已结束
+            groupServerMapper.updateGroupActivityStatus(activity.getId(), 3, now);
+            evictActivityCache(activity.getId());
+            cleanedCount++;
+            logger.info("【拼团定时任务】清理过期活动: id={}, title={}", activity.getId(), activity.getTitle());
+        }
+
+        // 同时清理过期的用户发起拼团
+        int expiredInitiated = expireInitiatedGroups();
+
+        logger.info("【拼团定时任务】清理过期组团: 活动 {} 条, 用户发起 {} 条", cleanedCount, expiredInitiated);
+        return cleanedCount;
+    }
+
+    /**
+     * 每日数据快照（每天凌晨4点执行）
+     * 生成前一天拼团数据快照
+     */
+    @Override
+    public void dailySnapshot() {
+        int totalActivities = groupServerMapper.countActivities(null);
+        int activeActivities = groupServerMapper.countActivities(1);
+        int successActivities = groupServerMapper.countActivities(2);
+        int endedActivities = groupServerMapper.countActivities(3);
+
+        int pendingOrders = groupServerMapper.countOrdersByStatus("pending");
+        int paidOrders = groupServerMapper.countOrdersByStatus("paid");
+        int successOrders = groupServerMapper.countOrdersByStatus("success");
+        int cancelledOrders = groupServerMapper.countOrdersByStatus("cancelled");
+
+        int activeInitiated = userInitiatedMapper.countActiveInitiatedGroups();
+
+        logger.info("【拼团每日快照】活动总数={}, 进行中={}, 成功={}, 已结束={}",
+                totalActivities, activeActivities, successActivities, endedActivities);
+        logger.info("【拼团每日快照】订单: pending={}, paid={}, success={}, cancelled={}",
+                pendingOrders, paidOrders, successOrders, cancelledOrders);
+        logger.info("【拼团每日快照】用户发起拼团(进行中)={}", activeInitiated);
+
+        // TODO: 将快照数据持久化到 osh_group_stats_snapshot 表（如需要BI报表支撑）
+    }
+
+    // ==================== 安全校验方法 ====================
+
+    /**
+     * 校验用户是否为某个拼团的成员
+     */
+    @Override
+    public boolean isUserInGroup(Long userId, Long activityId) {
+        if (userId == null || activityId == null) {
+            return false;
+        }
+        return groupServerMapper.isUserInGroup(userId, activityId) > 0;
+    }
+
+    /**
+     * 校验用户是否为指定订单的所有者
+     */
+    @Override
+    public boolean checkOrderOwnership(String orderNo, Long userId) {
+        if (orderNo == null || userId == null) {
+            return false;
+        }
+        return groupServerMapper.checkOrderOwnership(orderNo, userId) > 0;
     }
 }

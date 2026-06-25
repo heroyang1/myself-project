@@ -91,7 +91,7 @@ public class OshUserServiceImpl implements IOshUserService {
         }
         if (password.length() == 50) {
             String uniqueIdByUserId = oshUserMapper.getUniqueIdByUserId(oshUser.getId());
-            if (!uniqueIdByUserId.equals(password)) {
+            if (uniqueIdByUserId == null || !uniqueIdByUserId.equals(password)) {
                 return R.fail(ResultCode.FAILED_USER_UNIQUEID_ERROR.getMsg());
             }
         }else {
@@ -266,7 +266,7 @@ public class OshUserServiceImpl implements IOshUserService {
             return R.fail(ResultCode.FAILED_USER_NOT_EXISTS.getMsg());
         }
         String uniqueIdByUserId = oshUserMapper.getUniqueIdByUserId(userId);
-        if (!uniqueIdByUserId.equals(uniqueId)) {
+        if (uniqueIdByUserId == null || !uniqueIdByUserId.equals(uniqueId)) {
             return R.fail(ResultCode.FAILED_USER_UNIQUEID_ERROR.getMsg());
         }
         wrapper = new LambdaQueryWrapper<>();
@@ -321,7 +321,7 @@ public class OshUserServiceImpl implements IOshUserService {
             return R.fail(ResultCode.FAILED_USER_PASSWORD_NOT_MATCH.getMsg());
         }
         String uniqueIdByUserId = oshUserMapper.getUniqueIdByUserId(userId);
-        if (!uniqueIdByUserId.equals(uniqueId)) {
+        if (uniqueIdByUserId == null || !uniqueIdByUserId.equals(uniqueId)) {
             return R.fail(ResultCode.FAILED_USER_UNIQUEID_ERROR.getMsg());
         }
         oshUser.setPassword(SecurityUtils.encryptPassword(password));

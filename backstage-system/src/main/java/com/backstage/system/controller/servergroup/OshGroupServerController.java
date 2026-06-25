@@ -1,11 +1,13 @@
 package com.backstage.system.controller.servergroup;
 
 import com.backstage.common.annotation.Anonymous;
+import com.backstage.common.annotation.RateLimiter;
 import com.backstage.common.constant.OshUserConstants;
 import com.backstage.common.core.controller.BaseController;
 import com.backstage.common.core.domain.R;
 import com.backstage.common.core.page.TableDataInfo;
 import com.backstage.common.threadlocal.ThreadLocalUtil;
+import com.backstage.common.utils.DesensitizedUtil;
 import com.backstage.common.utils.SecurityUtils;
 import com.backstage.system.domain.dto.GroupCreateDTO;
 import com.backstage.system.domain.dto.AddUserToGroupDTO;
@@ -35,6 +37,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.DataIntegrityViolationException;
 import javax.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.util.HashMap;
@@ -193,9 +197,16 @@ public class OshGroupServerController extends BaseController {
             // 参与拼团无需额外权限检查，登录用户均可参与
             com.backstage.system.domain.vo.group.JoinGroupVO result = groupServerService.joinGroup(activityId, userId, payMethod);
             return R.ok(result, result.getMessage());
+        } catch (com.backstage.common.exception.ServiceException e) {
+            return R.fail(e.getMessage()); // 业务异常保留原始消息
+        } catch (DuplicateKeyException e) {
+            return R.fail("您已参团，请勿重复操作");
+        } catch (DataIntegrityViolationException e) {
+            logger.error("参与拼团数据冲突", e);
+            return R.fail("系统繁忙，请稍后重试");
         } catch (Exception e) {
             logger.error("参与拼团失败", e);
-            return R.fail(e.getMessage());
+            return R.fail("系统繁忙，请稍后重试"); // 避免暴露内部异常
         }
     }
     
@@ -241,9 +252,13 @@ public class OshGroupServerController extends BaseController {
         try {
             GroupCreateVO result = groupServerService.createGroupWork(dto, userId);
             return R.ok(result, "发起成功");
+        } catch (com.backstage.common.exception.ServiceException e) {
+            return R.fail(e.getMessage());
+        } catch (DuplicateKeyException e) {
+            return R.fail("您已发起过该拼团，请勿重复操作");
         } catch (Exception e) {
             logger.error("发起拼团失败", e);
-            return R.fail(e.getMessage());
+            return R.fail("系统繁忙，请稍后重试");
         }
     }
 
@@ -255,7 +270,7 @@ public class OshGroupServerController extends BaseController {
      * @param groupStatus 组团状态筛选（可选）：0-进行中 1-已成团 2-已结束
      * @return 组团记录列表（分页）
      */
-    @Anonymous
+    @PreAuthorize("hasAuthority('group:work:query')")
     @ApiOperation("查询全量组团记录列表")
     @GetMapping("/work/list")
     public TableDataInfo workList(
@@ -275,6 +290,8 @@ public class OshGroupServerController extends BaseController {
      * @param limit 返回数量限制（可选，默认20）
      * @return 用户信息列表
      */
+    @RateLimiter(time = 60, count = 10)
+    @PreAuthorize("hasAuthority('group:user:search')")
     @ApiOperation("模糊查询用户名列表")
     @GetMapping("/user/search")
     public R<List<UserSearchVO>> searchUsers(
@@ -314,9 +331,11 @@ public class OshGroupServerController extends BaseController {
                 operatorId
             );
             return R.ok(result, result.get("message").toString());
+        } catch (com.backstage.common.exception.ServiceException e) {
+            return R.fail(e.getMessage());
         } catch (Exception e) {
             logger.error("手动添加用户到拼团失败", e);
-            return R.fail(e.getMessage());
+            return R.fail("系统繁忙，请稍后重试");
         }
     }
     
@@ -350,22 +369,29 @@ public class OshGroupServerController extends BaseController {
             if (order == null) {
                 return R.fail("订单不存在");
             }
+
+            // 2. 校验订单归属（防止越权支付他人订单）
+            if (!userId.equals(order.getUserId())) {
+                logger.warn("【拼团支付】越权支付尝试: userId={}, orderUserId={}, orderNo={}",
+                        userId, order.getUserId(), DesensitizedUtil.maskOrderNo(orderNo));
+                return R.fail("订单不存在");
+            }
             
-            // 2. 校验订单状态（必须是待支付）
+            // 3. 校验订单状态（必须是待支付）
             if (!"pending".equals(order.getStatus())) {
                 return R.fail("订单状态不允许支付");
             }
             
-            // 3. 获取客户端IP
+            // 4. 获取客户端IP
             String clientIp = getClientIp(request);
             
-            // 4. 获取实际支付金额
+            // 5. 获取实际支付金额
             String money = order.getPrice() != null ? order.getPrice().toString() : "0";
             
-            // 5. 创建支付流水记录（必须先创建，才能被回调处理）
+            // 6. 创建支付流水记录（必须先创建，才能被回调处理）
             groupServerService.createGroupPayment(orderNo, order.getId(), money, clientIp);
             
-            // 6. 调用支付服务创建支付（默认使用微信支付）
+            // 7. 调用支付服务创建支付（默认使用微信支付）
             PayResponse response = payService.createPay(orderNo, name, money, clientIp, "wxpay");
             
             if (response.getCode() == 1) {
@@ -375,7 +401,7 @@ public class OshGroupServerController extends BaseController {
             }
         } catch (Exception e) {
             logger.error("拼团订单支付失败", e);
-            return R.fail("支付请求失败: " + e.getMessage());
+            return R.fail("支付请求失败，请稍后重试");
         }
     }
     
@@ -404,6 +430,13 @@ public class OshGroupServerController extends BaseController {
             if (order == null) {
                 return R.fail("订单不存在");
             }
+
+            // 校验订单归属（防止越权查看他人订单）
+            if (!userId.equals(order.getUserId())) {
+                logger.warn("【拼团订单】越权访问尝试: userId={}, orderUserId={}, orderNo={}",
+                        userId, order.getUserId(), DesensitizedUtil.maskOrderNo(orderNo));
+                return R.fail("订单不存在");
+            }
             
             // 构造返回结果
             Map<String, Object> result = new HashMap<>();
@@ -416,7 +449,7 @@ public class OshGroupServerController extends BaseController {
             return R.ok(result, "查询成功");
         } catch (Exception e) {
             logger.error("查询订单状态失败", e);
-            return R.fail("查询失败: " + e.getMessage());
+            return R.fail("查询失败，请稍后重试");
         }
     }
     
@@ -459,9 +492,11 @@ public class OshGroupServerController extends BaseController {
             com.backstage.system.domain.vo.group.ServerTutorialVO tutorial = 
                 groupServerService.getServerTutorial(activityId);
             return R.ok(tutorial, "查询成功");
+        } catch (com.backstage.common.exception.ServiceException e) {
+            return R.fail(e.getMessage());
         } catch (Exception e) {
             logger.error("获取服务器教程失败", e);
-            return R.fail(e.getMessage());
+            return R.fail("获取教程失败，请稍后重试");
         }
     }
     
@@ -484,13 +519,20 @@ public class OshGroupServerController extends BaseController {
             if (userId == null) {
                 return R.fail("请先登录");
             }
+
+            // 校验用户是否为该拼团的成员（防止越权获取服务器凭证）
+            boolean isMember = groupServerService.isUserInGroup(userId, activityId);
+            if (!isMember) {
+                logger.warn("【拼团SSH】越权访问尝试: userId={}, activityId={}", userId, activityId);
+                return R.fail("无权访问");
+            }
             
             com.backstage.system.domain.vo.group.ServerSshInfoVO sshInfo = 
                 groupServerService.getServerSshInfo(activityId, userId);
             return R.ok(sshInfo, "查询成功");
         } catch (Exception e) {
             logger.error("获取服务器SSH信息失败", e);
-            return R.fail(e.getMessage());
+            return R.fail("获取服务器信息失败，请稍后重试");
         }
     }
 }

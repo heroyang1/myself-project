@@ -173,4 +173,78 @@ public interface IOshGroupServerService {
      * @param clientIp 客户端IP
      */
     void createGroupPayment(String orderNo, Long orderId, String amount, String clientIp);
+
+    // ==================== 定时任务业务方法 ====================
+
+    /**
+     * 取消超时未支付的 pending 订单（每5分钟执行）
+     * 仅释放名额，不退款。
+     *
+     * @return 取消的订单数量
+     */
+    int cancelExpiredOrders();
+
+    /**
+     * 关闭已过招募期的用户发起拼团（每天凌晨2点执行）
+     *
+     * @return 关闭的记录数量
+     */
+    int expireInitiatedGroups();
+
+    /**
+     * 自动更新拼团活动状态（每天凌晨2:30执行）
+     * 根据参团人数和时间自动更新：1进行中→2拼团成功→3已结束
+     *
+     * @return 更新的活动数量
+     */
+    int autoUpdateActivityStatus();
+
+    /**
+     * 同步活动当前参与人数（每10分钟执行）
+     * 基于 osh_group_work 表刷新 osh_group_activity.current_num
+     *
+     * @return 同步的活动数量
+     */
+    int refreshActivityCurrentNum();
+
+    /**
+     * 服务器到期前提醒（每天9点执行）
+     * 在到期前N天提醒用户
+     *
+     * @return 提醒的记录数量
+     */
+    int notifyExpiringServers();
+
+    /**
+     * 清理长期未成团且已过期的组团（每天凌晨3点执行）
+     *
+     * @return 清理的活动数量
+     */
+    int cleanupExpiredGroups();
+
+    /**
+     * 每日数据快照（每天凌晨4点执行）
+     * 生成前一天拼团数据快照（订单数/成交额/成团率等）
+     */
+    void dailySnapshot();
+
+    // ==================== 安全校验方法 ====================
+
+    /**
+     * 校验用户是否为某个拼团的成员
+     *
+     * @param userId     用户ID
+     * @param activityId 活动ID
+     * @return 是否为成员
+     */
+    boolean isUserInGroup(Long userId, Long activityId);
+
+    /**
+     * 校验用户是否为指定订单的所有者
+     *
+     * @param orderNo 订单号
+     * @param userId  用户ID
+     * @return 是否为订单所有者
+     */
+    boolean checkOrderOwnership(String orderNo, Long userId);
 }

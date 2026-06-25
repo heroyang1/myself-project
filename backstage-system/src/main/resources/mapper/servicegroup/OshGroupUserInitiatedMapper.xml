@@ -8,6 +8,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <resultMap type="com.backstage.system.domain.servergroup.OshGroupUserInitiated" id="OshGroupUserInitiatedResult">
         <id     property="id"              column="id"/>
         <result property="userId"          column="user_id"/>
+        <result property="activityId"      column="activity_id"/>
         <result property="orderId"         column="order_id"/>
         <result property="minNum"          column="min_num"/>
         <result property="maxNum"          column="max_num"/>
@@ -240,6 +241,37 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             expire_time
         FROM osh_group_user_initiated
         WHERE id = #{activityId}
+          AND delete_flag = 0
+    </select>
+
+    <!-- ==================== 定时任务相关 SQL ==================== -->
+
+    <!-- 查询已过招募期且状态仍为招募中的用户发起拼团记录 -->
+    <select id="selectExpiredInitiatedGroups" resultMap="OshGroupUserInitiatedResult">
+        <include refid="selectUserInitiatedVo"/>
+        WHERE group_status = 0
+          AND delete_flag = 0
+          AND expire_time IS NOT NULL
+          AND expire_time &lt; #{expireBefore}
+    </select>
+
+    <!-- 批量更新用户发起拼团记录的状态 -->
+    <update id="batchUpdateGroupStatus">
+        UPDATE osh_group_user_initiated
+        SET group_status = #{groupStatus},
+            update_time = NOW()
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          AND group_status = 0
+    </update>
+
+    <!-- 统计进行中的用户发起拼团数量 -->
+    <select id="countActiveInitiatedGroups" resultType="int">
+        SELECT COUNT(*)
+        FROM osh_group_user_initiated
+        WHERE group_status = 0
           AND delete_flag = 0
     </select>
 
