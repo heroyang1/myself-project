@@ -1,20 +1,17 @@
 package com.backstage.system.domain;
 
-import com.backstage.common.core.domain.BaseEntity;
-import com.baomidou.mybatisplus.annotation.*;
-import com.fasterxml.jackson.annotation.JsonFormat;
+import com.backstage.common.core.domain.entity.OSHBaseEntity;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 
 import java.io.Serializable;
-import java.time.LocalDateTime;
-import java.util.Date;
 
 /**
- * 电子书章节对象 osh_book_chapter
- *
- * @author backstage
+ * 电子书章节对象，对应表 osh_book_chapter。
  */
 @TableName("osh_book_chapter")
-public class BookChapter implements Serializable {
+public class BookChapter extends OSHBaseEntity implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /** 章节ID */
@@ -27,7 +24,7 @@ public class BookChapter implements Serializable {
     /** 章节标题 */
     private String title;
 
-    /** 章节内容 */
+    /** 章节内容，统一按 Markdown 保存和渲染 */
     private String content;
 
     /** 第几章 */
@@ -36,29 +33,8 @@ public class BookChapter implements Serializable {
     /** 展示排序 */
     private Integer sortOrder;
 
-    /** 是否免费（0收费 1免费） */
+    /** 是否免费：0收费，1免费 */
     private Integer isFree;
-
-    /** 创建者 */
-    private String createBy;
-
-    /** 创建时间 */
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
-    @TableField(fill = FieldFill.INSERT)
-    private LocalDateTime createTime;
-
-    /** 更新者 */
-    private String updateBy;
-
-    /** 更新时间 */
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
-    @TableField(fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updateTime;
-
-
-    /** 删除标志（0代表存在 1代表删除） */
-    @TableLogic
-    private String delFlag;
 
     public Long getId() {
         return id;
@@ -114,50 +90,5 @@ public class BookChapter implements Serializable {
 
     public void setIsFree(Integer isFree) {
         this.isFree = isFree;
-    }
-
-    public String getDelFlag() {
-        return delFlag;
-    }
-
-    public void setDelFlag(String delFlag) {
-        this.delFlag = delFlag;
-    }
-
-
-    public String getCreateBy() {
-        return createBy;
-    }
-
-
-    public void setCreateBy(String createBy) {
-        this.createBy = createBy;
-    }
-
-
-    public LocalDateTime getCreateTime() {
-        return createTime;
-    }
-
-    public void setCreateTime(LocalDateTime createTime) {
-        this.createTime = createTime;
-    }
-
-
-    public String getUpdateBy() {
-        return updateBy;
-    }
-
-
-    public void setUpdateBy(String updateBy) {
-        this.updateBy = updateBy;
-    }
-
-    public LocalDateTime getUpdateTime() {
-        return updateTime;
-    }
-
-    public void setUpdateTime(LocalDateTime updateTime) {
-        this.updateTime = updateTime;
     }
 }

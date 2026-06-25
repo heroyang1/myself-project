@@ -14,7 +14,7 @@ public interface BookTagDOMapper extends BaseMapper<BookTagDO> {
         LambdaQueryWrapper<BookTagDO> queryWrapper = new LambdaQueryWrapper<BookTagDO>()
                 .select(BookTagDO::getTagName)
                 .eq(BookTagDO::getBookId, id)
-                .eq(BookTagDO::getDelFlag, 0);
+                .eq(BookTagDO::getDeleteFlag, 0);
 
         List<BookTagDO> list = selectList(queryWrapper);
 
@@ -29,7 +29,7 @@ public interface BookTagDOMapper extends BaseMapper<BookTagDO> {
     default List<String> getTagList() {
         LambdaQueryWrapper<BookTagDO> queryWrapper = new LambdaQueryWrapper<BookTagDO>()
                 .select(BookTagDO::getTagName)
-                .eq(BookTagDO::getDelFlag, 0);
+                .eq(BookTagDO::getDeleteFlag, 0);
 
         List<BookTagDO> list = selectList(queryWrapper);
 

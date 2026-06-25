@@ -47,7 +47,21 @@ public class UserContextUtil {
     }
 
     public static Integer getCurrentLevel() {
-        return Integer.parseInt(ThreadLocalUtil.get(OshUserConstants.LEVEL, String.class));
+        Object level = ThreadLocalUtil.getLocalMap().get(OshUserConstants.LEVEL);
+        if (level == null) {
+            return null;
+        }
+        if (level instanceof Integer) {
+            return (Integer) level;
+        }
+        if (level instanceof Number) {
+            return ((Number) level).intValue();
+        }
+        String levelText = String.valueOf(level);
+        if (StrUtil.isBlank(levelText)) {
+            return null;
+        }
+        return Integer.parseInt(levelText);
     }
 
     /**

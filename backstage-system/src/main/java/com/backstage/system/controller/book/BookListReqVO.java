@@ -15,20 +15,19 @@ public class BookListReqVO {
     @ApiModelProperty(value = "电子书标题")
     private String title;
 
-    
-
-    @ApiModelProperty(value = "权限等级：0-免费 1-小班专属 2-付费 3-VIP 4-内部")
+    @ApiModelProperty(value = "资源等级：1免费，2VIP，3小班，4内部成员，6创始人")
     private Integer level;
 
-    @ApiModelProperty(value = "当前用户权限等级（后端自动设置）", hidden = true)
+    @ApiModelProperty(value = "当前用户权限等级，后端自动设置", hidden = true)
     private Integer userLevel;
 
-    @ApiModelProperty(value = "当前用户ID（后端自动设置）", hidden = true)
+    @ApiModelProperty(value = "当前用户ID，后端自动设置", hidden = true)
     private Long userId;
 
-    /**
-     * 标签名列表
-     */
+    @ApiModelProperty(value = "是否包含逻辑删除电子书，仅 level>=4 生效")
+    private Boolean includeDeleted;
+
+    /** 标签名列表 */
     private List<String> tagNameList;
 
     public Long getPageNum() {
@@ -45,6 +44,14 @@ public class BookListReqVO {
 
     public void setPageSize(Long pageSize) {
         this.pageSize = pageSize;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
     }
 
     public Integer getLevel() {
@@ -71,19 +78,19 @@ public class BookListReqVO {
         this.userId = userId;
     }
 
+    public Boolean getIncludeDeleted() {
+        return includeDeleted;
+    }
+
+    public void setIncludeDeleted(Boolean includeDeleted) {
+        this.includeDeleted = includeDeleted;
+    }
+
     public List<String> getTagNameList() {
         return tagNameList;
     }
 
     public void setTagNameList(List<String> tagNameList) {
         this.tagNameList = tagNameList;
-    }
-
-    public String getTitle() {
-        return title;
-    }
-
-    public void setTitle(String title) {
-        this.title = title;
     }
 }
