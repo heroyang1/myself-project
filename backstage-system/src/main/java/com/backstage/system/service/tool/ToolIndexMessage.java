@@ -17,6 +17,7 @@ public class ToolIndexMessage {
     private String routePath;
     private String iframeUrl;
     private String githubUrl;
+    private String backgroundImage;
     private String resourceType;
     private Integer quotaCost;
     private Integer level;
@@ -116,6 +117,14 @@ public class ToolIndexMessage {
 
     public void setGithubUrl(String githubUrl) {
         this.githubUrl = githubUrl;
+    }
+
+    public String getBackgroundImage() {
+        return backgroundImage;
+    }
+
+    public void setBackgroundImage(String backgroundImage) {
+        this.backgroundImage = backgroundImage;
     }
 
     public String getResourceType() {

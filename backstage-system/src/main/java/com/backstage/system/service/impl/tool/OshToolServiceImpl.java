@@ -22,6 +22,7 @@ import com.backstage.system.request.tool.ToolRecommendRequest;
 import com.backstage.system.request.tool.ToolSaveRequest;
 import com.backstage.system.request.tool.ToolSearchRequest;
 import com.backstage.system.service.OutboxEventService;
+import com.backstage.system.service.common.OssService;
 import com.backstage.system.service.tool.IOshToolEsService;
 import com.backstage.system.service.tool.IOshToolService;
 import com.backstage.system.service.tool.ResourceNoGenerator;
@@ -88,6 +89,9 @@ public class OshToolServiceImpl implements IOshToolService {
 
     @Autowired
     private ResourceNoGenerator resourceNoGenerator;
+
+    @Autowired
+    private OssService ossService;
 
     @Override
     public List<OshTool> pageQuerySearchTool(Long userId, ToolSearchRequest request) {
@@ -183,6 +187,7 @@ public class OshToolServiceImpl implements IOshToolService {
         tool.setCollectionFlag(resolveCollectionFlag(toolId, userId));
         fillUserToolQuota(tool, userId);
         tool.setVoteType(resolveVoteType(toolId, userId));
+        fillBackgroundImageUrl(tool);
         return tool;
     }
 
@@ -440,6 +445,7 @@ public class OshToolServiceImpl implements IOshToolService {
         tool.setRoutePath(accessType == ACCESS_TYPE_INTERNAL ? request.getRoutePath() : null);
         tool.setIframeUrl(accessType == ACCESS_TYPE_IFRAME ? request.getIframeUrl() : null);
         tool.setGithubUrl(request.getGithubUrl());
+        tool.setBackgroundImage(request.getBackgroundImage());
         tool.setQuotaCost(resolveQuotaCost(request, resourceType));
         tool.setStatus(request.getId() == null ? 2 : request.getStatus());
         tool.setRemark(request.getRemark());
@@ -620,7 +626,20 @@ public class OshToolServiceImpl implements IOshToolService {
     private void fillToolExtras(List<OshTool> tools) {
         for (OshTool tool : tools) {
             tool.setTags(oshToolTagMapper.selectTagNamesByToolId(tool.getId()));
+            fillBackgroundImageUrl(tool);
         }
+    }
+
+    private void fillBackgroundImageUrl(OshTool tool) {
+        if (tool == null || StringUtils.isBlank(tool.getBackgroundImage())) {
+            return;
+        }
+        String backgroundImage = tool.getBackgroundImage();
+        if (isExternalUrl(backgroundImage)) {
+            tool.setBackgroundImageUrl(backgroundImage);
+            return;
+        }
+        tool.setBackgroundImageUrl(ossService.getLimitedUrl(backgroundImage, 1440));
     }
 
     private void fillUserToolQuota(OshTool tool, Long userId) {

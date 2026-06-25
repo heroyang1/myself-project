@@ -39,6 +39,12 @@ public class OshTool {
     @ApiModelProperty("GitHub地址")
     private String githubUrl;
 
+    @ApiModelProperty("工具展开背景图OSS相对路径")
+    private String backgroundImage;
+
+    @ApiModelProperty("工具展开背景图临时访问地址")
+    private String backgroundImageUrl;
+
     @ApiModelProperty("单次消耗工具点数")
     private Integer quotaCost;
 
@@ -166,6 +172,22 @@ public class OshTool {
 
     public void setGithubUrl(String githubUrl) {
         this.githubUrl = githubUrl;
+    }
+
+    public String getBackgroundImage() {
+        return backgroundImage;
+    }
+
+    public void setBackgroundImage(String backgroundImage) {
+        this.backgroundImage = backgroundImage;
+    }
+
+    public String getBackgroundImageUrl() {
+        return backgroundImageUrl;
+    }
+
+    public void setBackgroundImageUrl(String backgroundImageUrl) {
+        this.backgroundImageUrl = backgroundImageUrl;
     }
 
     public Integer getQuotaCost() {

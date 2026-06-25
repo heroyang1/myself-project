@@ -8,14 +8,17 @@ import com.backstage.common.constant.ResourceType;
 import com.backstage.common.annotation.OshUserLevel;
 import com.backstage.common.core.controller.BaseController;
 import com.backstage.common.core.domain.R;
+import com.backstage.common.enums.UploadPathEnum;
 import com.backstage.common.exception.ServiceException;
 import com.backstage.common.response.PageResponse;
 import com.backstage.system.config.properties.SearchEsProperties;
+import com.backstage.system.constants.CourseUploadConstants;
 import com.backstage.system.domain.tool.OshTool;
 import com.backstage.system.domain.tool.OshToolTag;
 import com.backstage.system.domain.tool.ToolUsagePermission;
 import com.backstage.system.domain.user.OshUser;
 import com.backstage.system.domain.vo.tool.ToolCalculatorResultVO;
+import com.backstage.system.domain.vo.tool.ToolBackgroundUploadVO;
 import com.backstage.system.enums.behavior.ContributionResourceType;
 import com.backstage.system.domain.vo.tool.ToolQuotaCurrentVO;
 import com.backstage.system.request.tool.ToolCalculatorRequest;
@@ -32,6 +35,7 @@ import com.backstage.system.service.tool.IOshToolCollectionService;
 import com.backstage.system.service.tool.IOshToolEsService;
 import com.backstage.system.service.tool.IOshToolService;
 import com.backstage.system.service.questionanswer.IOshQAQuestionService;
+import com.backstage.system.service.common.OssService;
 import com.backstage.system.utils.UserContextUtil;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiImplicitParam;
@@ -42,6 +46,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import javax.validation.constraints.NotNull;
 import java.util.Collections;
@@ -71,6 +76,9 @@ public class OshToolController extends BaseController {
 
     @Autowired
     private IOshQAQuestionService oshQaQuestionService;
+
+    @Autowired
+    private OssService ossService;
 
     @ApiOperation("工具搜索")
     @PostMapping("/search")
@@ -247,6 +255,42 @@ public class OshToolController extends BaseController {
         }
     }
 
+    @ApiOperation("上传工具展开背景图")
+    @PostMapping("/background/upload")
+    @OshUserLevel(value = 5)
+    @OshUserEvent(module = "工具模块", actionType = "上传", resourceType = ResourceType.TOOL_TYPE, description = "上传工具展开背景图")
+    public R<ToolBackgroundUploadVO> uploadBackground(@RequestParam("file") MultipartFile file,
+                                                       @RequestParam(value = "toolId", required = false) Long toolId) {
+        if (file == null || file.isEmpty()) {
+            return R.fail("背景图不能为空");
+        }
+        String fileName = file.getOriginalFilename();
+        String extension = resolveExtension(fileName);
+        if (!CourseUploadConstants.ALLOWED_IMAGE_EXTENSIONS.contains(extension)) {
+            return R.fail("背景图仅支持 bmp、gif、jpg、jpeg、png 格式");
+        }
+        if (file.getSize() > CourseUploadConstants.MAX_IMAGE_SIZE) {
+            return R.fail("背景图大小不能超过 5MB");
+        }
+        try {
+            String owner = toolId == null ? "temp" : String.valueOf(toolId);
+            String relativePath = ossService.upload(file, UploadPathEnum.TOOL_COVER, owner);
+            if (relativePath == null || CourseUploadConstants.isUploadError(relativePath)) {
+                return R.fail(relativePath == null ? "上传背景图失败" : relativePath);
+            }
+            ToolBackgroundUploadVO vo = new ToolBackgroundUploadVO();
+            vo.setBackgroundImage(relativePath);
+            vo.setBackgroundImageUrl(ossService.getLimitedUrl(relativePath, 1440));
+            vo.setFileName(fileName);
+            vo.setFileSize(file.getSize());
+            vo.setFileType(file.getContentType());
+            return R.ok(vo);
+        } catch (Exception ex) {
+            log.error("上传工具背景图失败", ex);
+            return R.fail("上传背景图失败：" + ex.getMessage());
+        }
+    }
+
     @ApiOperation("批量删除工具")
     @PostMapping("/delete")
     @OshUserEvent(module = "工具模块", actionType = "删除", resourceType = ResourceType.TOOL_TYPE, description = "批量删除工具")
@@ -263,6 +307,13 @@ public class OshToolController extends BaseController {
         } catch (IllegalArgumentException ex) {
             return R.fail(ex.getMessage());
         }
+    }
+
+    private String resolveExtension(String fileName) {
+        if (fileName == null || !fileName.contains(".")) {
+            return "";
+        }
+        return fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase();
     }
 
     @ApiOperation("收藏工具")
