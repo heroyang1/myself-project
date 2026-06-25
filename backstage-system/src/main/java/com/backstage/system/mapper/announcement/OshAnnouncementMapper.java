@@ -22,9 +22,9 @@ public interface OshAnnouncementMapper {
      * @param channel 栏目：1-公告 2-动态
      * @param limit   返回条数上限
      */
-    @Select("SELECT id, title, icon, color, channel, create_time AS createTime " +
+    @Select("SELECT id, title, icon_code AS icon, NULL AS color, channel, create_time AS createTime " +
             "FROM osh_announcement " +
-            "WHERE delete_flag = 0 AND status = 4 AND module = #{module} AND channel = #{channel} " +
+            "WHERE delete_flag = 0 AND status = 4 AND source_module = #{module} AND channel = #{channel} " +
             "ORDER BY sort DESC, create_time DESC " +
             "LIMIT #{limit}")
     List<AnnouncementMarqueeVO> selectMarqueeByModuleAndChannel(@Param("module") String module,
@@ -52,6 +52,23 @@ public interface OshAnnouncementMapper {
                                   @Param("resourceId") Long resourceId,
                                   @Param("sort") int sort,
                                   @Param("channel") int channel);
+
+    /**
+     * 插入一条审核模块公告记录，供各资源审核通过后展示在审核页公告栏。
+     */
+    @Insert("INSERT INTO osh_announcement " +
+            "(title, link, icon_code, channel, resource_type, resource_id, " +
+            " sort, status, source, source_module, delete_flag, create_by, create_time, update_by, update_time) " +
+            "VALUES " +
+            "(#{title}, #{link}, #{icon}, #{channel}, #{resourceType}, #{resourceId}, " +
+            " 0, 4, 'system', 'audit', 0, #{operator}, NOW(), #{operator}, NOW())")
+    int insertAuditAnnouncement(@Param("title") String title,
+                                @Param("link") String link,
+                                @Param("icon") String icon,
+                                @Param("resourceType") String resourceType,
+                                @Param("resourceId") Long resourceId,
+                                @Param("channel") int channel,
+                                @Param("operator") String operator);
 
     /**
      * 查询秒杀公告栏（channel=1），按 sort 降序、create_time 降序

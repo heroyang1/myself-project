@@ -222,7 +222,7 @@ public class OshToolController extends BaseController {
                 contributionService.recordContribution(ContributionResourceType.TOOL.getCode(), toolId, request.getToolName());
             }
             return R.ok(toolId);
-        } catch (IllegalArgumentException ex) {
+        } catch (IllegalArgumentException | ServiceException ex) {
             return R.fail(ex.getMessage());
         }
     }
@@ -242,7 +242,7 @@ public class OshToolController extends BaseController {
         }
         try {
             return R.ok(oshToolService.updateTool(request, currentOshUser));
-        } catch (IllegalArgumentException ex) {
+        } catch (IllegalArgumentException | ServiceException ex) {
             return R.fail(ex.getMessage());
         }
     }

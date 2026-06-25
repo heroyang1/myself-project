@@ -25,6 +25,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -173,6 +174,27 @@ public class OshToolServiceImplTest {
         operator.setUsername("admin");
 
         toolService.createTool(request, operator);
+    }
+
+    @Test
+    public void shouldRejectCreateToolWhenToolNameExists() {
+        ToolSaveRequest request = new ToolSaveRequest();
+        request.setToolName("测试工具");
+        request.setRoutePath("/test/test");
+
+        OshUser operator = new OshUser();
+        operator.setUsername("admin");
+
+        when(oshToolMapper.countActiveByToolName("测试工具", null)).thenReturn(1);
+
+        try {
+            toolService.createTool(request, operator);
+            fail("Expected duplicate tool name to be rejected");
+        } catch (IllegalArgumentException ex) {
+            assertEquals("工具名称已存在，请换一个名称", ex.getMessage());
+        }
+
+        verify(oshToolMapper, never()).insertTool(any(OshTool.class));
     }
 
     @Test

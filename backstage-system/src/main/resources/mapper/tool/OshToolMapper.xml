@@ -293,6 +293,16 @@
         where no = #{no}
     </select>
 
+    <select id="countActiveByToolName" resultType="int">
+        select count(1)
+        from osh_tool
+        where tool_name = #{toolName}
+          and delete_flag = 0
+        <if test="excludeId != null">
+          and id != #{excludeId}
+        </if>
+    </select>
+
     <update id="deleteToolsByIds">
         update osh_tool
         set delete_flag = 1,

@@ -11,6 +11,7 @@ import com.backstage.system.domain.websocket.WsNotifyMessage;
 import com.backstage.system.mapper.audit.ResourceAuditMapper;
 import com.backstage.system.mapper.tool.OshToolAnnouncementMapper;
 import com.backstage.system.mapper.user.OshUserMapper;
+import com.backstage.system.service.audit.AuditAnnouncementPublisher;
 import com.backstage.system.service.audit.ResourceAuditCallbackContext;
 import com.backstage.system.service.audit.ResourceAuditCallbackHandler;
 import com.backstage.system.service.websocket.WebSocketNotifyService;
@@ -48,6 +49,9 @@ public class ToolResourceAuditCallbackHandler implements ResourceAuditCallbackHa
     @Resource
     private WebSocketNotifyService webSocketNotifyService;
 
+    @Resource
+    private AuditAnnouncementPublisher auditAnnouncementPublisher;
+
     @Override
     public List<ResourceTypeEnum> resourceTypes() {
         return Collections.singletonList(ResourceTypeEnum.TOOL);
@@ -65,6 +69,7 @@ public class ToolResourceAuditCallbackHandler implements ResourceAuditCallbackHa
         String toolName = StringUtils.isEmpty(resource.getTitle()) ? String.valueOf(context.getResourceId()) : resource.getTitle();
         String jumpUrl = buildToolJumpUrl(resource, context.getResourceId());
         notifyCreator(resource, context.getResourceId(), context.getResourceStatus(), toolName, jumpUrl);
+        auditAnnouncementPublisher.publishResult(ResourceTypeEnum.TOOL, context.getResourceId(), toolName, context.getResourceStatus(), jumpUrl);
         if (ResourceStatusEnum.isPublished(context.getResourceStatus())) {
             publishToolOnline(toolName, context.getResourceId(), jumpUrl);
         }
@@ -116,10 +121,7 @@ public class ToolResourceAuditCallbackHandler implements ResourceAuditCallbackHa
     }
 
     private String buildToolJumpUrl(ResourceAuditItemVO resource, Long toolId) {
-        if (!StringUtils.isEmpty(resource.getUrl())) {
-            return resource.getUrl();
-        }
-        return "/tool/detail/" + toolId;
+        return "/tool?toolId=" + toolId + "&autoOpen=1";
     }
 
     private Long parseTargetUserId(String createBy) {

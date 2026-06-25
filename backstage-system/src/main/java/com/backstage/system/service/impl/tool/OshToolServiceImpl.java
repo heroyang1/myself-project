@@ -124,6 +124,7 @@ public class OshToolServiceImpl implements IOshToolService {
         if (StringUtils.isBlank(request.getToolName())) {
             throw new IllegalArgumentException("工具名称不能为空");
         }
+        validateToolNameUnique(request.getToolName(), null);
         validateToolTags(request.getTags());
         OshTool tool = buildTool(request, operator.getUsername());
         tool.setNo(generateToolNo());
@@ -141,6 +142,10 @@ public class OshToolServiceImpl implements IOshToolService {
         if (request.getId() == null) {
             throw new IllegalArgumentException("工具ID不能为空");
         }
+        if (StringUtils.isBlank(request.getToolName())) {
+            throw new IllegalArgumentException("工具名称不能为空");
+        }
+        validateToolNameUnique(request.getToolName(), request.getId());
         validateToolTags(request.getTags());
         validateToolExists(request.getId());
         OshTool tool = buildTool(request, operator.getUsername());
@@ -494,6 +499,12 @@ public class OshToolServiceImpl implements IOshToolService {
     private void validateToolTags(List<String> tags) {
         if (tags != null && tags.size() > MAX_TOOL_TAG_COUNT) {
             throw new IllegalArgumentException("工具标签最多添加" + MAX_TOOL_TAG_COUNT + "个");
+        }
+    }
+
+    private void validateToolNameUnique(String toolName, Long excludeId) {
+        if (oshToolMapper.countActiveByToolName(toolName, excludeId) > 0) {
+            throw new IllegalArgumentException("工具名称已存在，请换一个名称");
         }
     }
 
