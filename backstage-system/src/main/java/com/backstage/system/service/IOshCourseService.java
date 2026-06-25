@@ -92,6 +92,11 @@ public interface IOshCourseService {
 
     List<OshCourseSectionVo> getCourseSectionOutline(Long courseId, Long userId);
 
+    /**
+     * 编辑页获取课程大纲（不做试看/购买权限裁剪，保留完整文档内容）
+     */
+    List<OshCourseSectionVo> getCourseSectionOutlineForEdit(Long courseId);
+
     boolean canUserAccessSectionContent(Long courseId, Long sectionId, Long userId);
 
     Integer isUserBuyCourseOrFreeCourse(Long courseId, Long userId);
@@ -101,6 +106,11 @@ public interface IOshCourseService {
     boolean canUserAskQuestion(Long courseId, Long sectionId, Long userId);
 
     String getCourseSectionContent(Long sectionId, Long userId);
+
+    /**
+     * 编辑页获取小节文档内容（不受购买/试看权限限制）
+     */
+    String getCourseSectionEditContent(Long sectionId);
 
     List<OshCourseMaterial> getCourseMaterials(Long courseId);
 

@@ -214,6 +214,31 @@ public class OshCourseController extends BaseController {
         return R.ok(oshCourseDetailVo);
     }
 
+    private boolean canEditCourseSectionContent() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null) {
+                return false;
+            }
+            Collection<? extends GrantedAuthority> authorities = authentication.getAuthorities();
+            if (authorities == null || authorities.isEmpty()) {
+                return false;
+            }
+            for (GrantedAuthority authority : authorities) {
+                String perm = authority == null ? null : authority.getAuthority();
+                if ("course:section:video".equals(perm)
+                        || "course:section:text".equals(perm)
+                        || "course:update".equals(perm)
+                        || "course:create".equals(perm)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
     private boolean canViewUnpublishedDetail(OshUser currentOshUser) {
         if (currentOshUser == null) {
             return false;
@@ -251,6 +276,34 @@ public class OshCourseController extends BaseController {
             return R.fail("您没有获取课程内容的权限，请购买后观看");
         }
         return R.ok(oshCourseService.getCourseSectionContent(sectionId, userId));
+    }
+
+    @ApiOperation("编辑页获取小节文档内容")
+    @GetMapping("/section/editContent/{courseId}/{sectionId}")
+    @OshUserEvent(module = "课程模块", actionType = "查询", resourceType = ResourceType.COURSE_TYPE, description = "编辑页获取小节文档内容")
+    @Anonymous
+    public R<String> getCourseSectionEditContent(@OshResourceId @NotNull @PathVariable Long courseId, @NotNull @PathVariable Long sectionId) {
+        if (UserContextUtil.getCurrentUser() == null) {
+            return R.fail("请先登录");
+        }
+        if (!canEditCourseSectionContent()) {
+            return R.fail("无权限获取小节编辑内容");
+        }
+        return R.ok(oshCourseService.getCourseSectionEditContent(sectionId));
+    }
+
+    @ApiOperation("编辑页获取课程大纲")
+    @GetMapping("/section/outline/edit/{courseId}")
+    @OshUserEvent(module = "课程模块", actionType = "查询", resourceType = ResourceType.COURSE_TYPE, description = "编辑页获取课程大纲")
+    @Anonymous
+    public R<List<OshCourseSectionVo>> getSectionOutlineForEdit(@OshResourceId @NotNull @PathVariable Long courseId) {
+        if (UserContextUtil.getCurrentUser() == null) {
+            return R.fail("请先登录");
+        }
+        if (!canEditCourseSectionContent()) {
+            return R.fail("无权限获取课程编辑大纲");
+        }
+        return R.ok(oshCourseService.getCourseSectionOutlineForEdit(courseId));
     }
 
     @ApiOperation("获取课程资料数组")

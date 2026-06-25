@@ -696,8 +696,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <select id="getCourseSectionContent" resultType="java.lang.String">
         select case
-                   when s.type = 'text' then ifnull(d.content, '')
-                   when s.type = 'video' then s.media_url
+                   when d.content is not null and d.content != '' then d.content
+                   when s.type = 'text' then ifnull(s.text_content, '')
+                   when s.type = 'video' then ifnull(nullif(d.content, ''), nullif(s.text_content, ''), ifnull(s.media_url, ''))
                    else ''
                    end as content
         from osh_course_section s
