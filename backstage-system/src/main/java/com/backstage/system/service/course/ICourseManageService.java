@@ -551,4 +551,14 @@ public interface ICourseManageService {
      * @return 相对路径到临时URL的映射 Map<String, String>
      */
     Map<String, String> batchGetContentImageUrls(List<String> relativePaths, int minute);
+
+    /**
+     * 转存外链图片到 OSS（用于 Markdown 导入，绕过防盗链）
+     */
+    Map<String, Object> importRemoteImage(String url);
+
+    /**
+     * 批量删除课程内容图片（Markdown 重新导入时清理旧 OSS 资源）
+     */
+    void deleteContentImages(List<String> paths);
 }
