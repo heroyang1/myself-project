@@ -169,10 +169,10 @@ public class BookEsServiceImpl implements IBookEsService {
         )));
         document.setLevel(bookDO.getLevel());
         document.setStatus(bookDO.getStatus());
-        document.setDeleteFlag(0);
+        document.setDeleteFlag(bookDO.getDeleteFlag() == null ? 0 : bookDO.getDeleteFlag().intValue());
         document.setRemark(bookDO.getRemark());
-        document.setCreateBy(bookDO.getCreateBy());
-        document.setUpdateBy(bookDO.getUpdateBy());
+        document.setCreateBy(bookDO.getCreateBy() == null ? null : String.valueOf(bookDO.getCreateBy()));
+        document.setUpdateBy(bookDO.getUpdateBy() == null ? null : String.valueOf(bookDO.getUpdateBy()));
         document.setCreateTime(bookDO.getCreateTime());
         document.setUpdateTime(bookDO.getUpdateTime());
 

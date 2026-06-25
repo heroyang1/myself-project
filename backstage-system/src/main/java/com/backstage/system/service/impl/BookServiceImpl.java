@@ -36,6 +36,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -102,6 +103,13 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
 
     @Override
     public Page<BookListVO> getBookPageList(BookListReqVO reqVO) {
+        int currentLevel = UserContextUtil.getCurrentLevelSafely();
+        if (currentLevel < 1) {
+            currentLevel = 1;
+        }
+        if (Boolean.TRUE.equals(reqVO.getIncludeDeleted()) && currentLevel < 4) {
+            reqVO.setIncludeDeleted(false);
+        }
         Page<BookDO> pageParam = new Page<>(reqVO.getPageNum(), reqVO.getPageSize());
         List<BookListVO> bookListVOS = bookMapper.getBookPageList(pageParam, reqVO);
 
@@ -158,6 +166,9 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
      */
     @Override
     public BookDetailVO selectBookDetail(Long id, Boolean forEdit) {
+        if (Boolean.TRUE.equals(forEdit)) {
+            requireManageLevel();
+        }
         BookDetailAggregate aggregate = loadBookDetailAggregate(id, UserContextUtil.getCurrentUserIdSafely());
         return buildBookDetailVO(aggregate, forEdit);
     }
@@ -171,20 +182,33 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
      */
     @Override
     public BookChapterContentVO selectBookChapterContent(Long bookId, Long id) {
+        BookDO bookDO = requireReadableBook(bookId);
         BookChapter chapter = bookChapterMapper.selectBookChapterByBookIdAndId(bookId, id);
-        checkEntityNotNull(chapter, "该记录不存在");
-
-//        // 如果不是免费章节，检查用户是否购买
-//        if (chapter.getIsFree() == 0)
-//        {
-//            checkUserHasBoughtOrThrow(userId, bookId);
-//        }
+        checkEntityNotNull(chapter, "record not found");
+        if (!canReadChapter(bookDO, chapter)) {
+            throw new ServiceException("access denied");
+        }
 
         BookChapterContentVO vo = new BookChapterContentVO();
         BeanUtils.copyProperties(chapter, vo);
         vo.setIsFree(chapter.getIsFree());
-
         return vo;
+    }
+
+    private boolean canReadChapter(BookDO bookDO, BookChapter chapter) {
+        if (Integer.valueOf(1).equals(chapter.getIsFree())) {
+            return true;
+        }
+        int bookLevel = Optional.ofNullable(bookDO.getLevel()).orElse(1);
+        if (bookLevel <= 1) {
+            return true;
+        }
+        int currentLevel = UserContextUtil.getCurrentLevelSafely();
+        if (currentLevel >= bookLevel) {
+            return true;
+        }
+        Long userId = UserContextUtil.getCurrentUserIdSafely();
+        return checkUserHasBought(userId, bookDO.getId());
     }
 
     /**
@@ -196,7 +220,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
     @Override
     public BookMenuVO selectBookMenu(Long id) {
         CompletableFuture<BookDO> bookFuture = asyncTaskSupport.supplyAsync(() -> {
-            return requireBook(id);
+            return requireReadableBook(id);
         }, aggregationTaskExecutor);
         CompletableFuture<List<BookChapterVO>> chapterFuture = asyncTaskSupport.supplyAsync(
                 () -> bookChapterMapper.selectBookChapterListByBookId(id), aggregationTaskExecutor);
@@ -248,6 +272,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
     @Override
     @Transactional
     public void createBookChapter(BookChapterSaveUpdateVO reqVO) {
+        requireManageLevel();
         BookDO bookDO = getById(reqVO.getBookId());
         checkEntityNotNull(bookDO, "电子书不存在");
 
@@ -260,13 +285,13 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
             chapterNo = maxChapterNo == null ? 1 : maxChapterNo + 1;
         }
         if (chapterNo < 1) {
-            throw new ServiceException("章节号必须大于等于1");
+            throw new ServiceException("章节序号不能小于1");
         }
         bookChapter.setChapterNo(chapterNo);
         bookChapter.setSortOrder(reqVO.getSortOrder() == null ? chapterNo : reqVO.getSortOrder());
         bookChapter.setIsFree(reqVO.getIsFree());
         if (bookChapter.getSortOrder() < 1) {
-            throw new ServiceException("排序值必须大于等于1");
+            throw new ServiceException("排序值不能小于1");
         }
 
         bookChapterMapper.insert(bookChapter);
@@ -275,6 +300,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
     @Override
     @Transactional
     public void updateBookChapter(BookChapterSaveUpdateVO reqVO) {
+        requireManageLevel();
         BookDO bookDO = getById(reqVO.getBookId());
         checkEntityNotNull(bookDO, "电子书不存在");
 
@@ -289,13 +315,13 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         }
         if (reqVO.getChapterNo() != null) {
             if (reqVO.getChapterNo() < 1) {
-                throw new ServiceException("章节号必须大于等于1");
+                throw new ServiceException("章节序号不能小于1");
             }
             bookChapter.setChapterNo(reqVO.getChapterNo());
         }
         if (reqVO.getSortOrder() != null) {
             if (reqVO.getSortOrder() < 1) {
-                throw new ServiceException("排序值必须大于等于1");
+                throw new ServiceException("排序值不能小于1");
             }
             bookChapter.setSortOrder(reqVO.getSortOrder());
         }
@@ -319,15 +345,17 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
     @Override
     @Transactional
     public Long createBook(BookSaveReqVO reqVO) {
+        requireManageLevel();
+        validateBookAccessLevel(reqVO.getLevel());
 
         BookDO bookDO = new BookDO();
         BeanUtils.copyProperties(reqVO, bookDO);
         bookDO.setNo(GenerateUtil.generateResourceCode(ResourceCodePrefixEnum.BOOK));
-        bookDO.setOriginalPrice(reqVO.getTPrice());
         bookDO.setStatus("0");
         if (bookDO.getLevel() == null) {
             bookDO.setLevel(1);
         }
+        normalizeBookPricing(bookDO, reqVO);
         // 新增电子书
         bookMapper.insert(bookDO);
         // 新增电子书标签表记录
@@ -384,7 +412,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
                 chapterNo = i + 1;
             }
             if (chapterNo < 1) {
-                throw new ServiceException("章节号必须大于等于1");
+                throw new ServiceException("章节序号不能小于1");
             }
             bookChapter.setChapterNo(chapterNo);
 
@@ -394,7 +422,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
                 sortOrder = chapterNo;
             }
             if (sortOrder < 1) {
-                throw new ServiceException("排序值必须大于等于1");
+                throw new ServiceException("排序值不能小于1");
             }
             bookChapter.setSortOrder(sortOrder);
 
@@ -415,14 +443,16 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
     @Transactional
     public void updateBook(BookSaveReqVO reqVO)
     {
+        requireManageLevel();
+        validateBookAccessLevel(reqVO.getLevel());
         BookDO book = getById(reqVO.getId());
         checkEntityNotNull(book, "电子书不存在");
         BookDO bookDO = new BookDO();
         BeanUtils.copyProperties(reqVO, bookDO);
-        bookDO.setOriginalPrice(reqVO.getTPrice());
         if (bookDO.getLevel() == null) {
             bookDO.setLevel(1);
         }
+        normalizeBookPricing(bookDO, reqVO);
         bookMapper.updateById(bookDO);
 
         // 更新电子书标签
@@ -492,22 +522,32 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
     @Transactional
     public void deleteBook(Long id)
     {
+        requireManageLevel();
         BookDO bookDO = getById(id);
         checkEntityNotNull(bookDO, "电子书不存在");
         bookMapper.deleteById(id);
 
         // 删除关联标签
         bookTagDOMapper.delete(new LambdaQueryWrapper<BookTagDO>()
-                .eq(BookTagDO::getBookId, id)
-                .eq(BookTagDO::getDelFlag, 0));
+                .eq(BookTagDO::getBookId, id));
 
         // 删除关联章节
         bookChapterMapper.delete(new LambdaQueryWrapper<BookChapter>()
-                .eq(BookChapter::getBookId, id)
-                .eq(BookChapter::getDelFlag, 0));
+                .eq(BookChapter::getBookId, id));
 
         // 从ES删除
         bookEsService.deleteBookFromEs(id);
+    }
+
+    @Override
+    @Transactional
+    public void restoreBook(Long id)
+    {
+        requireFounderLevel();
+        BookDO deletedBook = bookMapper.selectDeletedById(id);
+        checkEntityNotNull(deletedBook, "电子书不存在");
+        bookMapper.restoreById(id);
+        bookEsService.syncBookToEs(id);
     }
 
     /**
@@ -548,7 +588,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
     private void checkUserHasBoughtOrThrow(Long userId, Long bookId)
     {
         if (!checkUserHasBought(userId, bookId)) {
-            throw new ServiceException("请先购买该电子书");
+            throw new ServiceException("access denied");
         }
     }
 
@@ -603,7 +643,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         // 校验是否已购买
         UserBookRelation relation = userBookRelationMapper.selectByUserIdAndBookId(userId, bookId);
         if (relation != null && Integer.valueOf(1).equals(relation.getPurchased())) {
-            throw new ServiceException("您已购买该电子书");
+            throw new ServiceException("access denied");
         }
 
         // 构建订单结算参数，交给订单模块处理
@@ -692,7 +732,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
 
     private BookDetailAggregate loadBookDetailAggregate(Long bookId, Long userId)
     {
-        CompletableFuture<BookDO> bookFuture = asyncTaskSupport.supplyAsync(() -> requireBook(bookId), aggregationTaskExecutor);
+        CompletableFuture<BookDO> bookFuture = asyncTaskSupport.supplyAsync(() -> requireReadableBook(bookId), aggregationTaskExecutor);
         CompletableFuture<List<BookChapterVO>> chapterFuture = asyncTaskSupport.supplyAsync(
                 () -> bookChapterMapper.selectBookChapterListByBookId(bookId), aggregationTaskExecutor);
         CompletableFuture<List<String>> tagFuture = asyncTaskSupport.supplyAsync(
@@ -721,6 +761,8 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         vo.setTPrice(Optional.ofNullable(bookDO.getOriginalPrice()).map(Object::toString).orElse("0"));
         vo.setSubCount(Optional.ofNullable(bookDO.getSubCount()).orElse(0));
         vo.setLevel(bookDO.getLevel());
+        vo.setStatus(bookDO.getStatus());
+        vo.setDeleteFlag(bookDO.getDeleteFlag() == null ? 0 : bookDO.getDeleteFlag().intValue());
         vo.setCover(resolveBookCover(bookDO.getCover(), forEdit));
         vo.setBookDetails(aggregate.getChapters());
         vo.setTags(aggregate.getTags());
@@ -734,6 +776,55 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         BookDO bookDO = getById(bookId);
         checkEntityNotNull(bookDO, "该记录不存在");
         return bookDO;
+    }
+
+    private BookDO requireReadableBook(Long bookId)
+    {
+        BookDO bookDO = bookMapper.selectReadableById(bookId);
+        if (bookDO != null) {
+            return bookDO;
+        }
+        if (UserContextUtil.getCurrentLevelSafely() >= 4) {
+            bookDO = bookMapper.selectDeletedById(bookId);
+        }
+        checkEntityNotNull(bookDO, "该记录不存在");
+        return bookDO;
+    }
+
+    private void requireManageLevel()
+    {
+        if (UserContextUtil.getCurrentLevelSafely() < 4) {
+            throw new ServiceException("access denied");
+        }
+    }
+
+    private void requireFounderLevel()
+    {
+        if (UserContextUtil.getCurrentLevelSafely() != 6) {
+            throw new ServiceException("access denied");
+        }
+    }
+
+    private void validateBookAccessLevel(Integer level)
+    {
+        if (level == null) {
+            return;
+        }
+        if (!(level == 1 || level == 2 || level == 3 || level == 4 || level == 6)) {
+            throw new ServiceException("access denied");
+        }
+    }
+
+    private void normalizeBookPricing(BookDO bookDO, BookSaveReqVO reqVO)
+    {
+        Integer level = bookDO.getLevel() == null ? 1 : bookDO.getLevel();
+        if (level != 2) {
+            bookDO.setPrice(BigDecimal.ZERO);
+            bookDO.setOriginalPrice(BigDecimal.ZERO);
+            return;
+        }
+        bookDO.setPrice(Optional.ofNullable(reqVO.getPrice()).orElse(BigDecimal.ZERO));
+        bookDO.setOriginalPrice(Optional.ofNullable(reqVO.getTPrice()).orElse(BigDecimal.ZERO));
     }
 
     private String resolveBookCover(String cover, Boolean forEdit)

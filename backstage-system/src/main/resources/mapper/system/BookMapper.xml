@@ -13,6 +13,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="tPrice" column="original_price" />
         <result property="subCount" column="sub_count" />
         <result property="level" column="level" />
+        <result property="status" column="status" />
+        <result property="deleteFlag" column="delete_flag" />
         <result property="chapterCount" column="chapter_count" />
         <result property="favorited" column="favorited" />
         <result property="purchased" column="purchased" />
@@ -21,6 +23,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="getBookPageList" parameterType="BookDO" resultType="com.backstage.system.domain.vo.book.BookListVO">
         SELECT
             book.id, book.title, book.cover, book.description, book.price, book.original_price, book.sub_count, book.level,
+            book.status, book.delete_flag,
             IFNULL(chapter_stats.chapter_count, 0) AS chapter_count,
             IFNULL(current_relation.favorited, 0) AS favorited,
             IFNULL(current_relation.purchased, 0) AS purchased,
@@ -28,25 +31,33 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             IFNULL(ubr.purchase_count, 0) AS purchaseCount
         FROM
             osh_book book
-            LEFT JOIN osh_book_tag tag ON book.id = tag.book_id AND tag.del_flag = '0'
+            LEFT JOIN osh_book_tag tag ON book.id = tag.book_id AND tag.delete_flag = 0
             LEFT JOIN (
                 SELECT book_id, COUNT(*) AS chapter_count
                 FROM osh_book_chapter
-                WHERE del_flag = '0'
+                WHERE delete_flag = 0
                 GROUP BY book_id
             ) chapter_stats ON book.id = chapter_stats.book_id
             LEFT JOIN osh_user_book_relation current_relation
                 ON book.id = current_relation.book_id
                 AND current_relation.user_id = #{reqVO.userId}
-                AND current_relation.deleted = 0
+                AND current_relation.delete_flag = 0
             LEFT JOIN (
                 SELECT book_id, COUNT(*) AS purchase_count
                 FROM osh_user_book_relation
-                WHERE purchased = 1 AND deleted = 0
+                WHERE purchased = 1 AND delete_flag = 0
                 GROUP BY book_id
             ) ubr ON book.id = ubr.book_id
         <where>
-            book.del_flag = '0' and book.status = '0'
+            book.status = '0'
+            <choose>
+                <when test="reqVO.includeDeleted != null and reqVO.includeDeleted">
+                    and book.delete_flag = 1
+                </when>
+                <otherwise>
+                    and book.delete_flag = 0
+                </otherwise>
+            </choose>
             <if test="reqVO.tagNameList != null and reqVO.tagNameList.size() > 0">
                 and tag.tag_name in
                 <foreach item="tagName" collection="reqVO.tagNameList" separator="," open="(" close=")" index="">
@@ -58,9 +69,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             </if>
             <if test="reqVO.level != null">
                 and book.level = #{reqVO.level}
-            </if>
-            <if test="reqVO.userLevel != null">
-                and (book.level &lt;= #{reqVO.userLevel} or book.level is null)
             </if>
         </where>
         GROUP BY book.id
@@ -77,6 +85,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         b.original_price AS tPrice,
         b.sub_count AS subCount,
         b.level AS level,
+        b.status AS status,
+        b.delete_flag AS deleteFlag,
         IFNULL(chapter_stats.chapter_count, 0) AS chapterCount,
         0 AS favorited,
         0 AS purchased,
@@ -85,16 +95,16 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
         LEFT JOIN osh_book_tag bt
         ON b.id = bt.book_id
-        AND bt.del_flag = 0
+        AND bt.delete_flag = 0
         LEFT JOIN (
             SELECT book_id, COUNT(*) AS chapter_count
             FROM osh_book_chapter
-            WHERE del_flag = '0'
+            WHERE delete_flag = 0
             GROUP BY book_id
         ) chapter_stats ON b.id = chapter_stats.book_id
 
         WHERE b.price = 0
-        AND b.del_flag = 0
+        AND b.delete_flag = 0
         AND b.status = 0
 
         GROUP BY b.id

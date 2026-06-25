@@ -16,7 +16,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         select b.id, b.title, b.cover, b.description
         from osh_user_book_relation ubr
         left join osh_book b on ubr.book_id = b.id
-        where ubr.user_id = #{userId} and ubr.purchased = 1 and ubr.deleted = 0 and b.del_flag = '0'
+        where ubr.user_id = #{userId} and ubr.purchased = 1 and ubr.deleted = 0 and b.delete_flag = 0
         order by ubr.pay_time desc
     </select>
 
@@ -24,7 +24,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         select b.id, b.title, b.cover, b.description
         from osh_user_book_relation ubr
         left join osh_book b on ubr.book_id = b.id
-        where ubr.user_id = #{userId} and ubr.purchased = 1 and ubr.deleted = 0 and b.del_flag = '0'
+        where ubr.user_id = #{userId} and ubr.purchased = 1 and ubr.deleted = 0 and b.delete_flag = 0
         order by ubr.pay_time desc
     </select>
 

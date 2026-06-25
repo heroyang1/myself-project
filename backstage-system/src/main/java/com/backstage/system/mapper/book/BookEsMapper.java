@@ -141,9 +141,11 @@ public class BookEsMapper {
                 .size(pageSize)
                 .timeout(TimeValue.timeValueMillis(searchEsProperties.getFallbackTimeoutMillis()));
 
+        int userLevel = request == null || request.getUserLevel() == null ? 1 : request.getUserLevel();
+        int deleteFlag = request != null && Boolean.TRUE.equals(request.getIncludeDeleted()) && userLevel >= 4 ? 1 : 0;
         BoolQueryBuilder boolQuery = QueryBuilders.boolQuery()
                 .filter(QueryBuilders.termQuery("status", "0"))
-                .filter(QueryBuilders.termQuery("deleteFlag", 0));
+                .filter(QueryBuilders.termQuery("deleteFlag", deleteFlag));
 
         if (request != null && StringUtils.isNotEmpty(request.getTitle())) {
             boolQuery.must(buildKeywordQuery(request.getTitle()));
