@@ -1,6 +1,7 @@
 package com.backstage.system.domain.vo.book;
 
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * 电子书章节内容视图对象
@@ -19,6 +20,12 @@ public class BookChapterContentVO implements Serializable
 
     /** 是否免费（0收费 1免费） */
     private Integer isFree;
+
+    /** Book media type: 1 ebook, 2 comic. */
+    private Integer mediaType;
+
+    /** Comic pages, only returned for comic books. */
+    private List<BookChapterPageVO> pages;
 
     public String getTitle()
     {
@@ -48,5 +55,21 @@ public class BookChapterContentVO implements Serializable
     public void setIsFree(Integer isFree)
     {
         this.isFree = isFree;
+    }
+
+    public Integer getMediaType() {
+        return mediaType;
+    }
+
+    public void setMediaType(Integer mediaType) {
+        this.mediaType = mediaType;
+    }
+
+    public List<BookChapterPageVO> getPages() {
+        return pages;
+    }
+
+    public void setPages(List<BookChapterPageVO> pages) {
+        this.pages = pages;
     }
 }
