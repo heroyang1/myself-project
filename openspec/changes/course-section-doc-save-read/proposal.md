@@ -32,13 +32,14 @@
 
 ## 验收标准
 
-- [ ] 保存 text 小节后 `GET .../editContent` 返回与保存一致内容。
-- [ ] 学员端 `getCourseSectionContent` 与 editContent 同源（video 除外）。
-- [ ] `OshCourseControllerSectionApiTest` 通过。
-- [ ] `mvn compile` 通过。
+- [x] 保存 text 小节后 `GET .../editContent` 返回与保存一致内容。
+- [x] 学员端 `getCourseSectionContent` 与 editContent 同源（video 除外）。
+- [x] `OshCourseControllerSectionApiTest` 通过。
+- [x] `mvn compile` 通过。
 
 ## 关联信息
 
-- 分支：`feature/course_hero_hope_xinghao`
-- 前端配套：`feature/course_xinghao` / `openspec/changes/course-doc-markdown-study-center`
+- 分支：`feature/course_hero_hope_xinghao`（已合并 `qa/20260708` @ `73a1b668`）
+- 实现提交：`e0c0b5db`（fix）、`4becad67`（OpenSpec）
+- 前端配套：`feature/course_xinghao` / `openspec/changes/course-doc-markdown-study-center`（已合并 qa 并联调）
 - 核心类：`OshCourseServiceImpl`
