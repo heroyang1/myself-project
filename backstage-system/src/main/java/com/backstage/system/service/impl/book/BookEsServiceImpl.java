@@ -168,6 +168,7 @@ public class BookEsServiceImpl implements IBookEsService {
                 new LambdaQueryWrapper<BookChapter>().eq(BookChapter::getBookId, bookDO.getId())
         )));
         document.setLevel(bookDO.getLevel());
+        document.setMediaType(bookDO.getMediaType());
         document.setStatus(bookDO.getStatus());
         document.setDeleteFlag(bookDO.getDeleteFlag() == null ? 0 : bookDO.getDeleteFlag().intValue());
         document.setRemark(bookDO.getRemark());

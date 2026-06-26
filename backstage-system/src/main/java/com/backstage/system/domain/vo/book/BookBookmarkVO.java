@@ -16,7 +16,9 @@ public class BookBookmarkVO implements Serializable {
     private Integer startOffset;
     private Integer endOffset;
     private java.math.BigDecimal progressPercent;
+    private Integer imageIndex;
     private String note;
+    private String label;
     private String color;
     private LocalDateTime createTime;
 
@@ -100,12 +102,28 @@ public class BookBookmarkVO implements Serializable {
         this.progressPercent = progressPercent;
     }
 
+    public Integer getImageIndex() {
+        return imageIndex;
+    }
+
+    public void setImageIndex(Integer imageIndex) {
+        this.imageIndex = imageIndex;
+    }
+
     public String getNote() {
         return note;
     }
 
     public void setNote(String note) {
         this.note = note;
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
     }
 
     public String getColor() {

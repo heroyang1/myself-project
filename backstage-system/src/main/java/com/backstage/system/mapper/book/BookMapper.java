@@ -29,13 +29,13 @@ public interface BookMapper extends BaseMapper<BookDO> {
 
     Page<BookListVO> selectFreeBookPage(Page<BookDO> page);
 
-    @Select("select id, no, title, cover, description, try_content, price, original_price, sub_count, level, status, remark, " +
+    @Select("select id, no, title, cover, description, try_content, price, original_price, sub_count, level, media_type, status, remark, " +
             "case when create_by regexp '^[0-9]+$' then create_by else null end as create_by, create_time, " +
             "case when update_by regexp '^[0-9]+$' then update_by else null end as update_by, update_time, delete_flag " +
             "from osh_book where id = #{id} and delete_flag = 0")
     BookDO selectReadableById(@Param("id") Long id);
 
-    @Select("select id, no, title, cover, description, try_content, price, original_price, sub_count, level, status, remark, " +
+    @Select("select id, no, title, cover, description, try_content, price, original_price, sub_count, level, media_type, status, remark, " +
             "case when create_by regexp '^[0-9]+$' then create_by else null end as create_by, create_time, " +
             "case when update_by regexp '^[0-9]+$' then update_by else null end as update_by, update_time, delete_flag " +
             "from osh_book where id = #{id} and delete_flag = 1")

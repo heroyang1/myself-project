@@ -24,7 +24,9 @@ public class BookBookmarkServiceImpl implements BookBookmarkService {
     private static final int MAX_SELECTED_TEXT_LENGTH = 2000;
     private static final int MAX_CONTEXT_LENGTH = 500;
     private static final int MAX_NOTE_LENGTH = 500;
+    private static final int MAX_LABEL_LENGTH = 100;
     private static final String DEFAULT_COLOR = "#fef08a";
+    private static final BigDecimal BOOKMARK_THRESHOLD_PERCENT = BigDecimal.valueOf(2.0);
 
     @Resource
     private BookBookmarkMapper bookBookmarkMapper;
@@ -37,6 +39,9 @@ public class BookBookmarkServiceImpl implements BookBookmarkService {
         Long userId = requireLoginUser();
         bookService.selectBookChapterContent(reqVO.getBookId(), reqVO.getChapterId());
 
+        BigDecimal targetProgress = normalizeProgress(reqVO.getProgressPercent());
+        checkBookmarkThreshold(userId, reqVO.getChapterId(), targetProgress, reqVO.getImageIndex());
+
         BookBookmarkDO bookmark = new BookBookmarkDO();
         bookmark.setUserId(userId);
         bookmark.setBookId(reqVO.getBookId());
@@ -47,13 +52,47 @@ public class BookBookmarkServiceImpl implements BookBookmarkService {
         bookmark.setSuffixText(limit(reqVO.getSuffixText(), MAX_CONTEXT_LENGTH));
         bookmark.setStartOffset(reqVO.getStartOffset());
         bookmark.setEndOffset(reqVO.getEndOffset());
-        bookmark.setProgressPercent(normalizeProgress(reqVO.getProgressPercent()));
+        bookmark.setProgressPercent(targetProgress);
+        bookmark.setImageIndex(reqVO.getImageIndex());
         bookmark.setNote(limit(reqVO.getNote(), MAX_NOTE_LENGTH));
+        bookmark.setLabel(limit(reqVO.getLabel(), MAX_LABEL_LENGTH));
         bookmark.setColor(normalizeColor(reqVO.getColor()));
         bookmark.setCreateBy(userId);
         bookmark.setUpdateBy(userId);
         bookBookmarkMapper.insert(bookmark);
         return bookmark.getId();
+    }
+
+    private void checkBookmarkThreshold(Long userId, Long chapterId, BigDecimal targetProgress, Integer imageIndex) {
+        LambdaQueryWrapper<BookBookmarkDO> wrapper = new LambdaQueryWrapper<BookBookmarkDO>()
+                .eq(BookBookmarkDO::getUserId, userId)
+                .eq(BookBookmarkDO::getChapterId, chapterId);
+        List<BookBookmarkDO> existingBookmarks = bookBookmarkMapper.selectList(wrapper);
+
+        // 图片章节：按图片索引去重，同一张图片只允许一个书签
+        if (imageIndex != null) {
+            for (BookBookmarkDO existing : existingBookmarks) {
+                if (imageIndex.equals(existing.getImageIndex())) {
+                    throw new ServiceException("该图片已有书签，请选择其他图片");
+                }
+            }
+            return;
+        }
+
+        // 文字章节：按阅读进度阈值去重
+        for (BookBookmarkDO existing : existingBookmarks) {
+            // 跳过图片章节书签，避免阈值误判
+            if (existing.getImageIndex() != null) {
+                continue;
+            }
+            BigDecimal existingProgress = existing.getProgressPercent();
+            if (existingProgress != null) {
+                BigDecimal diff = targetProgress.subtract(existingProgress).abs();
+                if (diff.compareTo(BOOKMARK_THRESHOLD_PERCENT) < 0) {
+                    throw new ServiceException("该位置附近已有书签，请选择其他位置");
+                }
+            }
+        }
     }
 
     @Override

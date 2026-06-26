@@ -18,6 +18,9 @@ public class BookListReqVO {
     @ApiModelProperty(value = "资源等级：1免费，2VIP，3小班，4内部成员，6创始人")
     private Integer level;
 
+    @ApiModelProperty(value = "书籍媒体类型：1电子书，2漫画")
+    private Integer mediaType;
+
     @ApiModelProperty(value = "当前用户权限等级，后端自动设置", hidden = true)
     private Integer userLevel;
 
@@ -60,6 +63,14 @@ public class BookListReqVO {
 
     public void setLevel(Integer level) {
         this.level = level;
+    }
+
+    public Integer getMediaType() {
+        return mediaType;
+    }
+
+    public void setMediaType(Integer mediaType) {
+        this.mediaType = mediaType;
     }
 
     public Integer getUserLevel() {

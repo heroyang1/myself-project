@@ -13,6 +13,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="tPrice" column="original_price" />
         <result property="subCount" column="sub_count" />
         <result property="level" column="level" />
+        <result property="mediaType" column="media_type" />
         <result property="status" column="status" />
         <result property="deleteFlag" column="delete_flag" />
         <result property="chapterCount" column="chapter_count" />
@@ -23,6 +24,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="getBookPageList" parameterType="BookDO" resultType="com.backstage.system.domain.vo.book.BookListVO">
         SELECT
             book.id, book.title, book.cover, book.description, book.price, book.original_price, book.sub_count, book.level,
+            book.media_type,
             book.status, book.delete_flag,
             IFNULL(chapter_stats.chapter_count, 0) AS chapter_count,
             IFNULL(current_relation.favorited, 0) AS favorited,
@@ -70,6 +72,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="reqVO.level != null">
                 and book.level = #{reqVO.level}
             </if>
+            <if test="reqVO.mediaType != null">
+                and book.media_type = #{reqVO.mediaType}
+            </if>
         </where>
         GROUP BY book.id
         ORDER BY purchaseCount DESC, book.sub_count DESC, book.create_time DESC
@@ -85,6 +90,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         b.original_price AS tPrice,
         b.sub_count AS subCount,
         b.level AS level,
+        b.media_type AS mediaType,
         b.status AS status,
         b.delete_flag AS deleteFlag,
         IFNULL(chapter_stats.chapter_count, 0) AS chapterCount,

@@ -2,6 +2,7 @@ package com.backstage.system.controller.book;
 
 import com.backstage.common.annotation.Anonymous;
 import com.backstage.common.annotation.OshResourceId;
+import com.backstage.common.annotation.OshUserLevel;
 import com.backstage.common.annotation.OshUserEvent;
 import com.backstage.common.constant.ResourceType;
 import com.backstage.common.core.domain.R;
@@ -23,7 +24,6 @@ import io.swagger.annotations.ApiOperation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -64,7 +64,7 @@ public class BookController {
      */
     @ApiOperation(value = "电子书列表")
     @OshUserEvent(module = "电子书模块", actionType = "查询", resourceType = ResourceType.BOOK_TYPE, description = "查询电子书列表")
-    @PreAuthorize("hasAuthority('book:list')")
+    @Anonymous
     @PostMapping("/page")
     public R<Page<BookListVO>> list(@RequestBody BookListReqVO reqVO) {
         reqVO.setUserLevel(UserContextUtil.getCurrentLevel());
@@ -138,7 +138,7 @@ public class BookController {
      */
     @ApiOperation(value = "新增电子书")
     @OshUserEvent(module = "电子书模块", actionType = "新增", resourceType = ResourceType.BOOK_TYPE, resourceNameExpression = "#p0.title", description = "创建电子书")
-    @PreAuthorize("hasAuthority('book:create') or @bookLevelAuth.canManageBook()")
+    @OshUserLevel(4)
     @PostMapping("/create")
     public R<Long> create(@Valid @RequestBody BookSaveReqVO reqVO) {
         Long bookId = bookService.createBook(reqVO);
@@ -151,7 +151,7 @@ public class BookController {
      */
     @ApiOperation(value = "修改电子书")
     @OshUserEvent(module = "电子书模块", actionType = "修改", resourceType = ResourceType.BOOK_TYPE, resourceNameExpression = "#p0.title", description = "更新电子书")
-    @PreAuthorize("hasAuthority('book:update') or @bookLevelAuth.canManageBook()")
+    @OshUserLevel(4)
     @PostMapping("/update")
     public R<String> update(@Valid @RequestBody BookSaveReqVO reqVO) {
         if (reqVO.getId() == null) {
@@ -166,7 +166,7 @@ public class BookController {
      */
     @ApiOperation(value = "删除电子书")
     @OshUserEvent(module = "电子书模块", actionType = "删除", resourceType = ResourceType.BOOK_TYPE, description = "删除电子书")
-    @PreAuthorize("hasAuthority('book:delete') or @bookLevelAuth.canManageBook()")
+    @OshUserLevel(4)
     @DeleteMapping("/delete")
     public R<String> delete(@OshResourceId @RequestParam("id") Long id) {
         bookService.deleteBook(id);
@@ -178,7 +178,7 @@ public class BookController {
      */
     @ApiOperation(value = "恢复电子书")
     @OshUserEvent(module = "电子书模块", actionType = "恢复", resourceType = ResourceType.BOOK_TYPE, description = "恢复逻辑删除的电子书")
-    @PreAuthorize("hasAuthority('book:restore') or @bookLevelAuth.canRestoreBook()")
+    @OshUserLevel(6)
     @PostMapping("/restore")
     public R<String> restore(@OshResourceId @RequestParam("id") Long id) {
         bookService.restoreBook(id);
@@ -201,7 +201,7 @@ public class BookController {
      */
     @ApiOperation(value = "新增章节")
     @OshUserEvent(module = "电子书模块", actionType = "新增", resourceType = ResourceType.BOOK_TYPE, description = "创建章节")
-    @PreAuthorize("hasAuthority('book:chapter:create') or @bookLevelAuth.canManageBook()")
+    @OshUserLevel(4)
     @PostMapping("/chapter/create")
     public R<String> createBookChapter(@RequestBody BookChapterSaveUpdateVO reqVO) {
         if (reqVO.getBookId() == null) {
@@ -216,7 +216,7 @@ public class BookController {
      */
     @ApiOperation(value = "修改章节")
     @OshUserEvent(module = "电子书模块", actionType = "修改", resourceType = ResourceType.BOOK_TYPE, description = "更新章节")
-    @PreAuthorize("hasAuthority('book:chapter:update') or @bookLevelAuth.canManageBook()")
+    @OshUserLevel(4)
     @PostMapping("/chapter/update")
     public R<String> updateBookChapter(@RequestBody BookChapterSaveUpdateVO reqVO) {
         if (reqVO.getId() == null) {
@@ -234,7 +234,7 @@ public class BookController {
      */
     @ApiOperation(value = "筛选电子书")
     @OshUserEvent(module = "电子书模块", actionType = "查询", resourceType = ResourceType.BOOK_TYPE, description = "筛选电子书")
-    @PreAuthorize("hasAuthority('book:filter')")
+    @OshUserLevel(4)
     @GetMapping("/getFilterBookList")
     public R<Page<BookListVO>> getFilterBookList(@RequestParam String filter) {
         Page<BookListVO> bookList = bookService.getFilterBookList(filter);
@@ -247,7 +247,15 @@ public class BookController {
     @ApiOperation(value = "全量同步电子书到ES")
     @PostMapping("/esSync/all")
     @OshUserEvent(module = "电子书模块", actionType = "更新资源", resourceType = ResourceType.BOOK_TYPE, description = "同步电子书到ES")
+    @OshUserLevel(4)
     public R<Integer> syncAllBooksToEs() {
         return R.ok(bookEsService.syncAllBooksToEs(), "ok");
+    }
+
+    @ApiOperation(value = "Ebook import placeholder")
+    @PostMapping("/import/ebook")
+    @OshUserLevel(4)
+    public R<String> importEbookPlaceholder(@RequestBody(required = false) Object payload) {
+        return R.fail("ebook import is not implemented yet");
     }
 }

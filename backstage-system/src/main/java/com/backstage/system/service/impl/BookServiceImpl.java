@@ -9,15 +9,21 @@ import com.backstage.common.threadlocal.ThreadLocalUtil;
 import com.backstage.common.utils.StringUtils;
 import com.backstage.common.utils.generate.GenerateUtil;
 import com.backstage.system.controller.book.BookListReqVO;
+import com.backstage.system.domain.book.BookChapterPageDO;
 import com.backstage.system.domain.book.BookDO;
 import com.backstage.system.domain.BookChapter;
 import com.backstage.system.domain.UserBookRelation;
 import com.backstage.system.domain.book.BookTagDO;
+import com.backstage.system.domain.user.OshUser;
 import com.backstage.system.domain.vo.book.*;
+import com.backstage.system.enums.book.BookMediaTypeEnum;
 import com.backstage.system.mapper.book.BookChapterMapper;
+import com.backstage.system.mapper.book.BookChapterPageMapper;
 import com.backstage.system.mapper.book.BookMapper;
 import com.backstage.system.mapper.book.UserBookRelationMapper;
 import com.backstage.system.mapper.book.BookTagDOMapper;
+import com.backstage.system.mapper.user.OshUserMapper;
+import com.backstage.system.mapper.user.UserManageMapper;
 import com.backstage.system.domain.vo.pay.OrderCheckoutReqVO;
 import com.backstage.system.domain.vo.pay.OrderCheckoutRespVO;
 import com.backstage.system.domain.order.OshOrder;
@@ -40,7 +46,9 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.time.LocalDateTime;
 import java.util.concurrent.CompletableFuture;
@@ -62,6 +70,9 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
     private BookChapterMapper bookChapterMapper;
 
     @Resource
+    private BookChapterPageMapper bookChapterPageMapper;
+
+    @Resource
     private BookChapterService bookChapterService;
 
     @Resource
@@ -69,6 +80,12 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
 
     @Resource
     private BookTagDOMapper bookTagDOMapper;
+
+    @Resource
+    private OshUserMapper oshUserMapper;
+
+    @Resource
+    private UserManageMapper userManageMapper;
 
     @Autowired
     private com.backstage.system.service.common.OssService ossService;
@@ -115,6 +132,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
 
         // tagNames 逗号字符串 -> tagNameList 数组
         for (BookListVO vo : bookListVOS) {
+            vo.setMediaType(BookMediaTypeEnum.normalize(vo.getMediaType()));
             if (StringUtils.isNotEmpty(vo.getTagNames())) {
                 vo.setTagNameList(Arrays.asList(vo.getTagNames().split(",")));
             }
@@ -139,6 +157,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
 
         // SQL 查出的逗号分隔 tagNames → 转成 List<String>
         for (BookListVO vo : voPage.getRecords()) {
+            vo.setMediaType(BookMediaTypeEnum.normalize(vo.getMediaType()));
             if (StrUtil.isNotBlank(vo.getTagNames())) {
                 List<String> tagList = Arrays.asList(vo.getTagNames().split(","));
                 vo.setTagNameList(tagList);
@@ -192,6 +211,10 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         BookChapterContentVO vo = new BookChapterContentVO();
         BeanUtils.copyProperties(chapter, vo);
         vo.setIsFree(chapter.getIsFree());
+        vo.setMediaType(BookMediaTypeEnum.normalize(bookDO.getMediaType()));
+        if (BookMediaTypeEnum.isComic(bookDO.getMediaType())) {
+            vo.setPages(listComicPages(bookId, id, false));
+        }
         return vo;
     }
 
@@ -209,6 +232,96 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         }
         Long userId = UserContextUtil.getCurrentUserIdSafely();
         return checkUserHasBought(userId, bookDO.getId());
+    }
+
+    private List<BookChapterPageVO> listComicPages(Long bookId, Long chapterId, Boolean forEdit) {
+        List<BookChapterPageDO> rows = bookChapterPageMapper.selectList(
+                new LambdaQueryWrapper<BookChapterPageDO>()
+                        .eq(BookChapterPageDO::getBookId, bookId)
+                        .eq(chapterId != null, BookChapterPageDO::getChapterId, chapterId)
+                        .orderByAsc(BookChapterPageDO::getChapterId)
+                        .orderByAsc(BookChapterPageDO::getPageNo)
+                        .orderByAsc(BookChapterPageDO::getId)
+        );
+        return rows.stream().map(row -> toComicPageVO(row, forEdit)).collect(Collectors.toList());
+    }
+
+    private Map<Long, List<BookChapterPageVO>> listComicPagesByChapter(Long bookId, Boolean forEdit) {
+        Map<Long, List<BookChapterPageVO>> result = new HashMap<>();
+        for (BookChapterPageVO page : listComicPages(bookId, null, forEdit)) {
+            if (page.getChapterId() == null) {
+                continue;
+            }
+            result.computeIfAbsent(page.getChapterId(), key -> new ArrayList<>()).add(page);
+        }
+        return result;
+    }
+
+    private BookChapterPageVO toComicPageVO(BookChapterPageDO row, Boolean forEdit) {
+        BookChapterPageVO vo = new BookChapterPageVO();
+        BeanUtils.copyProperties(row, vo);
+        vo.setImageUrl(resolveBookAssetUrl(row.getImageUrl(), forEdit));
+        return vo;
+    }
+
+    private String resolveBookAssetUrl(String url, Boolean forEdit) {
+        if (StringUtils.isEmpty(url) || Boolean.TRUE.equals(forEdit) || url.startsWith("http") || url.startsWith("data:")) {
+            return url;
+        }
+        return ossService.getLimitedUrl(url, 120);
+    }
+
+    private void attachComicPages(List<BookChapterVO> chapters, Long bookId, Boolean forEdit) {
+        if (chapters == null || chapters.isEmpty()) {
+            return;
+        }
+        Map<Long, List<BookChapterPageVO>> pageMap = listComicPagesByChapter(bookId, forEdit);
+        for (BookChapterVO chapter : chapters) {
+            chapter.setPages(pageMap.getOrDefault(chapter.getId(), Collections.emptyList()));
+        }
+    }
+
+    private void replaceComicPages(Long bookId, Long chapterId, List<BookChapterPageVO> pages) {
+        bookChapterPageMapper.physicalDeleteByBookAndChapter(bookId, chapterId);
+        if (pages == null || pages.isEmpty()) {
+            return;
+        }
+        int pageNo = 1;
+        for (BookChapterPageVO page : pages) {
+            if (StringUtils.isEmpty(page.getImageUrl())) {
+                continue;
+            }
+            BookChapterPageDO row = new BookChapterPageDO();
+            BeanUtils.copyProperties(page, row);
+            row.setId(null);
+            row.setBookId(bookId);
+            row.setChapterId(chapterId);
+            row.setPageNo(pageNo++);
+            row.setImageUrl(normalizeStoredAssetUrl(page.getImageUrl()));
+            bookChapterPageMapper.insert(row);
+        }
+    }
+
+    private String normalizeStoredAssetUrl(String url) {
+        if (StringUtils.isEmpty(url) || !url.startsWith("http")) {
+            return url;
+        }
+        try {
+            java.net.URL parsed = new java.net.URL(url);
+            String path = parsed.getPath();
+            if (StringUtils.isEmpty(path)) {
+                return url;
+            }
+            String normalized = path.startsWith("/") ? path.substring(1) : path;
+            int firstSlash = normalized.indexOf('/');
+            return firstSlash >= 0 ? normalized.substring(firstSlash + 1) : normalized;
+        } catch (Exception ignored) {
+            return url;
+        }
+    }
+
+    private void deleteComicPagesByBook(Long bookId) {
+        bookChapterPageMapper.physicalDeleteByBook(bookId);
     }
 
     /**
@@ -229,12 +342,16 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
 
         BookDO bookDO = asyncTaskSupport.join(bookFuture);
         List<BookChapterVO> chapters = asyncTaskSupport.join(chapterFuture);
+        if (BookMediaTypeEnum.isComic(bookDO.getMediaType())) {
+            attachComicPages(chapters, id, false);
+        }
 
         BookMenuVO vo = new BookMenuVO();
 
         // 设置电子书基本信息
         BookSimpleVO simpleVO = new BookSimpleVO();
         BeanUtils.copyProperties(bookDO, simpleVO);
+        simpleVO.setMediaType(BookMediaTypeEnum.normalize(bookDO.getMediaType()));
         if (StringUtils.isNotEmpty(simpleVO.getCover())) {
             simpleVO.setCover(ossService.getLimitedUrl(simpleVO.getCover(), 30));
         }
@@ -295,6 +412,10 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         }
 
         bookChapterMapper.insert(bookChapter);
+        reqVO.setId(bookChapter.getId());
+        if (BookMediaTypeEnum.isComic(bookDO.getMediaType())) {
+            replaceComicPages(reqVO.getBookId(), bookChapter.getId(), reqVO.getPages());
+        }
     }
 
     @Override
@@ -305,7 +426,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         checkEntityNotNull(bookDO, "电子书不存在");
 
         BookChapter bookChapter = bookChapterMapper.selectBookChapterByBookIdAndId(reqVO.getBookId(), reqVO.getId());
-        checkEntityNotNull(bookChapter, "章节不存在");
+        checkEntityNotNull(bookChapter, "chapter not found");
 
         if (reqVO.getTitle() != null) {
             bookChapter.setTitle(reqVO.getTitle());
@@ -334,6 +455,11 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         }
 
         bookChapterMapper.updateById(bookChapter);
+        if (BookMediaTypeEnum.isComic(bookDO.getMediaType())) {
+            replaceComicPages(reqVO.getBookId(), reqVO.getId(), reqVO.getPages());
+        } else {
+            bookChapterPageMapper.physicalDeleteByBookAndChapter(reqVO.getBookId(), reqVO.getId());
+        }
     }
 
     /**
@@ -355,6 +481,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         if (bookDO.getLevel() == null) {
             bookDO.setLevel(1);
         }
+        bookDO.setMediaType(BookMediaTypeEnum.normalize(reqVO.getMediaType()));
         normalizeBookPricing(bookDO, reqVO);
         // 新增电子书
         bookMapper.insert(bookDO);
@@ -364,7 +491,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
             bookTagDOMapper.insert(bookTagDOS);
         }
         // 批量新增章节
-        batchInsertChapters(bookDO.getId(), reqVO.getChapters());
+        batchInsertChapters(bookDO.getId(), reqVO.getChapters(), bookDO.getMediaType());
         // 同步ES
         bookEsService.syncBookToEs(bookDO.getId());
         return bookDO.getId();
@@ -394,7 +521,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
      * @param bookId   电子书ID
      * @param chapters 章节列表
      */
-    private void batchInsertChapters(Long bookId, List<BookChapterSaveUpdateVO> chapters) {
+    private void batchInsertChapters(Long bookId, List<BookChapterSaveUpdateVO> chapters, Integer mediaType) {
         if (chapters == null || chapters.isEmpty()) {
             return;
         }
@@ -431,6 +558,14 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
 
         // 批量插入
         bookChapterService.saveBatch(chapterList);
+        if (BookMediaTypeEnum.isComic(mediaType)) {
+            for (int i = 0; i < chapterList.size(); i++) {
+                BookChapter chapter = chapterList.get(i);
+                BookChapterSaveUpdateVO chapterVO = chapters.get(i);
+                chapterVO.setId(chapter.getId());
+                replaceComicPages(bookId, chapter.getId(), chapterVO.getPages());
+            }
+        }
     }
 
     /**
@@ -452,6 +587,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         if (bookDO.getLevel() == null) {
             bookDO.setLevel(1);
         }
+        bookDO.setMediaType(BookMediaTypeEnum.normalize(reqVO.getMediaType() == null ? book.getMediaType() : reqVO.getMediaType()));
         normalizeBookPricing(bookDO, reqVO);
         bookMapper.updateById(bookDO);
 
@@ -467,37 +603,66 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
             bookTagDOMapper.insert(bookTagDOS);
         }
 
-        syncBookChapters(reqVO.getId(), reqVO.getChapters());
+        syncBookChapters(reqVO.getId(), reqVO.getChapters(), bookDO.getMediaType());
+        if (!BookMediaTypeEnum.isComic(bookDO.getMediaType())) {
+            deleteComicPagesByBook(reqVO.getId());
+        }
 
         // 同步ES
         bookEsService.syncBookToEs(reqVO.getId());
     }
 
-    private void syncBookChapters(Long bookId, List<BookChapterSaveUpdateVO> chapters) {
+    private void syncBookChapters(Long bookId, List<BookChapterSaveUpdateVO> chapters, Integer mediaType) {
+        if (chapters == null) {
+            return;
+        }
         List<BookChapterVO> existingChapters = bookChapterMapper.selectBookChapterListByBookId(bookId);
+        List<Long> existingIds = existingChapters.stream()
+                .map(BookChapterVO::getId)
+                .collect(Collectors.toList());
         List<Long> incomingIds = new ArrayList<>();
+        boolean comicBook = BookMediaTypeEnum.isComic(mediaType);
 
-        if (chapters != null) {
-            for (int i = 0; i < chapters.size(); i++) {
-                BookChapterSaveUpdateVO chapterVO = chapters.get(i);
-                chapterVO.setBookId(bookId);
-                if (chapterVO.getChapterNo() == null || chapterVO.getChapterNo() < 1) {
-                    chapterVO.setChapterNo(i + 1);
-                }
-                if (chapterVO.getSortOrder() == null || chapterVO.getSortOrder() < 1) {
-                    chapterVO.setSortOrder(i + 1);
-                }
-                if (chapterVO.getIsFree() == null) {
-                    chapterVO.setIsFree(0);
-                }
+        for (int i = 0; i < chapters.size(); i++) {
+            BookChapterSaveUpdateVO chapterVO = chapters.get(i);
+            chapterVO.setBookId(bookId);
+            if (chapterVO.getChapterNo() == null || chapterVO.getChapterNo() < 1) {
+                chapterVO.setChapterNo(i + 1);
+            }
+            if (chapterVO.getSortOrder() == null || chapterVO.getSortOrder() < 1) {
+                chapterVO.setSortOrder(i + 1);
+            }
+            if (chapterVO.getIsFree() == null) {
+                chapterVO.setIsFree(0);
+            }
 
-                if (chapterVO.getId() == null) {
-                    createBookChapter(chapterVO);
-                    continue;
+            if (chapterVO.getId() == null) {
+                BookChapter bookChapter = new BookChapter();
+                BeanUtils.copyProperties(chapterVO, bookChapter);
+                bookChapter.setBookId(bookId);
+                bookChapterMapper.insert(bookChapter);
+                chapterVO.setId(bookChapter.getId());
+                incomingIds.add(bookChapter.getId());
+                if (comicBook) {
+                    replaceComicPages(bookId, bookChapter.getId(), chapterVO.getPages());
                 }
+                continue;
+            }
 
-                incomingIds.add(chapterVO.getId());
-                updateBookChapter(chapterVO);
+            if (!existingIds.contains(chapterVO.getId())) {
+                throw new ServiceException("chapter not found");
+            }
+            BookChapter bookChapter = bookChapterMapper.selectBookChapterByBookIdAndId(bookId, chapterVO.getId());
+            checkEntityNotNull(bookChapter, "chapter not found");
+            bookChapter.setTitle(chapterVO.getTitle());
+            bookChapter.setContent(chapterVO.getContent());
+            bookChapter.setChapterNo(chapterVO.getChapterNo());
+            bookChapter.setSortOrder(chapterVO.getSortOrder());
+            bookChapter.setIsFree(chapterVO.getIsFree());
+            bookChapterMapper.updateById(bookChapter);
+            incomingIds.add(chapterVO.getId());
+            if (comicBook) {
+                replaceComicPages(bookId, chapterVO.getId(), chapterVO.getPages());
             }
         }
 
@@ -507,6 +672,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
                 .collect(Collectors.toList());
 
         if (!toDeleteIds.isEmpty()) {
+            bookChapterPageMapper.physicalDeleteByBookAndChapterIds(bookId, toDeleteIds);
             bookChapterMapper.delete(new LambdaQueryWrapper<BookChapter>()
                     .eq(BookChapter::getBookId, bookId)
                     .in(BookChapter::getId, toDeleteIds));
@@ -526,6 +692,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         BookDO bookDO = getById(id);
         checkEntityNotNull(bookDO, "电子书不存在");
         bookMapper.deleteById(id);
+        deleteComicPagesByBook(id);
 
         // 删除关联标签
         bookTagDOMapper.delete(new LambdaQueryWrapper<BookTagDO>()
@@ -764,11 +931,79 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         vo.setStatus(bookDO.getStatus());
         vo.setDeleteFlag(bookDO.getDeleteFlag() == null ? 0 : bookDO.getDeleteFlag().intValue());
         vo.setCover(resolveBookCover(bookDO.getCover(), forEdit));
-        vo.setBookDetails(aggregate.getChapters());
+        attachBookAuthor(vo, bookDO, forEdit);
+        Integer mediaType = BookMediaTypeEnum.normalize(bookDO.getMediaType());
+        vo.setMediaType(mediaType);
+        List<BookChapterVO> chapters = aggregate.getChapters();
+        if (BookMediaTypeEnum.isComic(mediaType)) {
+            attachComicPages(chapters, bookDO.getId(), forEdit);
+        }
+        vo.setBookDetails(chapters);
         vo.setTags(aggregate.getTags());
         vo.setIsbuy(aggregate.getRelationStatus().getPurchased() == 1);
         vo.setIsfava(aggregate.getRelationStatus().getFavorited() == 1);
         return vo;
+    }
+
+    private void attachBookAuthor(BookDetailVO vo, BookDO bookDO, Boolean forEdit) {
+        Long authorUserId = bookDO.getCreateBy() != null ? bookDO.getCreateBy() : bookDO.getUpdateBy();
+        if (authorUserId == null) {
+            return;
+        }
+        OshUser author = oshUserMapper.selectById(authorUserId);
+        if (author == null) {
+            vo.setAuthorUserId(authorUserId);
+            return;
+        }
+        vo.setAuthorUserId(author.getId());
+        vo.setAuthorName(author.getUsername());
+        vo.setAuthorAvatar(resolveUserAvatar(author.getAvatar(), forEdit));
+        vo.setAuthorIntroduction(author.getIntroduction());
+        vo.setAuthorGithubAccount(author.getGithubAccount());
+        Map<String, Object> highestRole = findHighestRole(author.getId());
+        if (highestRole != null) {
+            vo.setAuthorRoleName(toStringValue(highestRole.get("roleName")));
+            vo.setAuthorRoleLevel(toIntegerValue(highestRole.get("roleLevel")));
+        }
+    }
+
+    private Map<String, Object> findHighestRole(Long userId) {
+        List<Map<String, Object>> roles = userManageMapper.selectUserRolesByUserIds(Collections.singletonList(userId));
+        if (roles == null || roles.isEmpty()) {
+            return null;
+        }
+        return roles.stream()
+                .filter(role -> role != null)
+                .max((left, right) -> Integer.compare(toIntegerValue(left.get("roleLevel")), toIntegerValue(right.get("roleLevel"))))
+                .orElse(null);
+    }
+
+    private Integer toIntegerValue(Object value) {
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        if (value == null) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value));
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
+    }
+
+    private String toStringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private String resolveUserAvatar(String avatar, Boolean forEdit) {
+        if (StringUtils.isEmpty(avatar) || Boolean.TRUE.equals(forEdit)) {
+            return avatar;
+        }
+        if (avatar.startsWith("http") || avatar.startsWith("data:")) {
+            return avatar;
+        }
+        return ossService.getLimitedUrl(avatar, 30);
     }
 
     private BookDO requireBook(Long bookId)

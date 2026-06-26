@@ -165,6 +165,10 @@ public class BookEsMapper {
             boolQuery.filter(QueryBuilders.rangeQuery("level").lte(request.getUserLevel()));
         }
 
+        if (request != null && request.getMediaType() != null) {
+            boolQuery.filter(QueryBuilders.termQuery("mediaType", request.getMediaType()));
+        }
+
         sourceBuilder.query(boolQuery);
         sourceBuilder.sort(SortBuilders.fieldSort("subCount").order(SortOrder.DESC).missing("_last").unmappedType("integer"));
         sourceBuilder.sort(SortBuilders.fieldSort("createTime").order(SortOrder.DESC).unmappedType("date"));
@@ -191,6 +195,7 @@ public class BookEsMapper {
         vo.setSubCount(document.getSubCount());
         vo.setChapterCount(document.getChapterCount());
         vo.setLevel(document.getLevel());
+        vo.setMediaType(document.getMediaType());
         vo.setTagNameList(document.getTagNames());
         vo.setPurchaseCount(0);
         return vo;

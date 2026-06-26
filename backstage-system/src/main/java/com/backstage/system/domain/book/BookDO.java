@@ -51,6 +51,9 @@ public class BookDO extends OSHBaseEntity implements Serializable {
     /** 访问等级：1免费，2VIP，3小班，4内部成员，6创始人 */
     private Integer level;
 
+    /** Book media type: 1 ebook, 2 comic. */
+    private Integer mediaType;
+
     /** 状态：0正常，1下架 */
     private String status;
 
@@ -135,6 +138,14 @@ public class BookDO extends OSHBaseEntity implements Serializable {
 
     public void setLevel(Integer level) {
         this.level = level;
+    }
+
+    public Integer getMediaType() {
+        return mediaType;
+    }
+
+    public void setMediaType(Integer mediaType) {
+        this.mediaType = mediaType;
     }
 
     public String getStatus() {

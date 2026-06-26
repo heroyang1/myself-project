@@ -41,6 +41,9 @@ public class BookListVO implements Serializable {
     /** 权限等级 */
     private Integer level;
 
+    /** Book media type: 1 ebook, 2 comic. */
+    private Integer mediaType;
+
     /** 状态：0正常，1下架 */
     private String status;
 
@@ -142,6 +145,14 @@ public class BookListVO implements Serializable {
 
     public void setLevel(Integer level) {
         this.level = level;
+    }
+
+    public Integer getMediaType() {
+        return mediaType;
+    }
+
+    public void setMediaType(Integer mediaType) {
+        this.mediaType = mediaType;
     }
 
     public String getStatus() {
