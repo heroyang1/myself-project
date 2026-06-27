@@ -141,9 +141,11 @@ public class BookEsMapper {
                 .size(pageSize)
                 .timeout(TimeValue.timeValueMillis(searchEsProperties.getFallbackTimeoutMillis()));
 
+        int userLevel = request == null || request.getUserLevel() == null ? 1 : request.getUserLevel();
+        int deleteFlag = request != null && Boolean.TRUE.equals(request.getIncludeDeleted()) && userLevel >= 4 ? 1 : 0;
         BoolQueryBuilder boolQuery = QueryBuilders.boolQuery()
                 .filter(QueryBuilders.termQuery("status", "0"))
-                .filter(QueryBuilders.termQuery("deleteFlag", 0));
+                .filter(QueryBuilders.termQuery("deleteFlag", deleteFlag));
 
         if (request != null && StringUtils.isNotEmpty(request.getTitle())) {
             boolQuery.must(buildKeywordQuery(request.getTitle()));
@@ -161,6 +163,10 @@ public class BookEsMapper {
             }
         } else if (request != null && request.getUserLevel() != null) {
             boolQuery.filter(QueryBuilders.rangeQuery("level").lte(request.getUserLevel()));
+        }
+
+        if (request != null && request.getMediaType() != null) {
+            boolQuery.filter(QueryBuilders.termQuery("mediaType", request.getMediaType()));
         }
 
         sourceBuilder.query(boolQuery);
@@ -189,6 +195,7 @@ public class BookEsMapper {
         vo.setSubCount(document.getSubCount());
         vo.setChapterCount(document.getChapterCount());
         vo.setLevel(document.getLevel());
+        vo.setMediaType(document.getMediaType());
         vo.setTagNameList(document.getTagNames());
         vo.setPurchaseCount(0);
         return vo;

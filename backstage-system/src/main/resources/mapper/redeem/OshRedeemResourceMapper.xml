@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.backstage.system.mapper.redeem.OshRedeemResourceMapper">
+
+    <select id="searchResources" resultType="com.backstage.system.domain.redeem.vo.RedeemResourceVO">
+        <choose>
+            <when test="resourceType == 'course'">
+                select no as resourceNo,
+                       'course' as resourceType,
+                       1 as productType,
+                       id as productId,
+                       title as productName,
+                       ifnull(price, 0.00) as price,
+                       ifnull(t_price, price) as originalPrice
+                from osh_course
+                where delete_flag = 0
+                  and status = 4
+                  and no is not null
+                  and no != ''
+                <if test="keyword != null and keyword != ''">
+                  and title like concat('%', #{keyword}, '%')
+                </if>
+                order by create_time desc, id desc
+            </when>
+            <when test="resourceType == 'book'">
+                select no as resourceNo,
+                       'book' as resourceType,
+                       2 as productType,
+                       id as productId,
+                       title as productName,
+                       ifnull(price, 0.00) as price,
+                       ifnull(original_price, price) as originalPrice
+                from osh_book
+                where delete_flag = 0
+                  and status = '0'
+                  and no is not null
+                  and no != ''
+                <if test="keyword != null and keyword != ''">
+                  and title like concat('%', #{keyword}, '%')
+                </if>
+                order by create_time desc, id desc
+            </when>
+            <when test="resourceType == 'tool'">
+                select no as resourceNo,
+                       'tool' as resourceType,
+                       5 as productType,
+                       id as productId,
+                       tool_name as productName,
+                       0.00 as price,
+                       0.00 as originalPrice
+                from osh_tool
+                where delete_flag = 0
+                  and status = 4
+                  and no is not null
+                  and no != ''
+                <if test="keyword != null and keyword != ''">
+                  and tool_name like concat('%', #{keyword}, '%')
+                </if>
+                order by create_time desc, id desc
+            </when>
+            <when test="resourceType == 'member_plan'">
+                select no as resourceNo,
+                       'member_plan' as resourceType,
+                       7 as productType,
+                       id as productId,
+                       plan_name as productName,
+                       ifnull(price, 0.00) as price,
+                       ifnull(original_price, price) as originalPrice
+                from osh_member_plan
+                where delete_flag = 0
+                  and status = 1
+                  and no is not null
+                  and no != ''
+                <if test="keyword != null and keyword != ''">
+                  and plan_name like concat('%', #{keyword}, '%')
+                </if>
+                order by sort asc, create_time desc, id desc
+            </when>
+            <otherwise>
+                select null as resourceNo,
+                       null as resourceType,
+                       null as productType,
+                       null as productId,
+                       null as productName,
+                       null as price,
+                       null as originalPrice
+                where 1 = 0
+            </otherwise>
+        </choose>
+    </select>
+</mapper>

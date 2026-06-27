@@ -38,11 +38,33 @@ public class ToolAnnouncementServiceImplTest {
     }
 
     @Test
+    public void shouldQueryNoticeAnnouncementsBySystemChannel() {
+        when(oshToolAnnouncementMapper.selectLatestToolAnnouncementsByChannel(AnnouncementChannelEnum.SYSTEM_NOTICE.getCode()))
+                .thenReturn(Collections.singletonList(new ToolAnnouncementVO()));
+
+        List<ToolAnnouncementVO> result = toolAnnouncementService.listNoticeAnnouncements();
+
+        assertTrue(result.size() == 1);
+        verify(oshToolAnnouncementMapper).selectLatestToolAnnouncementsByChannel(AnnouncementChannelEnum.SYSTEM_NOTICE.getCode());
+    }
+
+    @Test
     public void shouldQueryUserNoticesByUserChannel() {
         when(oshToolAnnouncementMapper.selectLatestToolAnnouncementsByChannel(AnnouncementChannelEnum.USER_NOTICE.getCode()))
                 .thenReturn(Collections.singletonList(new ToolAnnouncementVO()));
 
         List<ToolAnnouncementVO> result = toolAnnouncementService.listLatestUserNotices();
+
+        assertTrue(result.size() == 1);
+        verify(oshToolAnnouncementMapper).selectLatestToolAnnouncementsByChannel(AnnouncementChannelEnum.USER_NOTICE.getCode());
+    }
+
+    @Test
+    public void shouldQueryDynamicAnnouncementsByUserChannel() {
+        when(oshToolAnnouncementMapper.selectLatestToolAnnouncementsByChannel(AnnouncementChannelEnum.USER_NOTICE.getCode()))
+                .thenReturn(Collections.singletonList(new ToolAnnouncementVO()));
+
+        List<ToolAnnouncementVO> result = toolAnnouncementService.listDynamicAnnouncements();
 
         assertTrue(result.size() == 1);
         verify(oshToolAnnouncementMapper).selectLatestToolAnnouncementsByChannel(AnnouncementChannelEnum.USER_NOTICE.getCode());

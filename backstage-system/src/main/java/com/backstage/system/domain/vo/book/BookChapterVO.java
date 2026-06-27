@@ -3,6 +3,7 @@ package com.backstage.system.domain.vo.book;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * 电子书章节视图对象
@@ -32,6 +33,9 @@ public class BookChapterVO implements Serializable
 
     /** 章节内容 */
     private String content;
+
+    /** Comic pages, only used when the parent book is comic. */
+    private List<BookChapterPageVO> pages;
 
     public Long getId()
     {
@@ -91,5 +95,13 @@ public class BookChapterVO implements Serializable
     public void setContent(String content)
     {
         this.content = content;
+    }
+
+    public List<BookChapterPageVO> getPages() {
+        return pages;
+    }
+
+    public void setPages(List<BookChapterPageVO> pages) {
+        this.pages = pages;
     }
 }

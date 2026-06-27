@@ -14,5 +14,6 @@ public interface OshToolAnnouncementMapper {
     int insertToolAnnouncement(@Param("title") String title,
                                @Param("link") String link,
                                @Param("channel") Integer channel,
+                               @Param("iconCode") String iconCode,
                                @Param("operator") String operator);
 }

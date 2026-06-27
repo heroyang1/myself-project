@@ -57,7 +57,7 @@
                 select id, title, description, cover, null as url,
                        null as author, null as submit_time, level, cast(status as signed) as status, create_by, create_time
                 from osh_book
-                where del_flag = '0' and status in ('0', '2')
+                where delete_flag = 0 and status in ('0', '2')
                 <if test="keyword != null and keyword != ''">
                     and (title like concat('%', #{keyword}, '%') or description like concat('%', #{keyword}, '%'))
                 </if>
@@ -138,7 +138,7 @@
                 </if>
             </when>
             <when test="tableName == 'osh_book'">
-                select count(1) from osh_book where del_flag = '0' and status in ('0', '2')
+                select count(1) from osh_book where delete_flag = 0 and status in ('0', '2')
                 <if test="keyword != null and keyword != ''">
                     and (title like concat('%', #{keyword}, '%') or description like concat('%', #{keyword}, '%'))
                 </if>

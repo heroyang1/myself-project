@@ -3,6 +3,7 @@ package com.backstage.system.service.impl.tool;
 import com.backstage.common.async.AsyncExecutorNames;
 import com.backstage.common.async.AsyncTaskSupport;
 import com.backstage.common.enums.AnnouncementChannelEnum;
+import com.alibaba.fastjson2.JSON;
 import com.backstage.system.domain.tool.OshToolPurchaseRecord;
 import com.backstage.system.domain.user.OshUser;
 import com.backstage.system.domain.websocket.WsNotifyMessage;
@@ -16,6 +17,8 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.Executor;
 
 @Service
@@ -24,7 +27,8 @@ public class ToolPurchaseAnnouncementPublisherImpl implements ToolPurchaseAnnoun
     private static final Logger log = LoggerFactory.getLogger(ToolPurchaseAnnouncementPublisherImpl.class);
     private static final String SYSTEM_OPERATOR = "system";
     private static final String TOOL_PURCHASE_SUCCESS = "TOOL_PURCHASE_SUCCESS";
-    private static final String TOOL_USER_NOTICE_REFRESH = "TOOL_USER_NOTICE_REFRESH";
+    private static final String ANNOUNCEMENT_REFRESH = "ANNOUNCEMENT_REFRESH";
+    private static final String TOOL_MODULE = "tool";
 
     @Resource
     private OshToolAnnouncementMapper oshToolAnnouncementMapper;
@@ -72,20 +76,21 @@ public class ToolPurchaseAnnouncementPublisherImpl implements ToolPurchaseAnnoun
                 title,
                 jumpUrl,
                 AnnouncementChannelEnum.USER_NOTICE.getCode(),
+                "payment",
                 SYSTEM_OPERATOR
         );
         log.info("工具点数购买成功业务公告写入完成, orderNo={}, packageId={}, title={}",
                 record.getOrderNo(), record.getPackageId(), title);
 
         WsNotifyMessage broadcast = new WsNotifyMessage();
-        broadcast.setType(TOOL_USER_NOTICE_REFRESH);
-        broadcast.setTitle(title);
-        broadcast.setContent(null);
+        broadcast.setType(ANNOUNCEMENT_REFRESH);
+        broadcast.setTitle("工具模块公告刷新");
+        broadcast.setContent(buildAnnouncementRefreshContent());
         broadcast.setJumpUrl(jumpUrl);
-        broadcast.setBizId(record.getPackageId() == null ? null : String.valueOf(record.getPackageId()));
+        broadcast.setBizId(TOOL_MODULE);
         webSocketNotifyService.broadcast(broadcast);
         log.info("工具点数购买成功公告广播完成, orderNo={}, packageId={}, type={}",
-                record.getOrderNo(), record.getPackageId(), TOOL_USER_NOTICE_REFRESH);
+                record.getOrderNo(), record.getPackageId(), ANNOUNCEMENT_REFRESH);
     }
 
     private void sendPersonalSuccessNotification(OshToolPurchaseRecord record,
@@ -116,5 +121,15 @@ public class ToolPurchaseAnnouncementPublisherImpl implements ToolPurchaseAnnoun
 
     private String safeText(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private String buildAnnouncementRefreshContent() {
+        Map<String, Object> content = new HashMap<>();
+        content.put("module", TOOL_MODULE);
+        content.put("action", "refresh");
+        content.put("refresh", true);
+        content.put("noticeApi", "/pc/tool/announcement/notice");
+        content.put("dynamicApi", "/pc/tool/announcement/dynamic");
+        return JSON.toJSONString(content);
     }
 }

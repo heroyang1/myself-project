@@ -12,6 +12,7 @@ import com.backstage.common.exception.ServiceException;
 import com.backstage.system.domain.vo.order.PayResponse;
 import com.backstage.system.mapper.course.CourseBuyMapper;
 import com.backstage.system.service.course.ICoursePayService;
+import com.backstage.system.utils.IpUtils;
 import com.backstage.system.utils.UserContextUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -140,11 +141,16 @@ public class CoursePayController {
         }
     }
 
+    /**
+     * 课程支付专用：解析传给支付网关的 clientip。
+     * 原实现只读整段 X-Forwarded-For（含逗号链），经 nginx/Cloudflare 时网关报「IP不合法」。
+     * 逻辑限定在本 Controller，不改动公共 IpUtils。
+     */
     private String resolveClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty()) {
-            ip = request.getRemoteAddr();
+        String cfIp = request.getHeader("CF-Connecting-IP");
+        if (cfIp != null && !cfIp.isEmpty() && !"unknown".equalsIgnoreCase(cfIp.trim())) {
+            return cfIp.trim();
         }
-        return ip;
+        return IpUtils.getClientIp(request);
     }
 }

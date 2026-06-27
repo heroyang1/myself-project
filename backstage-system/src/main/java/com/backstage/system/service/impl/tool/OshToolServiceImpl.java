@@ -22,6 +22,7 @@ import com.backstage.system.request.tool.ToolRecommendRequest;
 import com.backstage.system.request.tool.ToolSaveRequest;
 import com.backstage.system.request.tool.ToolSearchRequest;
 import com.backstage.system.service.OutboxEventService;
+import com.backstage.system.service.common.OssService;
 import com.backstage.system.service.tool.IOshToolEsService;
 import com.backstage.system.service.tool.IOshToolService;
 import com.backstage.system.service.tool.ResourceNoGenerator;
@@ -89,6 +90,9 @@ public class OshToolServiceImpl implements IOshToolService {
     @Autowired
     private ResourceNoGenerator resourceNoGenerator;
 
+    @Autowired
+    private OssService ossService;
+
     @Override
     public List<OshTool> pageQuerySearchTool(Long userId, ToolSearchRequest request) {
         normalizeSearchRequest(request);
@@ -124,6 +128,7 @@ public class OshToolServiceImpl implements IOshToolService {
         if (StringUtils.isBlank(request.getToolName())) {
             throw new IllegalArgumentException("工具名称不能为空");
         }
+        validateToolNameUnique(request.getToolName(), null);
         validateToolTags(request.getTags());
         OshTool tool = buildTool(request, operator.getUsername());
         tool.setNo(generateToolNo());
@@ -141,6 +146,10 @@ public class OshToolServiceImpl implements IOshToolService {
         if (request.getId() == null) {
             throw new IllegalArgumentException("工具ID不能为空");
         }
+        if (StringUtils.isBlank(request.getToolName())) {
+            throw new IllegalArgumentException("工具名称不能为空");
+        }
+        validateToolNameUnique(request.getToolName(), request.getId());
         validateToolTags(request.getTags());
         validateToolExists(request.getId());
         OshTool tool = buildTool(request, operator.getUsername());
@@ -178,6 +187,7 @@ public class OshToolServiceImpl implements IOshToolService {
         tool.setCollectionFlag(resolveCollectionFlag(toolId, userId));
         fillUserToolQuota(tool, userId);
         tool.setVoteType(resolveVoteType(toolId, userId));
+        fillBackgroundImageUrl(tool);
         return tool;
     }
 
@@ -435,6 +445,7 @@ public class OshToolServiceImpl implements IOshToolService {
         tool.setRoutePath(accessType == ACCESS_TYPE_INTERNAL ? request.getRoutePath() : null);
         tool.setIframeUrl(accessType == ACCESS_TYPE_IFRAME ? request.getIframeUrl() : null);
         tool.setGithubUrl(request.getGithubUrl());
+        tool.setBackgroundImage(request.getBackgroundImage());
         tool.setQuotaCost(resolveQuotaCost(request, resourceType));
         tool.setStatus(request.getId() == null ? 2 : request.getStatus());
         tool.setRemark(request.getRemark());
@@ -494,6 +505,12 @@ public class OshToolServiceImpl implements IOshToolService {
     private void validateToolTags(List<String> tags) {
         if (tags != null && tags.size() > MAX_TOOL_TAG_COUNT) {
             throw new IllegalArgumentException("工具标签最多添加" + MAX_TOOL_TAG_COUNT + "个");
+        }
+    }
+
+    private void validateToolNameUnique(String toolName, Long excludeId) {
+        if (oshToolMapper.countActiveByToolName(toolName, excludeId) > 0) {
+            throw new IllegalArgumentException("工具名称已存在，请换一个名称");
         }
     }
 
@@ -609,7 +626,20 @@ public class OshToolServiceImpl implements IOshToolService {
     private void fillToolExtras(List<OshTool> tools) {
         for (OshTool tool : tools) {
             tool.setTags(oshToolTagMapper.selectTagNamesByToolId(tool.getId()));
+            fillBackgroundImageUrl(tool);
         }
+    }
+
+    private void fillBackgroundImageUrl(OshTool tool) {
+        if (tool == null || StringUtils.isBlank(tool.getBackgroundImage())) {
+            return;
+        }
+        String backgroundImage = tool.getBackgroundImage();
+        if (isExternalUrl(backgroundImage)) {
+            tool.setBackgroundImageUrl(backgroundImage);
+            return;
+        }
+        tool.setBackgroundImageUrl(ossService.getLimitedUrl(backgroundImage, 1440));
     }
 
     private void fillUserToolQuota(OshTool tool, Long userId) {
