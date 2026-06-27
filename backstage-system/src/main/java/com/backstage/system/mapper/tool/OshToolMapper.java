@@ -22,6 +22,8 @@ public interface OshToolMapper {
 
     OshTool selectToolById(@Param("id") Long id);
 
+    OshTool selectToolByNo(@Param("no") String no);
+
     Integer selectUserRemainingCount(@Param("userId") Long userId);
 
     int consumeUserQuota(@Param("userId") Long userId,

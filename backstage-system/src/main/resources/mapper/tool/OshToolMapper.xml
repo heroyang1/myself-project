@@ -172,6 +172,21 @@
         limit 1
     </select>
 
+    <select id="selectToolByNo" resultMap="OshToolResult">
+        select id, tool_name, no, description, access_type, route_path, iframe_url, github_url,
+               background_image,
+               quota_cost, status, good_count, neutral_count, bad_count,
+               view_count, total_usage, collection_count, remark, resource_type, level, create_by, create_time,
+               update_by, update_time, delete_flag,
+               0 as remaining_count,
+               0 as purchased_flag,
+               0 as vote_type
+        from osh_tool
+        where no = #{no}
+          and delete_flag = 0
+        limit 1
+    </select>
+
     <select id="selectToolsWithMissingNo" resultMap="OshToolResult">
         select id, tool_name, no, description, access_type, route_path, iframe_url, github_url,
                background_image,
