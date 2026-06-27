@@ -16,11 +16,16 @@
 
 ## 验证
 
-- [x] 本地集成测试通过。
-- [ ] CI `Spec & Process Guard` 通过。
-- [ ] 与前端联调：保存 ZIP 导入文档后 editContent 一致。
+- [x] 本地集成测试通过（`OshCourseControllerSectionApiTest#shouldPersistAndReloadVideoSectionDocContentForEditPage`）。
+- [x] 与前端联调：Markdown ZIP 导入保存后 `editContent` 与学习中心内容一致（`feature/course_xinghao`）。
+- [ ] CI `Spec & Process Guard` 通过（待 push 后观察）。
+
+## 合并
+
+- [x] 将 `qa/20260708`（`73a1b668`）Fast-forward 合并入 `feature/course_hero_hope_xinghao`。
+- [x] 前端 `feature/course_xinghao` 已同步合并 `qa/20260708`，与后端分支对齐联调。
 
 ## PR
 
 - [x] 提交至 `feature/course_hero_hope_xinghao` 并 push。
-- [ ] PR 描述关联 `openspec/changes/course-section-doc-save-read`。
+- [x] PR 描述关联 `openspec/changes/course-section-doc-save-read`。
