@@ -10,7 +10,9 @@ public enum PayChannelEnum {
     WXPAY(1, "wxpay", "微信支付"),
     ALIPAY(2, "alipay", "支付宝"),
 
-    FREE(5, "free", "免费");
+    FREE(5, "free", "免费"),
+
+    OFFLINE(6, "offline", "线下核销");
 
     private final int code;
     private final String value;

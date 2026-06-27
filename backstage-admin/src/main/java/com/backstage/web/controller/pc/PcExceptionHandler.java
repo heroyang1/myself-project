@@ -17,7 +17,11 @@ import javax.servlet.http.HttpServletRequest;
  *
  * @author backstage
  */
-@RestControllerAdvice(basePackages = {"com.backstage.web.controller.pc", "com.backstage.system.controller.group"})
+@RestControllerAdvice(basePackages = {
+        "com.backstage.web.controller.pc",
+        "com.backstage.system.controller.group",
+        "com.backstage.system.controller.redeem"
+})
 @Order(1)
 public class PcExceptionHandler
 {
