@@ -55,5 +55,7 @@ flowchart TD
 
 ## 发布与回滚
 
-- 与前端 `feature/course_xinghao` 同期合并验证
-- 回滚：revert `e0c0b5db`
+- 后端 `feature/course_hero_hope_xinghao` 已 Fast-forward 合并 `qa/20260708`（`73a1b668`）。
+- 前端 `feature/course_xinghao` 已同步合并 `qa/20260708`，Markdown 保存 / 学习中心读取联调通过。
+- 与前端同期合并至 qa 后，在 25 环境做回归验证。
+- 回滚：revert `e0c0b5db`（读写逻辑）；OpenSpec 文档可单独 revert `4becad67`。
