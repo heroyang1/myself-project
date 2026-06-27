@@ -5,9 +5,11 @@ import com.backstage.common.core.domain.R;
 import com.backstage.system.domain.redeem.OshRedeemChannel;
 import com.backstage.system.domain.redeem.OshRedeemCode;
 import com.backstage.system.domain.redeem.dto.RedeemChannelCreateRequest;
+import com.backstage.system.domain.redeem.dto.RedeemCodeBatchCreateRequest;
 import com.backstage.system.domain.redeem.dto.RedeemCodeCreateRequest;
 import com.backstage.system.domain.redeem.dto.RedeemCodePageQuery;
 import com.backstage.system.domain.redeem.dto.RedeemResourceSearchQuery;
+import com.backstage.system.domain.redeem.vo.RedeemCodeBatchResultVO;
 import com.backstage.system.domain.redeem.vo.RedeemCodeVO;
 import com.backstage.system.domain.redeem.vo.RedeemCodeResultVO;
 import com.backstage.system.domain.redeem.vo.RedeemResourceVO;
@@ -63,6 +65,12 @@ public class AdminRedeemController {
     public R<RedeemCodeResultVO> createCode(@RequestBody RedeemCodeCreateRequest request) {
         OshRedeemCode code = redeemService.createCode(request);
         return R.ok(new RedeemCodeResultVO(code.getCode(), code.getOrderNo(), code.getStatus()));
+    }
+
+    @PostMapping("/code/batch-create")
+    @OshUserLevel(5)
+    public R<RedeemCodeBatchResultVO> batchCreateCodes(@RequestBody RedeemCodeBatchCreateRequest request) {
+        return R.ok(redeemService.batchCreateCodes(request));
     }
 
     @PostMapping("/code/page")

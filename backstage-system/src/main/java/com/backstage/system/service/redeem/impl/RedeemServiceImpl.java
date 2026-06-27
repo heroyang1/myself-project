@@ -17,9 +17,12 @@ import com.backstage.system.domain.order.enums.PurchaseModeEnum;
 import com.backstage.system.domain.redeem.OshRedeemChannel;
 import com.backstage.system.domain.redeem.OshRedeemCode;
 import com.backstage.system.domain.redeem.dto.RedeemChannelCreateRequest;
+import com.backstage.system.domain.redeem.dto.RedeemCodeBatchCreateRequest;
 import com.backstage.system.domain.redeem.dto.RedeemCodeCreateRequest;
 import com.backstage.system.domain.redeem.dto.RedeemCodePageQuery;
 import com.backstage.system.domain.redeem.dto.RedeemResourceSearchQuery;
+import com.backstage.system.domain.redeem.vo.RedeemCodeBatchItemVO;
+import com.backstage.system.domain.redeem.vo.RedeemCodeBatchResultVO;
 import com.backstage.system.domain.redeem.vo.RedeemCodeVO;
 import com.backstage.system.domain.redeem.vo.RedeemResourceVO;
 import com.backstage.system.domain.tool.OshTool;
@@ -55,6 +58,7 @@ import javax.annotation.Resource;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -73,6 +77,7 @@ public class RedeemServiceImpl implements RedeemService {
     private static final String SYSTEM_OPERATOR = "redeem";
     private static final int DEFAULT_RESOURCE_PAGE_SIZE = 10;
     private static final int MAX_RESOURCE_PAGE_SIZE = 50;
+    private static final int MAX_BATCH_CREATE_SIZE = 200;
 
     @Resource
     private OshRedeemChannelMapper redeemChannelMapper;
@@ -213,6 +218,52 @@ public class RedeemServiceImpl implements RedeemService {
         code.setDeleteFlag((byte) 0);
         redeemCodeMapper.insert(code);
         return code;
+    }
+
+    @Override
+    public RedeemCodeBatchResultVO batchCreateCodes(RedeemCodeBatchCreateRequest request) {
+        if (request == null || request.getItems() == null || request.getItems().isEmpty()) {
+            throw new ServiceException("请至少提交一条核销码生成记录");
+        }
+        if (request.getItems().size() > MAX_BATCH_CREATE_SIZE) {
+            throw new ServiceException("单次最多生成" + MAX_BATCH_CREATE_SIZE + "条核销码");
+        }
+
+        RedeemCodeBatchResultVO result = new RedeemCodeBatchResultVO();
+        List<RedeemCodeBatchItemVO> items = new ArrayList<>();
+        int successCount = 0;
+
+        for (RedeemCodeCreateRequest itemRequest : request.getItems()) {
+            RedeemCodeBatchItemVO item = new RedeemCodeBatchItemVO();
+            if (itemRequest != null) {
+                item.setUserEmail(StringUtils.trimToEmpty(itemRequest.getUserEmail()));
+                item.setResourceNo(StringUtils.trimToEmpty(itemRequest.getResourceNo()));
+            }
+            try {
+                OshRedeemCode code = createCode(itemRequest);
+                item.setUserEmail(itemRequest.getUserEmail().trim());
+                item.setResourceNo(code.getResourceNo());
+                item.setProductName(code.getProductName());
+                item.setCode(code.getCode());
+                item.setStatus(code.getStatus());
+                item.setSuccess(true);
+                item.setMessage("生成成功");
+                successCount++;
+            } catch (ServiceException ex) {
+                item.setSuccess(false);
+                item.setMessage(StringUtils.defaultIfBlank(ex.getMessage(), "生成失败"));
+            } catch (Exception ex) {
+                item.setSuccess(false);
+                item.setMessage("生成失败");
+            }
+            items.add(item);
+        }
+
+        result.setTotal(items.size());
+        result.setSuccessCount(successCount);
+        result.setFailCount(items.size() - successCount);
+        result.setItems(items);
+        return result;
     }
 
     @Override

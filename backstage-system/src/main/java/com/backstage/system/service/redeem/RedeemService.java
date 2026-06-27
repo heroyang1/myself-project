@@ -3,9 +3,11 @@ package com.backstage.system.service.redeem;
 import com.backstage.system.domain.redeem.OshRedeemChannel;
 import com.backstage.system.domain.redeem.OshRedeemCode;
 import com.backstage.system.domain.redeem.dto.RedeemChannelCreateRequest;
+import com.backstage.system.domain.redeem.dto.RedeemCodeBatchCreateRequest;
 import com.backstage.system.domain.redeem.dto.RedeemCodeCreateRequest;
 import com.backstage.system.domain.redeem.dto.RedeemCodePageQuery;
 import com.backstage.system.domain.redeem.dto.RedeemResourceSearchQuery;
+import com.backstage.system.domain.redeem.vo.RedeemCodeBatchResultVO;
 import com.backstage.system.domain.redeem.vo.RedeemCodeVO;
 import com.backstage.system.domain.redeem.vo.RedeemResourceVO;
 import com.github.pagehelper.PageInfo;
@@ -22,6 +24,8 @@ public interface RedeemService {
     PageInfo<RedeemResourceVO> searchResources(RedeemResourceSearchQuery query);
 
     OshRedeemCode createCode(RedeemCodeCreateRequest request);
+
+    RedeemCodeBatchResultVO batchCreateCodes(RedeemCodeBatchCreateRequest request);
 
     PageInfo<RedeemCodeVO> pageAdminCodes(RedeemCodePageQuery query);
 
