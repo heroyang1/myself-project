@@ -31,6 +31,38 @@
 - AND 按 `resourceNo` 校验资源
 - AND 创建待核销状态的核销码
 
+### Requirement: 后台支持批量生成核销码
+
+系统 SHALL 为 level>=5 用户提供批量生成核销码接口，支持同一商品对应多个用户，也支持多行不同商品分别生成。
+
+#### Scenario: 同一资源批量生成给多个邮箱
+
+- GIVEN level>=5 用户提交 `POST /pc/admin/redeem/code/batch-create`
+- AND 请求体 `items` 中包含多个拥有相同 `resourceNo`、不同 `userEmail` 的条目
+- WHEN 系统处理批量创建请求
+- THEN 系统逐条按用户邮箱定位消费者
+- AND 逐条按内部 `resourceNo` 校验资源并生成待核销状态核销码
+- AND 响应包含 `total`、`successCount`、`failCount` 和逐条结果
+
+#### Scenario: 多个资源批量生成
+
+- GIVEN 请求体 `items` 中包含不同 `resourceNo` 的条目
+- WHEN 系统处理批量创建请求
+- THEN 每条核销码 SHALL 使用该条目自己的资源快照、金额、渠道和备注
+
+#### Scenario: 批量生成部分失败
+
+- GIVEN 批量请求中存在邮箱不存在、资源无效或参数缺失的条目
+- WHEN 系统处理批量创建请求
+- THEN 系统 SHALL 返回该条目 `success=false` 和失败原因
+- AND 其他合法条目仍可生成核销码
+
+#### Scenario: 批量数量超过上限
+
+- GIVEN 请求体 `items` 超过单次批量上限
+- WHEN 系统处理批量创建请求
+- THEN 系统返回业务错误且不创建核销码
+
 ### Requirement: 用户中心只能核销本人待核销记录
 
 系统 SHALL 在用户中心支持列表确认和手动输入核销码两种入口，并在服务端统一校验核销码归属与状态。
