@@ -3,6 +3,7 @@ package com.backstage.system.controller.objectslim;
 import com.backstage.common.annotation.OshUserLevel;
 import com.backstage.common.core.domain.R;
 import com.backstage.system.domain.objectslim.OshObjectSlimTask;
+import com.backstage.system.domain.objectslim.dto.ObjectSlimDefaultModeRequest;
 import com.backstage.system.domain.objectslim.dto.ObjectSlimEnabledRequest;
 import com.backstage.system.domain.objectslim.dto.ObjectSlimPageQuery;
 import com.backstage.system.domain.objectslim.dto.ObjectSlimRunRequest;
@@ -39,6 +40,12 @@ public class ObjectSlimAdminController {
     public R<ObjectSlimConfigVO> setEnabled(@RequestBody ObjectSlimEnabledRequest request) {
         boolean enabled = request != null && Boolean.TRUE.equals(request.getEnabled());
         return R.ok(objectSlimService.setEnabled(enabled));
+    }
+
+    @PostMapping("/config/default-mode")
+    @OshUserLevel(5)
+    public R<ObjectSlimConfigVO> setDefaultMode(@RequestBody ObjectSlimDefaultModeRequest request) {
+        return R.ok(objectSlimService.setDefaultSlimMode(request == null ? null : request.getSlimMode()));
     }
 
     @GetMapping("/overview")
