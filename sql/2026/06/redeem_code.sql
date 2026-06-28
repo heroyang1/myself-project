@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS `osh_redeem_channel` (
 CREATE TABLE IF NOT EXISTS `osh_redeem_code` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `code` varchar(32) NOT NULL COMMENT '核销码',
-  `user_id` bigint NOT NULL COMMENT '接收用户ID',
+  `user_id` bigint DEFAULT NULL COMMENT '核销用户ID，待核销时为空',
   `resource_no` varchar(32) NOT NULL COMMENT '资源编号',
   `resource_type` varchar(32) NOT NULL COMMENT '资源类型',
   `product_type` tinyint NOT NULL COMMENT '统一订单商品类型',
@@ -49,6 +49,22 @@ CREATE TABLE IF NOT EXISTS `osh_redeem_code` (
   KEY `idx_channel_id` (`channel_id`),
   KEY `idx_delete_flag` (`delete_flag`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='核销码';
+
+-- 历史环境中如果已创建为 NOT NULL，则调整为待核销阶段可为空。
+SET @column_nullable := (
+  SELECT IS_NULLABLE
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'osh_redeem_code'
+    AND column_name = 'user_id'
+);
+SET @ddl := IF(@column_nullable = 'NO',
+  'ALTER TABLE `osh_redeem_code` MODIFY COLUMN `user_id` bigint DEFAULT NULL COMMENT ''核销用户ID，待核销时为空''',
+  'SELECT 1'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 INSERT INTO `osh_redeem_channel`
   (`channel_code`, `channel_name`, `status`, `sort`, `remark`, `create_by`, `update_by`, `delete_flag`)

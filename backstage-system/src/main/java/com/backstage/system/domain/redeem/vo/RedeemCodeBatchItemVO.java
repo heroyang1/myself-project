@@ -1,7 +1,6 @@
 package com.backstage.system.domain.redeem.vo;
 
 public class RedeemCodeBatchItemVO {
-    private String userEmail;
     private String resourceNo;
     private String productName;
     private String code;
@@ -9,8 +8,6 @@ public class RedeemCodeBatchItemVO {
     private boolean success;
     private String message;
 
-    public String getUserEmail() { return userEmail; }
-    public void setUserEmail(String userEmail) { this.userEmail = userEmail; }
     public String getResourceNo() { return resourceNo; }
     public void setResourceNo(String resourceNo) { this.resourceNo = resourceNo; }
     public String getProductName() { return productName; }
