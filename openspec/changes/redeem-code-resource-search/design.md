@@ -2,7 +2,7 @@
 
 ## 方案概览
 
-在核销模块新增资源搜索接口，按资源类型路由到对应业务表查询候选资源。前端选择资源后仅把内部 `resourceNo` 提交给创建核销码接口，后端继续通过 `resolveResource` 校验资源并复用现有订单、支付流水、权益发放逻辑。
+在核销模块新增资源搜索接口，按资源类型路由到对应业务表查询候选资源。前端选择资源后仅把内部 `resourceNo` 提交给创建核销码接口，后端继续通过 `resolveResource` 校验资源并复用现有订单、支付流水、权益发放逻辑。核销码生成后不做站内发送，由管理员通过平台外方式发送；后端在用户使用时绑定当前用户。
 
 ## 现状分析
 
@@ -34,6 +34,7 @@
 | `osh_tool.idx_redeem_tool_no` | 新增资源编号索引 | 追加到 `redeem_code.sql` | `DROP INDEX` |
 | `osh_member_plan.idx_redeem_member_plan_no` | 新增资源编号索引 | 追加到 `redeem_code.sql` | `DROP INDEX` |
 | `osh_member_plan.idx_redeem_member_plan_name` | 新增套餐名称索引 | 追加到 `redeem_code.sql` | `DROP INDEX` |
+| `osh_redeem_code.user_id` | 调整为可空 | 追加到 `redeem_code.sql` | 按历史需要恢复 `NOT NULL` |
 
 ### 业务流程
 
@@ -45,7 +46,9 @@ flowchart TD
   D --> E["管理员选中资源"]
   E --> F["前端内部回填 resourceNo"]
   F --> G["调用创建核销码接口"]
-  G --> H["后端校验资源并创建核销码"]
+  G --> H["后端校验资源并创建通用核销码"]
+  H --> I["管理员平台外发送核销码"]
+  I --> J["用户中心输入核销码并绑定当前用户"]
 ```
 
 ### 中间件影响
@@ -58,7 +61,7 @@ flowchart TD
 
 ## 兼容性
 
-- 老接口保留：`resource/resolve` 保留，创建接口仍以 `resourceNo` 为内部契约。
+- 老接口保留：`resource/resolve` 保留，创建接口仍以 `resourceNo` 为内部契约，不再要求消费者邮箱。
 - 老数据可读：历史核销码继续通过 `product_name/resource_type` 展示。
 - 前端需要同步：后台创建页切换为资源搜索选择，用户中心隐藏资源编号。
 - 灰度兼容：前端新版本调用新增接口；后端旧创建接口行为不变。
