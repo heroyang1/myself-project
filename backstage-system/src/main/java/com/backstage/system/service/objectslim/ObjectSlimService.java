@@ -14,6 +14,8 @@ public interface ObjectSlimService {
 
     ObjectSlimConfigVO setEnabled(boolean enabled);
 
+    ObjectSlimConfigVO setDefaultSlimMode(String slimMode);
+
     ObjectSlimOverviewVO overview();
 
     PageInfo<OshObjectSlimTask> page(ObjectSlimPageQuery query);

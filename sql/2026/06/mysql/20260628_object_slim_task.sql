@@ -63,3 +63,8 @@ INSERT INTO `sys_config` (`config_name`, `config_key`, `config_value`, `config_t
 SELECT '对象存储视频瘦身开关', 'object.slim.enabled', 'false', 'N', 'system', NOW(), 'false=关闭，true=开启；关闭时 XXL-JOB handler 直接退出'
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM `sys_config` WHERE `config_key` = 'object.slim.enabled');
+
+INSERT INTO `sys_config` (`config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `remark`)
+SELECT '对象存储视频瘦身定时默认策略', 'object.slim.default-mode', 'balanced', 'N', 'system', NOW(), 'XXL-JOB 未传 slimMode 时使用的对象瘦身策略'
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `sys_config` WHERE `config_key` = 'object.slim.default-mode');

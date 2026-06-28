@@ -56,6 +56,7 @@ public class ObjectSlimServiceImpl implements ObjectSlimService {
     private static final Logger log = LoggerFactory.getLogger(ObjectSlimServiceImpl.class);
 
     private static final String CONFIG_ENABLED = "object.slim.enabled";
+    private static final String CONFIG_DEFAULT_MODE = "object.slim.default-mode";
     private static final String HANDLER_NAME = "osh-object-storage-slimmer";
     private static final List<String> VIDEO_SUFFIXES = Arrays.asList("mp4", "mov", "m4v", "webm", "mkv", "avi");
     private static final int DEFAULT_LIMIT = 5;
@@ -118,7 +119,7 @@ public class ObjectSlimServiceImpl implements ObjectSlimService {
         vo.setXxlJobHandler(HANDLER_NAME);
         vo.setDefaultLimit(DEFAULT_LIMIT);
         vo.setMinSavedRatioPercent(MIN_SAVED_RATIO.multiply(new BigDecimal("100")).intValue());
-        vo.setDefaultSlimMode(DEFAULT_SLIM_MODE);
+        vo.setDefaultSlimMode(defaultSlimMode());
         vo.setSlimModes(buildSlimModeVos());
         if (!Boolean.TRUE.equals(vo.getFfmpegAvailable()) || !Boolean.TRUE.equals(vo.getFfprobeAvailable())) {
             vo.setMessage("ffmpeg 或 ffprobe 不可用，任务会跳过转码");
@@ -128,24 +129,39 @@ public class ObjectSlimServiceImpl implements ObjectSlimService {
 
     @Override
     public ObjectSlimConfigVO setEnabled(boolean enabled) {
+        saveConfig(CONFIG_ENABLED, "对象存储视频瘦身开关", String.valueOf(enabled),
+                "false=关闭，true=开启；关闭时 XXL-JOB handler 直接退出");
+        return getConfig();
+    }
+
+    @Override
+    public ObjectSlimConfigVO setDefaultSlimMode(String slimMode) {
+        SlimProfile profile = resolveProfile(slimMode);
+        saveConfig(CONFIG_DEFAULT_MODE, "对象存储视频瘦身定时默认策略", profile.code,
+                "XXL-JOB 未传 slimMode 时使用的对象瘦身策略");
+        return getConfig();
+    }
+
+    private void saveConfig(String key, String name, String value, String remark) {
         SysConfig query = new SysConfig();
-        query.setConfigKey(CONFIG_ENABLED);
+        query.setConfigKey(key);
         SysConfig existing = sysConfigMapper.selectConfig(query);
         if (existing == null) {
             SysConfig config = new SysConfig();
-            config.setConfigName("对象存储视频瘦身开关");
-            config.setConfigKey(CONFIG_ENABLED);
-            config.setConfigValue(String.valueOf(enabled));
+            config.setConfigName(name);
+            config.setConfigKey(key);
+            config.setConfigValue(value);
             config.setConfigType("N");
             config.setCreateBy("system");
-            config.setRemark("false=关闭，true=开启；关闭时 XXL-JOB handler 直接退出");
+            config.setRemark(remark);
             sysConfigService.insertConfig(config);
         } else {
-            existing.setConfigValue(String.valueOf(enabled));
+            existing.setConfigName(name);
+            existing.setConfigValue(value);
             existing.setUpdateBy("system");
+            existing.setRemark(remark);
             sysConfigService.updateConfig(existing);
         }
-        return getConfig();
     }
 
     @Override
@@ -264,6 +280,7 @@ public class ObjectSlimServiceImpl implements ObjectSlimService {
             return result;
         }
         ObjectSlimRunRequest request = new ObjectSlimRunRequest();
+        request.setSlimMode(defaultSlimMode());
         String mode = null;
         if (StringUtils.isNotEmpty(jobParam)) {
             try {
@@ -271,7 +288,11 @@ public class ObjectSlimServiceImpl implements ObjectSlimService {
                 request.setLimit(json.getInteger("limit"));
                 request.setRetryFailed(json.getBoolean("retryFailed"));
                 request.setDryRun(json.getBoolean("dryRun"));
-                request.setSlimMode(firstNotBlank(json.getString("slimMode"), json.getString("qualityMode")));
+                String paramSlimMode = firstNotBlank(json.getString("slimMode"), json.getString("qualityMode"));
+                // XXL-JOB 参数显式传策略时优先；否则使用后台保存的定时默认策略。
+                if (StringUtils.isNotBlank(paramSlimMode)) {
+                    request.setSlimMode(paramSlimMode);
+                }
                 mode = json.getString("mode");
                 if ("scan".equalsIgnoreCase(mode) || "scan-and-slim".equalsIgnoreCase(mode)) {
                     ObjectSlimScanRequest scanRequest = new ObjectSlimScanRequest();
@@ -656,6 +677,10 @@ public class ObjectSlimServiceImpl implements ObjectSlimService {
 
     private boolean isEnabled() {
         return Boolean.parseBoolean(sysConfigService.selectConfigByKey(CONFIG_ENABLED));
+    }
+
+    private String defaultSlimMode() {
+        return resolveProfile(sysConfigService.selectConfigByKey(CONFIG_DEFAULT_MODE)).code;
     }
 
     private String defaultBucket() {
