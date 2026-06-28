@@ -15,6 +15,7 @@ public class OshMemberPlan extends OSHBaseEntity implements Serializable {
 
     @TableId(type = IdType.AUTO)
     private Long id;
+    private String no;
     private String planCode;
     private String planName;
     private String memberType;
@@ -39,6 +40,8 @@ public class OshMemberPlan extends OSHBaseEntity implements Serializable {
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
+    public String getNo() { return no; }
+    public void setNo(String no) { this.no = no; }
     public String getPlanCode() { return planCode; }
     public void setPlanCode(String planCode) { this.planCode = planCode; }
     public String getPlanName() { return planName; }

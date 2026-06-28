@@ -20,6 +20,9 @@ public class BookSimpleVO implements Serializable
     /** 封面 */
     private String cover;
 
+    /** Book media type: 1 ebook, 2 comic. */
+    private Integer mediaType;
+
     public Long getId()
     {
         return id;
@@ -48,5 +51,13 @@ public class BookSimpleVO implements Serializable
     public void setCover(String cover)
     {
         this.cover = cover;
+    }
+
+    public Integer getMediaType() {
+        return mediaType;
+    }
+
+    public void setMediaType(Integer mediaType) {
+        this.mediaType = mediaType;
     }
 }

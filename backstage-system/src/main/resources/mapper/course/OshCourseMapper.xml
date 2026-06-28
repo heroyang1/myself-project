@@ -332,6 +332,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where id = #{id}
     </select>
 
+    <select id="selectCourseByNo" resultMap="OshCouresResult">
+        <include refid="selectCourseVo"/>
+        where no = #{no}
+          and delete_flag = 0
+        limit 1
+    </select>
+
     <!-- 根据条件查询课程列表 -->
     <select id="selectCourseList" resultMap="OshCouresResult">
         <include refid="selectCourseVo"/>
