@@ -26,22 +26,22 @@
 #### Scenario: 前端选择资源后创建核销码
 
 - GIVEN 后台用户已通过资源搜索选中一个资源
-- WHEN 前端提交包含 `userEmail`、`resourceNo`、`channelId` 和金额的创建请求
-- THEN 系统按用户邮箱定位消费者
-- AND 按 `resourceNo` 校验资源
+- WHEN 前端提交包含 `resourceNo`、`channelId` 和金额的创建请求
+- THEN 系统按 `resourceNo` 校验资源
 - AND 创建待核销状态的核销码
+- AND 待核销码不预绑定用户
 
 ### Requirement: 后台支持批量生成核销码
 
-系统 SHALL 为 level>=5 用户提供批量生成核销码接口，支持同一商品对应多个用户，也支持多行不同商品分别生成。
+系统 SHALL 为 level>=5 用户提供批量生成核销码接口，支持同一商品一次生成多个通用核销码，也支持多行不同商品分别生成。
 
-#### Scenario: 同一资源批量生成给多个邮箱
+#### Scenario: 同一资源批量生成多个通用核销码
 
 - GIVEN level>=5 用户提交 `POST /pc/admin/redeem/code/batch-create`
-- AND 请求体 `items` 中包含多个拥有相同 `resourceNo`、不同 `userEmail` 的条目
+- AND 请求体 `items` 中包含多个拥有相同 `resourceNo` 的条目
 - WHEN 系统处理批量创建请求
-- THEN 系统逐条按用户邮箱定位消费者
-- AND 逐条按内部 `resourceNo` 校验资源并生成待核销状态核销码
+- THEN 系统逐条按内部 `resourceNo` 校验资源并生成待核销状态核销码
+- AND 生成的核销码均不预绑定用户
 - AND 响应包含 `total`、`successCount`、`failCount` 和逐条结果
 
 #### Scenario: 多个资源批量生成
@@ -52,7 +52,7 @@
 
 #### Scenario: 批量生成部分失败
 
-- GIVEN 批量请求中存在邮箱不存在、资源无效或参数缺失的条目
+- GIVEN 批量请求中存在资源无效或参数缺失的条目
 - WHEN 系统处理批量创建请求
 - THEN 系统 SHALL 返回该条目 `success=false` 和失败原因
 - AND 其他合法条目仍可生成核销码
@@ -63,33 +63,26 @@
 - WHEN 系统处理批量创建请求
 - THEN 系统返回业务错误且不创建核销码
 
-### Requirement: 用户中心只能核销本人待核销记录
+### Requirement: 用户中心可使用通用待核销码
 
-系统 SHALL 在用户中心支持列表确认和手动输入核销码两种入口，并在服务端统一校验核销码归属与状态。
+系统 SHALL 在用户中心支持手动输入核销码使用，并在服务端只校验核销码是否存在且未使用、未作废，不校验预绑定归属。核销成功后 SHALL 将该核销码绑定到当前用户。
 
-#### Scenario: 当前用户确认自己的待核销码
+#### Scenario: 当前用户手动输入未使用核销码
+
+- GIVEN 存在一条 `status=0` 的核销码记录
+- WHEN 当前登录用户请求 `POST /pc/user/redeem/consume` 并提交该记录 `code`
+- THEN 系统对该记录加锁
+- AND 校验状态为待核销
+- AND 核销成功后仅在 `id` 和待核销状态同时匹配时将状态更新为已核销
+- AND 系统将 `user_id` 写为当前登录用户并发放资源
+
+#### Scenario: 当前用户确认自己列表中的待核销码
 
 - GIVEN 当前登录用户拥有一条 `status=0` 的核销码记录
 - WHEN 用户请求 `POST /pc/user/redeem/consume` 并提交该记录 `id`
 - THEN 系统对该记录加锁
-- AND 校验记录归属用户等于当前登录用户
 - AND 校验状态为待核销
-- AND 核销成功后仅在 `id`、当前用户 ID 和待核销状态同时匹配时将状态更新为已核销
-
-#### Scenario: 当前用户手动输入自己的待核销码
-
-- GIVEN 当前登录用户拥有一条 `status=0` 的核销码记录
-- WHEN 用户请求 `POST /pc/user/redeem/consume` 并提交该记录 `code`
-- THEN 系统对该记录加锁
-- AND 校验记录归属用户等于当前登录用户
-- AND 校验状态为待核销
-- AND 核销成功后仅在 `id`、当前用户 ID 和待核销状态同时匹配时将状态更新为已核销
-
-#### Scenario: 用户尝试确认他人的核销码
-
-- GIVEN 核销码记录归属其他用户
-- WHEN 当前用户提交该记录 `id` 或 `code` 进行核销
-- THEN 系统拒绝核销并不发放资源
+- AND 核销成功后将 `user_id` 写为当前登录用户并发放资源
 
 #### Scenario: 用户重复确认已核销记录
 
@@ -107,3 +100,4 @@
 - WHEN 执行 `sql/2026/06/redeem_code.sql`
 - THEN 核销码表与渠道表存在
 - AND 课程、电子书、工具、会员套餐的核销辅助索引存在
+- AND `osh_redeem_code.user_id` 允许为空以支持待核销码不预绑定用户

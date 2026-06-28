@@ -26,7 +26,6 @@ import com.backstage.system.domain.redeem.vo.RedeemCodeBatchResultVO;
 import com.backstage.system.domain.redeem.vo.RedeemCodeVO;
 import com.backstage.system.domain.redeem.vo.RedeemResourceVO;
 import com.backstage.system.domain.tool.OshTool;
-import com.backstage.system.domain.user.OshUser;
 import com.backstage.system.enums.behavior.ContributionResourceType;
 import com.backstage.system.mapper.book.BookMapper;
 import com.backstage.system.mapper.book.UserBookRelationMapper;
@@ -41,7 +40,6 @@ import com.backstage.system.mapper.redeem.OshRedeemCodeMapper;
 import com.backstage.system.mapper.redeem.OshRedeemResourceMapper;
 import com.backstage.system.mapper.tool.OshToolMapper;
 import com.backstage.system.mapper.tool.OshToolQuotaMapper;
-import com.backstage.system.mapper.user.OshUserMapper;
 import com.backstage.system.service.behavior.ContributionService;
 import com.backstage.system.service.member.MemberEntitlementService;
 import com.backstage.system.service.order.OrderNoGenerator;
@@ -61,7 +59,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Service
@@ -87,9 +84,6 @@ public class RedeemServiceImpl implements RedeemService {
 
     @Resource
     private OshRedeemResourceMapper redeemResourceMapper;
-
-    @Resource
-    private OshUserMapper oshUserMapper;
 
     @Resource
     private OshCourseMapper oshCourseMapper;
@@ -195,14 +189,12 @@ public class RedeemServiceImpl implements RedeemService {
     @Transactional(rollbackFor = Exception.class)
     public OshRedeemCode createCode(RedeemCodeCreateRequest request) {
         validateCreateRequest(request);
-        OshUser user = resolveCreateUser(request);
         RedeemResourceVO resource = resolveResource(request.getResourceNo());
         OshRedeemChannel channel = resolveChannel(request.getChannelId());
 
         Long operatorId = currentOperatorId();
         OshRedeemCode code = new OshRedeemCode();
         code.setCode(generateUniqueCode());
-        code.setUserId(user.getId());
         code.setResourceNo(resource.getResourceNo());
         code.setResourceType(resource.getResourceType());
         code.setProductType(resource.getProductType());
@@ -236,12 +228,10 @@ public class RedeemServiceImpl implements RedeemService {
         for (RedeemCodeCreateRequest itemRequest : request.getItems()) {
             RedeemCodeBatchItemVO item = new RedeemCodeBatchItemVO();
             if (itemRequest != null) {
-                item.setUserEmail(StringUtils.trimToEmpty(itemRequest.getUserEmail()));
                 item.setResourceNo(StringUtils.trimToEmpty(itemRequest.getResourceNo()));
             }
             try {
                 OshRedeemCode code = createCode(itemRequest);
-                item.setUserEmail(itemRequest.getUserEmail().trim());
                 item.setResourceNo(code.getResourceNo());
                 item.setProductName(code.getProductName());
                 item.setCode(code.getCode());
@@ -314,9 +304,6 @@ public class RedeemServiceImpl implements RedeemService {
         if (code == null) {
             throw new ServiceException("核销码不存在");
         }
-        if (!Objects.equals(code.getUserId(), userId)) {
-            throw new ServiceException("无权核销该核销码");
-        }
         if (Integer.valueOf(REDEEM_USED).equals(code.getStatus())) {
             throw new ServiceException("核销码已使用");
         }
@@ -332,8 +319,9 @@ public class RedeemServiceImpl implements RedeemService {
         LocalDateTime now = LocalDateTime.now();
         int updated = redeemCodeMapper.markRedeemed(code.getId(), orderNo, paymentNo, now, userId);
         if (updated <= 0) {
-            throw new ServiceException("核销码已使用或无权核销");
+            throw new ServiceException("核销码已使用");
         }
+        code.setUserId(userId);
         OshOrder order = createPaidOrder(code, orderNo, now);
         createSuccessPayment(code, order, paymentNo, now);
         grantResource(code, orderNo);
@@ -368,27 +356,12 @@ public class RedeemServiceImpl implements RedeemService {
         if (request == null) {
             throw new ServiceException("创建参数不能为空");
         }
-        if (StringUtils.isBlank(request.getUserEmail())) {
-            throw new ServiceException("用户邮箱不能为空");
-        }
         if (StringUtils.isBlank(request.getResourceNo())) {
             throw new ServiceException("资源编号不能为空");
         }
         if (request.getAmount() != null && request.getAmount().compareTo(BigDecimal.ZERO) < 0) {
             throw new ServiceException("金额不能小于0");
         }
-    }
-
-    private OshUser resolveCreateUser(RedeemCodeCreateRequest request) {
-        String email = request.getUserEmail().trim();
-        OshUser user = oshUserMapper.selectOne(new LambdaQueryWrapper<OshUser>()
-                .eq(OshUser::getEmail, email)
-                .eq(OshUser::getDeleteFlag, (byte) 0)
-                .last("limit 1"));
-        if (user == null) {
-            throw new ServiceException("用户邮箱不存在");
-        }
-        return user;
     }
 
     private OshRedeemChannel resolveChannel(Long channelId) {

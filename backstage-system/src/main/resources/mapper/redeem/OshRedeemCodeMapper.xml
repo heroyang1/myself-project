@@ -100,13 +100,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <update id="markRedeemed">
         update osh_redeem_code
         set status = 1,
+            user_id = #{operatorId},
             order_no = #{orderNo},
             payment_no = #{paymentNo},
             redeem_time = #{redeemTime},
             update_by = #{operatorId},
             update_time = now()
         where id = #{id}
-          and user_id = #{operatorId}
           and status = 0
           and delete_flag = 0
     </update>
