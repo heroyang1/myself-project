@@ -1,5 +1,6 @@
 package com.backstage.system.controller.redeem;
 
+import com.backstage.common.annotation.Anonymous;
 import com.backstage.common.annotation.OshUserLevel;
 import com.backstage.common.core.domain.R;
 import com.backstage.common.exception.ServiceException;
@@ -8,13 +9,16 @@ import com.backstage.system.domain.redeem.dto.RedeemCodePageQuery;
 import com.backstage.system.domain.redeem.dto.RedeemConsumeRequest;
 import com.backstage.system.domain.redeem.vo.RedeemCodeVO;
 import com.backstage.system.domain.redeem.vo.RedeemCodeResultVO;
+import com.backstage.system.domain.redeem.vo.RedeemInviteLinkVO;
 import com.backstage.system.service.redeem.RedeemService;
 import com.backstage.system.utils.UserContextUtil;
 import com.github.pagehelper.PageInfo;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import javax.annotation.Resource;
 import java.util.LinkedHashMap;
@@ -24,6 +28,18 @@ import java.util.LinkedHashMap;
 public class UserRedeemController {
     @Resource
     private RedeemService redeemService;
+
+    @GetMapping("/invite-link")
+    @Anonymous
+    public R<RedeemInviteLinkVO> getInviteLink(@RequestParam String token) {
+        return R.ok(redeemService.getInviteLink(token, false));
+    }
+
+    @GetMapping("/invite-link/resolve")
+    @OshUserLevel(1)
+    public R<RedeemInviteLinkVO> resolveInviteLink(@RequestParam String token) {
+        return R.ok(redeemService.getInviteLink(token, true));
+    }
 
     @PostMapping("/page")
     @OshUserLevel(1)

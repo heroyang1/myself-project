@@ -24,6 +24,8 @@ public interface IOshUserService {
 
     R<String> registerSubmit(String username, String password, String repassword, String email, String inviteCode) throws MessagingException;
 
+    R<String> registerSubmit(String username, String password, String repassword, String email, String inviteCode, String redeemInviteToken) throws MessagingException;
+
     R<String> registerVerity(String uniqueId);
 
     R<String> logout();

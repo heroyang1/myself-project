@@ -55,7 +55,8 @@ public class OshUserController extends BaseController {
     public R<String> registerSubmit(
             @ApiParam("网校 appid") @RequestHeader(value = "appid", required = false) String appid,
             @RequestBody UserRegisterDTO userRegisterDTO) throws MessagingException {
-        return userService.registerSubmit(userRegisterDTO.getUsername(),userRegisterDTO.getPassword(),userRegisterDTO.getRepassword(),userRegisterDTO.getEmail(),userRegisterDTO.getInviteCode());
+        return userService.registerSubmit(userRegisterDTO.getUsername(), userRegisterDTO.getPassword(), userRegisterDTO.getRepassword(),
+                userRegisterDTO.getEmail(), userRegisterDTO.getInviteCode(), userRegisterDTO.getRedeemInviteToken());
     }
 
     @ApiOperation("账号注册")
