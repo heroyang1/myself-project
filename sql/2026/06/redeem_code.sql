@@ -50,7 +50,33 @@ CREATE TABLE IF NOT EXISTS `osh_redeem_code` (
   KEY `idx_delete_flag` (`delete_flag`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='核销码';
 
--- 历史环境中如果已创建为 NOT NULL，则调整为待核销阶段可为空。
+CREATE TABLE IF NOT EXISTS `osh_redeem_invite_link` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `redeem_code_id` bigint NOT NULL COMMENT '核销码ID',
+  `redeem_code` varchar(32) NOT NULL COMMENT '核销码快照',
+  `link_token` varchar(64) NOT NULL COMMENT '核销邀请链接Token',
+  `invite_code` varchar(32) DEFAULT NULL COMMENT '邀请注册使用的邀请码',
+  `inviter_id` bigint DEFAULT NULL COMMENT '邀请人用户ID',
+  `status` tinyint NOT NULL DEFAULT 1 COMMENT '状态：1启用，0停用',
+  `expire_time` datetime DEFAULT NULL COMMENT '过期时间',
+  `register_email` varchar(128) DEFAULT NULL COMMENT '通过链接提交注册的邮箱',
+  `register_user_id` bigint DEFAULT NULL COMMENT '通过链接注册成功的用户ID',
+  `register_time` datetime DEFAULT NULL COMMENT '注册成功时间',
+  `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `create_by` bigint NOT NULL DEFAULT 0 COMMENT '创建人',
+  `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `update_by` bigint NOT NULL DEFAULT 0 COMMENT '更新人',
+  `delete_flag` tinyint NOT NULL DEFAULT 0 COMMENT '逻辑删除：0未删除，1已删除',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_redeem_code_id` (`redeem_code_id`),
+  UNIQUE KEY `uk_link_token` (`link_token`),
+  KEY `idx_inviter_id` (`inviter_id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_register_user_id` (`register_user_id`),
+  KEY `idx_delete_flag` (`delete_flag`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='核销邀请链接';
+
+-- Existing environments may have created user_id as NOT NULL. Make pending codes unbound.
 SET @column_nullable := (
   SELECT IS_NULLABLE
   FROM information_schema.columns
@@ -76,7 +102,7 @@ ON DUPLICATE KEY UPDATE
   `delete_flag` = 0,
   `update_time` = CURRENT_TIMESTAMP;
 
--- 核销后台按资源名称搜索、按资源编号定位需要的辅助索引。
+-- Resource search and resource number lookup indexes.
 SET @idx_exists := (
   SELECT COUNT(1)
   FROM information_schema.statistics
@@ -166,3 +192,26 @@ SET @ddl := IF(@idx_exists = 0,
 PREPARE stmt FROM @ddl;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
+
+-- Backfill one invite link for historical redeem codes that do not have a link yet.
+INSERT INTO `osh_redeem_invite_link`
+  (`redeem_code_id`, `redeem_code`, `link_token`, `invite_code`, `inviter_id`, `status`, `create_by`, `update_by`, `delete_flag`)
+SELECT
+  rc.id,
+  rc.code,
+  LOWER(REPLACE(UUID(), '-', '')),
+  u.invite_code,
+  NULLIF(rc.create_by, 0),
+  1,
+  rc.create_by,
+  rc.create_by,
+  0
+FROM `osh_redeem_code` rc
+LEFT JOIN `osh_redeem_invite_link` ril
+  ON ril.redeem_code_id = rc.id
+  AND ril.delete_flag = 0
+LEFT JOIN `osh_user` u
+  ON u.id = NULLIF(rc.create_by, 0)
+  AND u.delete_flag = 0
+WHERE rc.delete_flag = 0
+  AND ril.id IS NULL;
