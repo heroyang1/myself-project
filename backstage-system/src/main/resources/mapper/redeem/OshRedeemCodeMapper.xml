@@ -7,6 +7,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <resultMap id="RedeemCodeVOResult" type="com.backstage.system.domain.redeem.vo.RedeemCodeVO">
         <id property="id" column="id"/>
         <result property="code" column="code"/>
+        <result property="inviteLinkToken" column="invite_link_token"/>
         <result property="username" column="username"/>
         <result property="userEmail" column="user_email"/>
         <result property="resourceNo" column="resource_no"/>
@@ -27,7 +28,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </resultMap>
 
     <sql id="selectRedeemCodeVOColumns">
-        rc.id, rc.code, u.username, u.email as user_email, rc.resource_no, rc.resource_type,
+        rc.id, rc.code, ril.link_token as invite_link_token, u.username, u.email as user_email, rc.resource_no, rc.resource_type,
         rc.product_type, rc.product_id, rc.product_name, rc.amount, rc.channel_id,
         rc.channel_name, rc.order_no, rc.payment_no, rc.status, rc.redeem_time,
         rc.cancel_time, rc.remark, rc.create_time
@@ -36,6 +37,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectAdminPage" resultMap="RedeemCodeVOResult">
         select <include refid="selectRedeemCodeVOColumns"/>
         from osh_redeem_code rc
+        left join osh_redeem_invite_link ril on ril.redeem_code_id = rc.id and ril.delete_flag = 0
         left join osh_user u on u.id = rc.user_id and u.delete_flag = 0
         where rc.delete_flag = 0
         <if test="query.userEmail != null and query.userEmail != ''">
@@ -59,6 +61,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectUserPage" resultMap="RedeemCodeVOResult">
         select <include refid="selectRedeemCodeVOColumns"/>
         from osh_redeem_code rc
+        left join osh_redeem_invite_link ril on ril.redeem_code_id = rc.id and ril.delete_flag = 0
         left join osh_user u on u.id = rc.user_id and u.delete_flag = 0
         where rc.delete_flag = 0
           and rc.user_id = #{userId}

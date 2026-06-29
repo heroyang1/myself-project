@@ -1,9 +1,8 @@
 package com.backstage.system.controller.common;
 
 import com.backstage.common.annotation.Anonymous;
-import com.backstage.common.annotation.RateLimiter;
+import com.backstage.common.annotation.OshUserLevel;
 import com.backstage.common.core.domain.R;
-import com.backstage.common.enums.LimitType;
 import com.backstage.common.enums.UploadPathEnum;
 import com.backstage.system.utils.OssUtil;
 import com.backstage.system.domain.order.OshUploadImage;
@@ -47,17 +46,14 @@ public class OssCloudFlareController {
     private UserContextUtil userContextUtil;
 
     /**
-     * 限制IP 每60秒 10次 如果加key可以相同的配额限制
-     *
      * @param file        文件
      * @param type        上传场景模块类型
      * @param previewFlag 是否需要预览, 默认false
      * @param limitMinute 生成文件预览链接的超时时间, 分钟数, 默认30分钟
      */
-    @RateLimiter(limitType = LimitType.IP, time = 60, count = 10)
     @ApiParam(value = "上传文件", required = true)
     @ApiOperation("上传接口")
-    @PreAuthorize("hasAnyAuthority('upload:file','book:create','book:update')")
+    @OshUserLevel(value = 4)
     @PostMapping("/upload")
     public R<Object> upload(
             @RequestParam("file") MultipartFile file,

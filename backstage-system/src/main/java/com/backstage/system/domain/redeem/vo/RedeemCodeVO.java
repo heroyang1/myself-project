@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 public class RedeemCodeVO {
     private Long id;
     private String code;
+    private String inviteLinkToken;
     private String username;
     private String userEmail;
     private String resourceNo;
@@ -28,6 +29,8 @@ public class RedeemCodeVO {
     public void setId(Long id) { this.id = id; }
     public String getCode() { return code; }
     public void setCode(String code) { this.code = code; }
+    public String getInviteLinkToken() { return inviteLinkToken; }
+    public void setInviteLinkToken(String inviteLinkToken) { this.inviteLinkToken = inviteLinkToken; }
     public String getUsername() { return username; }
     public void setUsername(String username) { this.username = username; }
     public String getUserEmail() { return userEmail; }

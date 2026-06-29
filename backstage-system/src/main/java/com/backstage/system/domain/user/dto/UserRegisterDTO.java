@@ -41,6 +41,12 @@ public class UserRegisterDTO {
     )
     private String inviteCode;
 
+    @ApiModelProperty(
+            value = "核销邀请链接Token（选填）",
+            required = false
+    )
+    private String redeemInviteToken;
+
     public String getUsername() {
         return username;
     }
@@ -79,6 +85,14 @@ public class UserRegisterDTO {
 
     public void setInviteCode(String inviteCode) {
         this.inviteCode = inviteCode;
+    }
+
+    public String getRedeemInviteToken() {
+        return redeemInviteToken;
+    }
+
+    public void setRedeemInviteToken(String redeemInviteToken) {
+        this.redeemInviteToken = redeemInviteToken;
     }
 
     @Override
