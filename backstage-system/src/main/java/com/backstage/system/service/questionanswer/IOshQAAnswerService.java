@@ -11,4 +11,8 @@ import com.backstage.common.core.domain.R;
  */
 public interface IOshQAAnswerService {
     R<String> answer(Long userId, Long questionId, String content);
+
+    R<String> vote(Long userId, Long answerId);
+
+    R<String> cancelVote(Long userId, Long answerId);
 }

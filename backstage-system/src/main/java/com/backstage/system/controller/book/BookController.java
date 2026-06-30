@@ -101,8 +101,7 @@ public class BookController {
      * 查看电子书详情
      */
     @ApiOperation(value = "电子书详情")
-    @OshUserEvent(module = "电子书模块", actionType = "浏览", resourceType = ResourceType.BOOK_TYPE, description = "浏览电子书详情", recordAnonymous = true)
-    @Anonymous
+    @OshUserEvent(module = "电子书模块", actionType = "浏览", resourceType = ResourceType.BOOK_TYPE, description = "浏览电子书详情")
     @GetMapping("/getById")
     public R<BookDetailVO> getById(@OshResourceId @RequestParam Long id, @RequestParam(required = false, defaultValue = "false") Boolean forEdit) {
         BookDetailVO detail = bookService.selectBookDetail(id, forEdit);
@@ -114,7 +113,6 @@ public class BookController {
      */
     @ApiOperation(value = "章节内容详情")
     @OshUserEvent(module = "电子书模块", actionType = "学习", resourceType = ResourceType.BOOK_TYPE, description = "查询章节内容")
-    @Anonymous
     @GetMapping("/detail")
     public R<BookChapterContentVO> detail(@OshResourceId @RequestParam Long book_id, @RequestParam Long id) {
         BookChapterContentVO content = bookService.selectBookChapterContent(book_id, id);
@@ -125,8 +123,7 @@ public class BookController {
      * 查看电子书章节菜单
      */
     @ApiOperation(value = "章节菜单")
-    @OshUserEvent(module = "电子书模块", actionType = "查询", resourceType = ResourceType.BOOK_TYPE, description = "查询章节菜单", recordAnonymous = true)
-    @Anonymous
+    @OshUserEvent(module = "电子书模块", actionType = "查询", resourceType = ResourceType.BOOK_TYPE, description = "查询章节菜单")
     @GetMapping("/menus")
     public R<BookMenuVO> menus(@OshResourceId @RequestParam Long id) {
         BookMenuVO menu = bookService.selectBookMenu(id);

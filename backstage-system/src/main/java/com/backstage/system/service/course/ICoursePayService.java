@@ -1,6 +1,6 @@
 package com.backstage.system.service.course;
 
-import com.backstage.system.domain.vo.order.PayResponse;
+import com.backstage.system.domain.vo.pay.OrderCheckoutRespVO;
 
 /**
  * Course payment service.
@@ -18,9 +18,9 @@ public interface ICoursePayService {
      * @param courseId target course id (price is fetched server-side to avoid client tampering)
      * @param payType  payment channel: "wxpay" or "alipay"
      * @param clientIp end-user IP, required by the gateway
-     * @return parsed gateway response holding qrcode / payurl and the generated out_trade_no
+     * @return unified checkout response, with point deduction and payment information
      */
-    PayResponse createCoursePay(Long courseId, String payType, String clientIp, Long userId);
+    OrderCheckoutRespVO createCoursePay(Long courseId, String payType, String clientIp, Long userId);
 
     /**
      * Query the upstream gateway for the current status of a given out_trade_no.
