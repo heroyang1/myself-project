@@ -114,6 +114,10 @@ public class OshCourseServiceImpl implements IOshCourseService {
 
     /** 创始人 role.level >= 6，课程操作跳过审核直接发布 */
     private static final int FOUNDER_ROLE_LEVEL = 6;
+    private static final int LEVEL_FREE = 1;
+    private static final int LEVEL_VIP = 2;
+    private static final int LEVEL_SMALL_CLASS = 3;
+    private static final int LEVEL_INTERNAL = 4;
 
     private static final String DOC_MODE_BIND_EXISTING = "BIND_EXISTING";
     private static final String DOC_REF_TYPE_COURSE_SECTION = "course_section";
@@ -867,8 +871,8 @@ public class OshCourseServiceImpl implements IOshCourseService {
         course.setAfterServiceDays(defaultInteger(request.getAfterServiceDays()));
         course.setExamId(request.getExamId());
         course.setRemark(StringUtils.trimToNull(request.getRemark()));
-        course.setResourceType(request.getResourceType());
-        course.setLevel(request.getLevel());
+        course.setResourceType(normalizeCourseResourceType(request.getResourceType(), request.getLevel()));
+        course.setLevel(resolveCourseLevelByResourceType(course.getResourceType(), request.getLevel()));
         course.setDifficulty(request.getDifficulty());
         course.setServicePeriod(request.getServicePeriod());
 
@@ -890,6 +894,74 @@ public class OshCourseServiceImpl implements IOshCourseService {
 
     private static Integer defaultInteger(Integer value) {
         return value == null ? CourseConstants.DEFAULT_COUNT : value;
+    }
+
+    private static Integer resolveCourseLevelByResourceType(String resourceType, Integer fallbackLevel) {
+        CourseResourceEnum resourceEnum = CourseResourceEnum.fromCode(resourceType);
+        if (resourceEnum == CourseResourceEnum.CASH_ONLY
+                || resourceEnum == CourseResourceEnum.CASH_POINT
+                || resourceEnum == CourseResourceEnum.VIP) {
+            return LEVEL_VIP;
+        }
+        if (resourceEnum == CourseResourceEnum.SMALL_CLASS) {
+            return LEVEL_SMALL_CLASS;
+        }
+        if (resourceEnum == CourseResourceEnum.INTERNAL) {
+            return LEVEL_INTERNAL;
+        }
+        if (resourceEnum == CourseResourceEnum.FREE) {
+            return LEVEL_FREE;
+        }
+        return normalizeLegacyLevel(fallbackLevel);
+    }
+
+    private static String normalizeCourseResourceType(String resourceType, Integer fallbackLevel) {
+        CourseResourceEnum resourceEnum = CourseResourceEnum.fromCode(resourceType);
+        if (resourceEnum == CourseResourceEnum.CASH_ONLY || resourceEnum == CourseResourceEnum.CASH_POINT) {
+            return CourseResourceEnum.VIP.getCode();
+        }
+        if (resourceEnum != null) {
+            return resourceEnum.getCode();
+        }
+
+        String normalized = StringUtils.trimToEmpty(resourceType);
+        if ("0".equals(normalized) || "1".equals(normalized)) {
+            return CourseResourceEnum.FREE.getCode();
+        }
+        if ("2".equals(normalized) || "3".equals(normalized) || "4".equals(normalized)) {
+            return CourseResourceEnum.VIP.getCode();
+        }
+        if ("5".equals(normalized)) {
+            return CourseResourceEnum.SMALL_CLASS.getCode();
+        }
+        if ("6".equals(normalized)) {
+            return CourseResourceEnum.INTERNAL.getCode();
+        }
+
+        Integer level = normalizeLegacyLevel(fallbackLevel);
+        if (Objects.equals(level, LEVEL_VIP)) {
+            return CourseResourceEnum.VIP.getCode();
+        }
+        if (Objects.equals(level, LEVEL_SMALL_CLASS)) {
+            return CourseResourceEnum.SMALL_CLASS.getCode();
+        }
+        if (Objects.equals(level, LEVEL_INTERNAL)) {
+            return CourseResourceEnum.INTERNAL.getCode();
+        }
+        return CourseResourceEnum.FREE.getCode();
+    }
+
+    private static Integer normalizeLegacyLevel(Integer level) {
+        if (Objects.equals(level, LEVEL_VIP)) {
+            return LEVEL_VIP;
+        }
+        if (Objects.equals(level, LEVEL_SMALL_CLASS)) {
+            return LEVEL_SMALL_CLASS;
+        }
+        if (level != null && level >= LEVEL_INTERNAL) {
+            return LEVEL_INTERNAL;
+        }
+        return LEVEL_FREE;
     }
 
     /**
@@ -945,8 +1017,8 @@ public class OshCourseServiceImpl implements IOshCourseService {
         course.setAfterServiceDays(defaultInteger(request.getAfterServiceDays()));
         course.setExamId(request.getExamId());
         course.setRemark(StringUtils.trimToNull(request.getRemark()));
-        course.setResourceType(request.getResourceType());
-        course.setLevel(request.getLevel());
+        course.setResourceType(normalizeCourseResourceType(request.getResourceType(), request.getLevel()));
+        course.setLevel(resolveCourseLevelByResourceType(course.getResourceType(), request.getLevel()));
         course.setDifficulty(request.getDifficulty());
         if (request.getServicePeriod() != null) course.setServicePeriod(request.getServicePeriod());
         String operatorName = operator == null ? null : StringUtils.trimToNull(operator.getUsername());
