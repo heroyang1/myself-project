@@ -19,4 +19,8 @@ public interface OshUserExamRecordMapper {
     void insertOshUserExam(OshUserExamRecord record);
 
     OshUserExamRecord selectByUserIdAndExamId(@Param("userId") Long userId, @Param("examId") Long examId);
+
+    OshUserExamRecord selectRecordByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
+
+    UserExamRecordVo selectUserTestDetail(@Param("id") Long id, @Param("userId") Long userId);
 }
