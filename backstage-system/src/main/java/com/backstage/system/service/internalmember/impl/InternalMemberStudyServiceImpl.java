@@ -4,9 +4,13 @@ import com.backstage.common.exception.ServiceException;
 import com.backstage.system.domain.internalmember.dto.InternalMemberCourseDetailQueryDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberPageQueryDTO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberCourseProgressVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentProfileVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberExamItemVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberStudyAttitudeVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberStudyOverviewVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberStudySummaryVO;
+import com.backstage.system.enums.internalmember.InternalMemberStageEnum;
+import com.backstage.system.mapper.internalmember.InternalMemberMapper;
 import com.backstage.system.mapper.internalmember.InternalMemberStudyMapper;
 import com.backstage.system.service.internalmember.IInternalMemberStudyService;
 import org.springframework.stereotype.Service;
@@ -23,6 +27,8 @@ import java.util.List;
 public class InternalMemberStudyServiceImpl implements IInternalMemberStudyService {
     @Resource
     private InternalMemberStudyMapper internalMemberStudyMapper;
+    @Resource
+    private InternalMemberMapper internalMemberMapper;
 
     @Override
     public List<InternalMemberStudyOverviewVO> selectPaidMemberStudyOverview(InternalMemberPageQueryDTO query) {
@@ -36,6 +42,7 @@ public class InternalMemberStudyServiceImpl implements IInternalMemberStudyServi
         if (summary == null) {
             throw new ServiceException("Paid member record not found");
         }
+        fillCurrentStage(summary, userId);
         return summary;
     }
 
@@ -157,5 +164,76 @@ public class InternalMemberStudyServiceImpl implements IInternalMemberStudyServi
         }
         LocalDateTime dateTime = LocalDateTime.parse(time, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         return Duration.between(dateTime, LocalDateTime.now()).toDays();
+    }
+
+    private void fillCurrentStage(InternalMemberStudySummaryVO summary, Long userId) {
+        InternalMemberEmploymentProfileVO employmentProfile = internalMemberMapper.selectEmploymentProfileByUserId(userId);
+        List<InternalMemberExamItemVO> exams = internalMemberMapper.selectExamListByUserId(userId);
+        InternalMemberStageEnum stage = resolveCurrentStage(summary, employmentProfile, exams);
+        summary.setCurrentStage(stage.getCode());
+        summary.setCurrentStageName(stage.getName());
+        summary.setCurrentStageIndex(stage.getIndex());
+    }
+
+    private InternalMemberStageEnum resolveCurrentStage(InternalMemberStudySummaryVO summary,
+                                                        InternalMemberEmploymentProfileVO employmentProfile,
+                                                        List<InternalMemberExamItemVO> exams) {
+        if (employmentProfile != null) {
+            if (equalsNumber(employmentProfile.getJobStatus(), 2) || hasText(employmentProfile.getEntryTime())) {
+                return InternalMemberStageEnum.EMPLOYED;
+            }
+
+            if (equalsNumber(employmentProfile.getJobStatus(), 1)
+                    || gtZero(employmentProfile.getPendingInterviewCount())
+                    || gtZero(employmentProfile.getCompletedInterviewCount())
+                    || hasText(employmentProfile.getInterviewStatus())) {
+                return InternalMemberStageEnum.INTERVIEW;
+            }
+        }
+
+        if (hasExamStage(exams)) {
+            return InternalMemberStageEnum.EXAM;
+        }
+
+        if (summary != null
+                && (gtZero(summary.getStartedCourseCount())
+                || gtZero(summary.getOverallProgress())
+                || hasText(summary.getLastLearnTime()))) {
+            return InternalMemberStageEnum.LEARNING;
+        }
+
+        return InternalMemberStageEnum.NOT_STARTED;
+    }
+
+    private boolean hasExamStage(List<InternalMemberExamItemVO> exams) {
+        if (exams == null || exams.isEmpty()) {
+            return false;
+        }
+        int reportedCount = exams.size();
+        int passedCount = 0;
+        int failedCount = 0;
+        int inProgressCount = 0;
+        for (InternalMemberExamItemVO exam : exams) {
+            if ("passed".equals(exam.getResult())) {
+                passedCount++;
+            } else if ("failed".equals(exam.getResult())) {
+                failedCount++;
+            } else if ("in_progress".equals(exam.getResult())) {
+                inProgressCount++;
+            }
+        }
+        return gtZero(reportedCount) || gtZero(inProgressCount) || gtZero(passedCount) || gtZero(failedCount);
+    }
+
+    private boolean gtZero(Number value) {
+        return value != null && value.doubleValue() > 0;
+    }
+
+    private boolean equalsNumber(Number value, int target) {
+        return value != null && value.intValue() == target;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 }

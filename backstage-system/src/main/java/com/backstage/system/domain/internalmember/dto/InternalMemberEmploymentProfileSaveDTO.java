@@ -3,23 +3,30 @@ package com.backstage.system.domain.internalmember.dto;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 
+import javax.validation.constraints.NotNull;
+import javax.validation.constraints.Size;
 import java.math.BigDecimal;
 
 @ApiModel("Internal member employment profile save request")
 public class InternalMemberEmploymentProfileSaveDTO {
     @ApiModelProperty("Job status: 0-unemployed 1-looking 2-employed")
+    @NotNull(message = "求职状态不能为空")
     private Integer jobStatus;
 
     @ApiModelProperty("Job status display name")
+    @Size(max = 64, message = "求职状态名称长度不能超过64")
     private String jobStatusName;
 
     @ApiModelProperty("Company name")
+    @Size(max = 128, message = "公司名称长度不能超过128")
     private String companyName;
 
     @ApiModelProperty("Position name")
+    @Size(max = 128, message = "岗位名称长度不能超过128")
     private String positionName;
 
     @ApiModelProperty("City")
+    @Size(max = 64, message = "城市长度不能超过64")
     private String city;
 
     @ApiModelProperty("Salary before study")
@@ -38,6 +45,7 @@ public class InternalMemberEmploymentProfileSaveDTO {
     private Integer caseEligible;
 
     @ApiModelProperty("Remark")
+    @Size(max = 1000, message = "备注长度不能超过1000")
     private String remark;
 
     @ApiModelProperty("Resume delivery count")
@@ -56,9 +64,11 @@ public class InternalMemberEmploymentProfileSaveDTO {
     private Integer interviewRoundCount;
 
     @ApiModelProperty("Interview status")
+    @Size(max = 64, message = "面试状态长度不能超过64")
     private String interviewStatus;
 
     @ApiModelProperty("Interview result")
+    @Size(max = 64, message = "面试结果长度不能超过64")
     private String interviewResult;
 
     @ApiModelProperty("Last interview time, format: yyyy-MM-dd HH:mm:ss")

@@ -3,15 +3,22 @@ package com.backstage.system.domain.internalmember.dto;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 
-@ApiModel("成员跟进记录保存参数")
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.Size;
+
+@ApiModel("Internal member follow record save request")
 public class InternalMemberFollowRecordSaveDTO {
-    @ApiModelProperty("跟进类型，如 电话、微信、面谈、复盘")
+    @ApiModelProperty("Follow type, e.g. phone/wechat/interview/review")
+    @NotBlank(message = "跟进类型不能为空")
+    @Size(max = 64, message = "跟进类型长度不能超过64")
     private String followType;
 
-    @ApiModelProperty("跟进内容")
+    @ApiModelProperty("Follow content")
+    @NotBlank(message = "跟进内容不能为空")
+    @Size(max = 2000, message = "跟进内容长度不能超过2000")
     private String content;
 
-    @ApiModelProperty("下次跟进时间，格式：yyyy-MM-dd HH:mm:ss")
+    @ApiModelProperty("Next follow time, format: yyyy-MM-dd HH:mm:ss")
     private String nextFollowTime;
 
     public String getFollowType() {

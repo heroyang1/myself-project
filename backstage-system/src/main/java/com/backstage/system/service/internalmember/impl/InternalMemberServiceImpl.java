@@ -18,6 +18,9 @@ import com.backstage.system.domain.internalmember.vo.InternalMemberResumeSummary
 import com.backstage.system.domain.internalmember.vo.InternalMemberSalarySummaryVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberStudyOverviewVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberStudySummaryVO;
+import com.backstage.system.enums.internalmember.InterviewResultEnum;
+import com.backstage.system.enums.internalmember.InterviewStatusEnum;
+import com.backstage.system.enums.internalmember.JobStatusEnum;
 import com.backstage.system.mapper.internalmember.InternalMemberMapper;
 import com.backstage.system.service.internalmember.IInternalMemberService;
 import org.springframework.stereotype.Service;
@@ -115,6 +118,7 @@ public class InternalMemberServiceImpl implements IInternalMemberService {
         if (dto == null) {
             throw new ServiceException("Employment profile cannot be empty");
         }
+        normalizeAndValidateEmploymentProfile(dto);
         InternalMemberEmploymentProfileVO existed = internalMemberMapper.selectEmploymentProfileByUserId(userId);
         int affected = existed == null
                 ? internalMemberMapper.insertEmploymentProfile(userId, dto, operatorId)
@@ -137,6 +141,9 @@ public class InternalMemberServiceImpl implements IInternalMemberService {
         if (dto == null || StringUtils.isEmpty(dto.getContent())) {
             throw new ServiceException("Follow content cannot be empty");
         }
+        dto.setFollowType(StringUtils.trim(dto.getFollowType()));
+        dto.setContent(StringUtils.trim(dto.getContent()));
+        dto.setNextFollowTime(trimToNull(dto.getNextFollowTime()));
         int affected = internalMemberMapper.insertFollowRecord(
                 userId,
                 dto.getFollowType(),
@@ -195,6 +202,37 @@ public class InternalMemberServiceImpl implements IInternalMemberService {
         if (internalMemberMapper.countPaidMemberByUserId(userId) <= 0) {
             throw new ServiceException("The user is not a paid member or has no valid paid record");
         }
+    }
+
+    private void normalizeAndValidateEmploymentProfile(InternalMemberEmploymentProfileSaveDTO dto) {
+        if (!JobStatusEnum.contains(dto.getJobStatus())) {
+            throw new ServiceException("求职状态不合法");
+        }
+
+        String interviewStatus = trimToNull(dto.getInterviewStatus());
+        if (interviewStatus != null && !InterviewStatusEnum.contains(interviewStatus)) {
+            throw new ServiceException("面试状态不合法");
+        }
+
+        String interviewResult = trimToNull(dto.getInterviewResult());
+        if (interviewResult != null && !InterviewResultEnum.contains(interviewResult)) {
+            throw new ServiceException("面试结果不合法");
+        }
+
+        dto.setJobStatusName(JobStatusEnum.getLabelByCode(dto.getJobStatus()));
+        dto.setCompanyName(trimToNull(dto.getCompanyName()));
+        dto.setPositionName(trimToNull(dto.getPositionName()));
+        dto.setCity(trimToNull(dto.getCity()));
+        dto.setRemark(trimToNull(dto.getRemark()));
+        dto.setEntryTime(trimToNull(dto.getEntryTime()));
+        dto.setInterviewStatus(interviewStatus);
+        dto.setInterviewResult(interviewResult);
+        dto.setLastInterviewTime(trimToNull(dto.getLastInterviewTime()));
+    }
+
+    private String trimToNull(String value) {
+        String trimmed = StringUtils.trim(value);
+        return StringUtils.isEmpty(trimmed) ? null : trimmed;
     }
 
     private BigDecimal calculateIncreaseRate(BigDecimal salaryBefore, BigDecimal salaryAfter) {

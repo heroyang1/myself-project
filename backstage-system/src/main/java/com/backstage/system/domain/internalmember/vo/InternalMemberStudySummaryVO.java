@@ -21,6 +21,9 @@ public class InternalMemberStudySummaryVO {
     private BigDecimal completionRate;
     private String firstLearnTime;
     private String lastLearnTime;
+    private String currentStage;
+    private String currentStageName;
+    private Integer currentStageIndex;
 
     public Long getUserId() {
         return userId;
@@ -164,5 +167,29 @@ public class InternalMemberStudySummaryVO {
 
     public void setLastLearnTime(String lastLearnTime) {
         this.lastLearnTime = lastLearnTime;
+    }
+
+    public String getCurrentStage() {
+        return currentStage;
+    }
+
+    public void setCurrentStage(String currentStage) {
+        this.currentStage = currentStage;
+    }
+
+    public String getCurrentStageName() {
+        return currentStageName;
+    }
+
+    public void setCurrentStageName(String currentStageName) {
+        this.currentStageName = currentStageName;
+    }
+
+    public Integer getCurrentStageIndex() {
+        return currentStageIndex;
+    }
+
+    public void setCurrentStageIndex(Integer currentStageIndex) {
+        this.currentStageIndex = currentStageIndex;
     }
 }

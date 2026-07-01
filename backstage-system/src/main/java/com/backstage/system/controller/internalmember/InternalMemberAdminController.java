@@ -27,6 +27,7 @@ import com.backstage.system.utils.UserContextUtil;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -40,6 +41,7 @@ import java.util.List;
 
 @Api(tags = "Internal Member Admin APIs")
 @RestController
+@Validated
 @RequestMapping("/pc/admin/internal-member")
 public class InternalMemberAdminController extends BaseController {
     @Resource
@@ -91,7 +93,7 @@ public class InternalMemberAdminController extends BaseController {
     @PutMapping("/{userId}/employment-profile")
     public R<Void> saveEmploymentProfile(
             @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId,
-            @RequestBody InternalMemberEmploymentProfileSaveDTO dto) {
+            @Validated @RequestBody InternalMemberEmploymentProfileSaveDTO dto) {
         internalMemberService.saveEmploymentProfile(userId, dto, currentOperatorId());
         return R.ok();
     }
@@ -107,7 +109,7 @@ public class InternalMemberAdminController extends BaseController {
     @PostMapping("/{userId}/follow-records")
     public R<Void> addFollowRecord(
             @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId,
-            @RequestBody InternalMemberFollowRecordSaveDTO dto) {
+            @Validated @RequestBody InternalMemberFollowRecordSaveDTO dto) {
         internalMemberService.addFollowRecord(userId, dto, currentOperatorId());
         return R.ok();
     }
