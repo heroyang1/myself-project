@@ -95,6 +95,17 @@
 - THEN 系统返回占位响应或明确提示暂未实现
 - AND 不影响漫画/电子书现有保存流程
 
+### Requirement: 漫画批量图片上传不受固定频率限流中断
+
+系统 SHALL 允许漫画压缩包导入过程连续调用通用上传接口上传图片，并保留上传接口权限与文件校验。
+
+#### Scenario: 连续上传漫画图片
+
+- GIVEN 编辑者正在导入包含多张图片的漫画压缩包
+- WHEN 前端连续调用 `/pc/upload` 上传漫画图片
+- THEN 系统不因固定 IP 频率限流拒绝请求
+- AND 上传接口仍要求登录权限与 `upload:file`、`book:create` 或 `book:update` 业务权限
+
 ## MODIFIED Requirements
 
 ### Requirement: 资源编号与权限控制

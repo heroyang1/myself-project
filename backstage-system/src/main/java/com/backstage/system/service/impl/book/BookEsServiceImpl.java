@@ -128,6 +128,7 @@ public class BookEsServiceImpl implements IBookEsService {
             Page<BookDO> pageParam = new Page<>(pageNum, pageSize);
             LambdaQueryWrapper<BookDO> wrapper = new LambdaQueryWrapper<BookDO>()
                     .eq(BookDO::getStatus, "0")
+                    .eq(BookDO::getDeleteFlag, (byte) 0)
                     .orderByDesc(BookDO::getCreateTime);
             Page<BookDO> pageResult = bookMapper.selectPage(pageParam, wrapper);
             List<BookDO> rows = pageResult.getRecords();
@@ -165,7 +166,9 @@ public class BookEsServiceImpl implements IBookEsService {
         document.setOriginalPrice(bookDO.getOriginalPrice() != null ? bookDO.getOriginalPrice() : java.math.BigDecimal.ZERO);
         document.setSubCount(bookDO.getSubCount());
         document.setChapterCount(Math.toIntExact(bookChapterMapper.selectCount(
-                new LambdaQueryWrapper<BookChapter>().eq(BookChapter::getBookId, bookDO.getId())
+                new LambdaQueryWrapper<BookChapter>()
+                        .eq(BookChapter::getBookId, bookDO.getId())
+                        .eq(BookChapter::getDeleteFlag, (byte) 0)
         )));
         document.setLevel(bookDO.getLevel());
         document.setMediaType(bookDO.getMediaType());

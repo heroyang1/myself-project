@@ -5,6 +5,7 @@ import com.backstage.common.core.controller.BaseController;
 import com.backstage.common.core.domain.R;
 import com.backstage.system.domain.dto.exam.UserExamSaveDto;
 import com.backstage.system.domain.vo.exam.UserExamRecordVo;
+import com.backstage.system.domain.vo.exam.UserExamResultVo;
 import com.backstage.system.service.exam.IOshUserExamRecordService;
 import com.backstage.system.utils.UserContextUtil;
 import com.github.pagehelper.PageInfo;
@@ -58,5 +59,20 @@ public class OshUserExamRecordController extends BaseController {
 
         boolean result = userTestService.saveUserExam(saveDto);
         return result ? R.ok("交卷成功") : R.fail("交卷失败");
+    }
+
+    /**
+     * 考试结果详情与错题解析
+     */
+    @ApiOperation("考试结果详情")
+    @GetMapping("/detail")
+    @Anonymous
+    public R detail(Long id) {
+        Long userId = null;
+        try { userId = UserContextUtil.getCurrentUserId(); } catch (Exception ignored) {}
+        if (userId == null) return R.fail("请先登录");
+
+        UserExamResultVo result = userTestService.getUserExamResult(id);
+        return result == null ? R.fail("考试结果不存在") : R.ok(result);
     }
 }

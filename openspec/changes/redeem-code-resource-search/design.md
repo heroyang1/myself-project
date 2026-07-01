@@ -4,6 +4,8 @@
 
 在核销模块新增资源搜索接口，按资源类型路由到对应业务表查询候选资源。前端选择资源后仅把内部 `resourceNo` 提交给创建核销码接口，后端继续通过 `resolveResource` 校验资源并复用现有订单、支付流水、权益发放逻辑。核销码生成后不做站内发送，由管理员通过平台外方式发送；后端在用户使用时绑定当前用户。
 
+在每个核销码旁新增一条一一对应的核销邀请链接。链接本身不自动核销，只提供注册引导和登录后解析核销码能力：未注册用户通过链接提交注册时，后端复用邀请注册关系，并发送增强邮件模板，邮件同时包含唯一标识和核销码；已注册用户登录后由前端跳转用户中心，用户手动确认核销。
+
 ## 现状分析
 
 - 相关模块：`controller/redeem`、`service/redeem`、`mapper/redeem`
@@ -19,6 +21,9 @@
 |---|---|---|---|
 | POST | `/pc/admin/redeem/resource/search` | 新增按资源类型、名称搜索资源候选 | `@OshUserLevel(5)`，只影响后台核销码创建 |
 | POST | `/pc/admin/redeem/code/create` | 保持 `resourceNo` 入参 | 前端由资源选择自动回填，不让用户手填 |
+| GET | `/pc/user/redeem/invite-link` | 匿名查看核销邀请链接对应的资源信息 | 不返回核销码 |
+| GET | `/pc/user/redeem/invite-link/resolve` | 登录后解析核销邀请链接对应的核销码 | `@OshUserLevel(1)` |
+| POST | `/pc/user/register/submit` | 增加可选 `redeemInviteToken` | 有效 token 会触发增强邮件模板 |
 
 搜索入参：`resourceType/pageNum/pageSize/keyword`。
 
@@ -35,6 +40,7 @@
 | `osh_member_plan.idx_redeem_member_plan_no` | 新增资源编号索引 | 追加到 `redeem_code.sql` | `DROP INDEX` |
 | `osh_member_plan.idx_redeem_member_plan_name` | 新增套餐名称索引 | 追加到 `redeem_code.sql` | `DROP INDEX` |
 | `osh_redeem_code.user_id` | 调整为可空 | 追加到 `redeem_code.sql` | 按历史需要恢复 `NOT NULL` |
+| `osh_redeem_invite_link` | 新增核销码与邀请注册链接一一对应表 | 追加到 `redeem_code.sql`，并回填历史核销码 | 可删除表并回滚代码 |
 
 ### 业务流程
 
@@ -47,13 +53,18 @@ flowchart TD
   E --> F["前端内部回填 resourceNo"]
   F --> G["调用创建核销码接口"]
   G --> H["后端校验资源并创建通用核销码"]
-  H --> I["管理员平台外发送核销码"]
-  I --> J["用户中心输入核销码并绑定当前用户"]
+  H --> I["后端创建一一对应邀请链接"]
+  I --> J["管理员平台外发送核销码或邀请链接"]
+  J --> K["未注册用户通过链接注册并收到增强邮件"]
+  J --> L["已注册用户登录后进入用户中心"]
+  K --> M["用户中心手动确认核销"]
+  L --> M
 ```
 
 ### 中间件影响
 
 - Redis：无
+- Redis：注册流程沿用现有唯一标识缓存，并追加核销邀请 token、核销码和资源名称。
 - Kafka：无
 - Elasticsearch：无
 - Nacos：无
@@ -63,6 +74,7 @@ flowchart TD
 
 - 老接口保留：`resource/resolve` 保留，创建接口仍以 `resourceNo` 为内部契约，不再要求消费者邮箱。
 - 老数据可读：历史核销码继续通过 `product_name/resource_type` 展示。
+- 老数据补链：迁移脚本为历史核销码补充 `osh_redeem_invite_link` 记录。
 - 前端需要同步：后台创建页切换为资源搜索选择，用户中心隐藏资源编号。
 - 灰度兼容：前端新版本调用新增接口；后端旧创建接口行为不变。
 
@@ -72,6 +84,7 @@ flowchart TD
 - 前端构建：`npm run generate`
 - SQL smoke：确认 `idx_redeem_*` 索引存在。
 - 接口 smoke：按课程、电子书、工具、会员套餐各搜索一次资源。
+- 链接 smoke：打开匿名邀请链接只返回资源信息；登录后 resolve 返回核销码；注册提交带 token 的邮件使用增强模板。
 
 ## 发布与回滚
 

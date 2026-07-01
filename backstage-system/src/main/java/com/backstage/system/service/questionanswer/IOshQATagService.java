@@ -14,4 +14,12 @@ import java.util.List;
  */
 public interface IOshQATagService {
     R<List<QATagVO>> searchTags(String type);
+
+    Long resolveTagId(String tagName, Long userId);
+
+    void bindQuestionTags(Long questionId, List<String> tags, Long userId);
+
+    void replaceQuestionTags(Long questionId, List<String> tags, Long userId);
+
+    List<String> listQuestionTagNames(Long questionId);
 }

@@ -101,3 +101,49 @@
 - THEN 核销码表与渠道表存在
 - AND 课程、电子书、工具、会员套餐的核销辅助索引存在
 - AND `osh_redeem_code.user_id` 允许为空以支持待核销码不预绑定用户
+
+### Requirement: 核销码拥有一一对应邀请链接
+
+系统 SHALL 为每个核销码维护一条一一对应的核销邀请链接，链接可用于外部平台购买后的注册引导与登录后手动核销。
+
+#### Scenario: 批量生成核销码时返回邀请链接 token
+
+- GIVEN level>=5 用户请求批量生成核销码
+- WHEN 某条核销码创建成功
+- THEN 系统创建一条 `osh_redeem_invite_link` 记录
+- AND 该记录的 `redeem_code_id` 与核销码唯一对应
+- AND 响应条目包含 `inviteLinkToken`
+
+#### Scenario: 匿名访问邀请链接只查看资源信息
+
+- GIVEN 存在启用且未过期的核销邀请链接
+- WHEN 用户请求 `GET /pc/user/redeem/invite-link`
+- THEN 系统返回资源名称、资源类型、金额、来源和状态
+- AND 响应不包含核销码明文
+
+#### Scenario: 登录用户解析邀请链接
+
+- GIVEN 当前用户已登录
+- AND 存在启用且未过期的核销邀请链接
+- WHEN 用户请求 `GET /pc/user/redeem/invite-link/resolve`
+- THEN 系统返回该链接对应的核销码
+- AND 不自动核销
+
+### Requirement: 核销邀请链接增强注册邮件
+
+系统 SHALL 在注册提交携带有效 `redeemInviteToken` 时发送增强注册邮件，邮件同时包含唯一标识和核销码。
+
+#### Scenario: 未注册用户通过核销邀请链接提交注册
+
+- GIVEN 用户通过核销邀请链接进入注册页
+- WHEN 前端提交注册请求且携带 `redeemInviteToken`
+- THEN 系统校验链接启用、未过期且核销码待核销
+- AND 若链接包含邀请人的邀请码，注册流程使用该邀请码
+- AND 系统发送增强邮件模板，包含唯一标识、核销码和资源名称
+- AND 核销码不自动核销
+
+#### Scenario: 用户完成唯一标识验证
+
+- GIVEN 用户注册提交时携带了有效 `redeemInviteToken`
+- WHEN 用户通过唯一标识完成注册验证
+- THEN 系统记录该邀请链接的注册邮箱、注册用户和注册时间

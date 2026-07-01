@@ -749,8 +749,9 @@ public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> impl
      * @param orderNo 订单号
      */
     private void handleOrderProductPaid(String orderNo) {
-            Runnable paidTask = () -> {
+        Runnable paidTask = () -> {
             recordContributionRevenue(orderNo);
+            handlePaidBusiness(orderNo);
 
             try {
                 PaySuccessMessage message = packgePaySuccessMessage(orderNo);
@@ -776,6 +777,30 @@ public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> impl
         }
 
         paidTask.run();
+    }
+
+    private void handlePaidBusiness(String orderNo) {
+        OshOrder order = orderMapper.selectByOrderNo(orderNo);
+        if (Objects.isNull(order)) {
+            return;
+        }
+        ProductTypeEnum productType = ProductTypeEnum.fromCode(order.getProductType());
+        if (Objects.isNull(productType)) {
+            log.warn("skip paid business handler, unsupported productType, orderNo={}, productType={}",
+                    orderNo, order.getProductType());
+            return;
+        }
+        if (productType != ProductTypeEnum.COURSE) {
+            log.info("skip paid business handler, productType not managed here, orderNo={}, productType={}",
+                    orderNo, productType.getName());
+            return;
+        }
+        if (!paidHandlerRegistry.hasHandler(productType.getName())) {
+            log.info("skip paid business handler, handler not registered, orderNo={}, productType={}",
+                    orderNo, productType.getName());
+            return;
+        }
+        paidHandlerRegistry.handle(productType.getName(), orderNo);
     }
 
     private void recordContributionRevenue(String orderNo) {

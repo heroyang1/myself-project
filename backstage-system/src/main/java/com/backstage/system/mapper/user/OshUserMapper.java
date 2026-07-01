@@ -53,15 +53,6 @@ public interface OshUserMapper extends BaseMapper<OshUser> {
      * @return 用户
      */
     OshUser selectUserById(Long id);
-//
-//    /**
-//     * 查询用户列表
-//     *
-//     * @param oshUser 用户
-//     * @return 用户集合
-//     */
-//    public List<OshUser> selectUserList(OshUser oshUser);
-//
 //    /**
 //     * 新增用户
 //     *

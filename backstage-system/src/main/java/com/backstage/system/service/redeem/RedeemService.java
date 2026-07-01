@@ -9,6 +9,7 @@ import com.backstage.system.domain.redeem.dto.RedeemCodePageQuery;
 import com.backstage.system.domain.redeem.dto.RedeemResourceSearchQuery;
 import com.backstage.system.domain.redeem.vo.RedeemCodeBatchResultVO;
 import com.backstage.system.domain.redeem.vo.RedeemCodeVO;
+import com.backstage.system.domain.redeem.vo.RedeemInviteLinkVO;
 import com.backstage.system.domain.redeem.vo.RedeemResourceVO;
 import com.github.pagehelper.PageInfo;
 
@@ -30,6 +31,8 @@ public interface RedeemService {
     PageInfo<RedeemCodeVO> pageAdminCodes(RedeemCodePageQuery query);
 
     PageInfo<RedeemCodeVO> pageUserCodes(Long userId, RedeemCodePageQuery query);
+
+    RedeemInviteLinkVO getInviteLink(String token, boolean includeCode);
 
     OshRedeemCode redeem(Long userId, Long id);
 

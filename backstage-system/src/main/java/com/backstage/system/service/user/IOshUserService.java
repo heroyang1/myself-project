@@ -4,11 +4,9 @@ import com.backstage.common.core.domain.R;
 import com.backstage.system.domain.user.OshUser;
 import com.backstage.system.domain.user.vo.OshUserCardVO;
 import com.backstage.system.domain.user.vo.OshUserLoginVO;
-import com.backstage.system.request.UserListRequest;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.mail.MessagingException;
-import java.util.List;
 
 /**
  * Created with IntelliJ IDEA.
@@ -23,6 +21,8 @@ public interface IOshUserService {
     R<String> registerSubmit(String username, String password, String repassword, String email) throws MessagingException;
 
     R<String> registerSubmit(String username, String password, String repassword, String email, String inviteCode) throws MessagingException;
+
+    R<String> registerSubmit(String username, String password, String repassword, String email, String inviteCode, String redeemInviteToken) throws MessagingException;
 
     R<String> registerVerity(String uniqueId);
 
@@ -49,6 +49,4 @@ public interface IOshUserService {
     R<String> deleteUser();
 
     R<String> updateAsset(Integer changeType, Integer changeSource, Long changeAmount, String remark);
-
-    List<OshUser> selectUserList(UserListRequest req);
 }

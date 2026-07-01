@@ -5,8 +5,6 @@ import com.backstage.common.exception.ServiceException;
 import com.backstage.system.domain.UserBookRelation;
 import com.backstage.system.domain.book.BookDO;
 import com.backstage.system.domain.course.OshCourse;
-import com.backstage.system.domain.member.OshMemberOrder;
-import com.backstage.system.domain.member.OshMemberPlan;
 import com.backstage.system.domain.order.OshOrder;
 import com.backstage.system.domain.order.OshPayment;
 import com.backstage.system.domain.order.enums.OrderStatusEnum;
@@ -16,6 +14,7 @@ import com.backstage.system.domain.order.enums.ProductTypeEnum;
 import com.backstage.system.domain.order.enums.PurchaseModeEnum;
 import com.backstage.system.domain.redeem.OshRedeemChannel;
 import com.backstage.system.domain.redeem.OshRedeemCode;
+import com.backstage.system.domain.redeem.OshRedeemInviteLink;
 import com.backstage.system.domain.redeem.dto.RedeemChannelCreateRequest;
 import com.backstage.system.domain.redeem.dto.RedeemCodeBatchCreateRequest;
 import com.backstage.system.domain.redeem.dto.RedeemCodeCreateRequest;
@@ -24,24 +23,22 @@ import com.backstage.system.domain.redeem.dto.RedeemResourceSearchQuery;
 import com.backstage.system.domain.redeem.vo.RedeemCodeBatchItemVO;
 import com.backstage.system.domain.redeem.vo.RedeemCodeBatchResultVO;
 import com.backstage.system.domain.redeem.vo.RedeemCodeVO;
+import com.backstage.system.domain.redeem.vo.RedeemInviteLinkVO;
 import com.backstage.system.domain.redeem.vo.RedeemResourceVO;
-import com.backstage.system.domain.tool.OshTool;
+import com.backstage.system.domain.user.OshUser;
 import com.backstage.system.enums.behavior.ContributionResourceType;
 import com.backstage.system.mapper.book.BookMapper;
 import com.backstage.system.mapper.book.UserBookRelationMapper;
 import com.backstage.system.mapper.course.CourseBuyMapper;
 import com.backstage.system.mapper.course.OshCourseMapper;
-import com.backstage.system.mapper.member.OshMemberOrderMapper;
-import com.backstage.system.mapper.member.OshMemberPlanMapper;
 import com.backstage.system.mapper.order.OshOrderMapper;
 import com.backstage.system.mapper.order.OshPaymentMapper;
 import com.backstage.system.mapper.redeem.OshRedeemChannelMapper;
 import com.backstage.system.mapper.redeem.OshRedeemCodeMapper;
+import com.backstage.system.mapper.redeem.OshRedeemInviteLinkMapper;
 import com.backstage.system.mapper.redeem.OshRedeemResourceMapper;
-import com.backstage.system.mapper.tool.OshToolMapper;
-import com.backstage.system.mapper.tool.OshToolQuotaMapper;
+import com.backstage.system.mapper.user.OshUserMapper;
 import com.backstage.system.service.behavior.ContributionService;
-import com.backstage.system.service.member.MemberEntitlementService;
 import com.backstage.system.service.order.OrderNoGenerator;
 import com.backstage.system.service.redeem.RedeemService;
 import com.backstage.system.utils.UserContextUtil;
@@ -59,6 +56,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Service
@@ -67,14 +65,14 @@ public class RedeemServiceImpl implements RedeemService {
     private static final int REDEEM_PENDING = 0;
     private static final int REDEEM_USED = 1;
     private static final int REDEEM_CANCELLED = 2;
-    private static final int MEMBER_PAY_STATUS_PAID = 1;
-    private static final int MEMBER_GRANT_PENDING = 0;
+    private static final int LINK_ENABLED = 1;
     private static final String DEFAULT_CHANNEL_CODE = "wechat_transfer";
     private static final String DEFAULT_CHANNEL_NAME = "微信转账";
     private static final String SYSTEM_OPERATOR = "redeem";
     private static final int DEFAULT_RESOURCE_PAGE_SIZE = 10;
     private static final int MAX_RESOURCE_PAGE_SIZE = 50;
     private static final int MAX_BATCH_CREATE_SIZE = 200;
+    private static final int VIP_REDEEMABLE_LEVEL = 2;
 
     @Resource
     private OshRedeemChannelMapper redeemChannelMapper;
@@ -83,7 +81,13 @@ public class RedeemServiceImpl implements RedeemService {
     private OshRedeemCodeMapper redeemCodeMapper;
 
     @Resource
+    private OshRedeemInviteLinkMapper redeemInviteLinkMapper;
+
+    @Resource
     private OshRedeemResourceMapper redeemResourceMapper;
+
+    @Resource
+    private OshUserMapper oshUserMapper;
 
     @Resource
     private OshCourseMapper oshCourseMapper;
@@ -92,25 +96,10 @@ public class RedeemServiceImpl implements RedeemService {
     private BookMapper bookMapper;
 
     @Resource
-    private OshToolMapper oshToolMapper;
-
-    @Resource
-    private OshMemberPlanMapper memberPlanMapper;
-
-    @Resource
     private CourseBuyMapper courseBuyMapper;
 
     @Resource
     private UserBookRelationMapper userBookRelationMapper;
-
-    @Resource
-    private OshToolQuotaMapper oshToolQuotaMapper;
-
-    @Resource
-    private OshMemberOrderMapper memberOrderMapper;
-
-    @Resource
-    private MemberEntitlementService memberEntitlementService;
 
     @Resource
     private OshOrderMapper orderMapper;
@@ -209,6 +198,7 @@ public class RedeemServiceImpl implements RedeemService {
         code.setUpdateBy(operatorId);
         code.setDeleteFlag((byte) 0);
         redeemCodeMapper.insert(code);
+        ensureInviteLink(code, operatorId);
         return code;
     }
 
@@ -235,6 +225,8 @@ public class RedeemServiceImpl implements RedeemService {
                 item.setResourceNo(code.getResourceNo());
                 item.setProductName(code.getProductName());
                 item.setCode(code.getCode());
+                OshRedeemInviteLink link = ensureInviteLink(code, currentOperatorId());
+                item.setInviteLinkToken(link.getLinkToken());
                 item.setStatus(code.getStatus());
                 item.setSuccess(true);
                 item.setMessage("生成成功");
@@ -272,6 +264,25 @@ public class RedeemServiceImpl implements RedeemService {
         RedeemCodePageQuery normalized = normalizePage(query);
         PageHelper.startPage(normalized.getPageNum(), normalized.getPageSize());
         return new PageInfo<>(redeemCodeMapper.selectUserPage(userId, normalized));
+    }
+
+    @Override
+    public RedeemInviteLinkVO getInviteLink(String token, boolean includeCode) {
+        String normalized = normalizeLinkToken(token);
+        RedeemInviteLinkVO vo = redeemInviteLinkMapper.selectByToken(normalized);
+        if (vo == null) {
+            throw new ServiceException("核销邀请链接不存在");
+        }
+        if (!Integer.valueOf(LINK_ENABLED).equals(vo.getLinkStatus())) {
+            throw new ServiceException("核销邀请链接已停用");
+        }
+        if (vo.getExpireTime() != null && vo.getExpireTime().isBefore(LocalDateTime.now())) {
+            throw new ServiceException("核销邀请链接已过期");
+        }
+        if (!includeCode) {
+            vo.setCode(null);
+        }
+        return vo;
     }
 
     @Override
@@ -313,6 +324,7 @@ public class RedeemServiceImpl implements RedeemService {
         if (!Integer.valueOf(REDEEM_PENDING).equals(code.getStatus())) {
             throw new ServiceException("核销码状态异常");
         }
+        assertCodeResourceRedeemable(code);
 
         String orderNo = orderNoGenerator.nextOrderNo(ProductTypeEnum.fromCode(code.getProductType()).getName());
         String paymentNo = orderNoGenerator.nextPaymentNo();
@@ -364,6 +376,39 @@ public class RedeemServiceImpl implements RedeemService {
         }
     }
 
+    private OshRedeemInviteLink ensureInviteLink(OshRedeemCode code, Long operatorId) {
+        if (code == null || code.getId() == null) {
+            throw new ServiceException("核销码不存在");
+        }
+        OshRedeemInviteLink existing = redeemInviteLinkMapper.selectOne(new LambdaQueryWrapper<OshRedeemInviteLink>()
+                .eq(OshRedeemInviteLink::getRedeemCodeId, code.getId())
+                .eq(OshRedeemInviteLink::getDeleteFlag, (byte) 0)
+                .last("limit 1"));
+        if (existing != null) {
+            return existing;
+        }
+        OshUser operator = operatorId == null || operatorId <= 0 ? null : oshUserMapper.selectById(operatorId);
+        OshRedeemInviteLink link = new OshRedeemInviteLink();
+        link.setRedeemCodeId(code.getId());
+        link.setRedeemCode(code.getCode());
+        link.setLinkToken(generateUniqueLinkToken());
+        link.setInviteCode(operator == null ? null : StringUtils.trimToNull(operator.getInviteCode()));
+        link.setInviterId(operator == null ? null : operator.getId());
+        link.setStatus(LINK_ENABLED);
+        link.setCreateBy(operatorId == null ? 0L : operatorId);
+        link.setUpdateBy(operatorId == null ? 0L : operatorId);
+        link.setDeleteFlag((byte) 0);
+        redeemInviteLinkMapper.insert(link);
+        return link;
+    }
+
+    private String normalizeLinkToken(String token) {
+        if (StringUtils.isBlank(token)) {
+            throw new ServiceException("核销邀请链接不能为空");
+        }
+        return token.trim();
+    }
+
     private OshRedeemChannel resolveChannel(Long channelId) {
         OshRedeemChannel channel = channelId == null ? null : redeemChannelMapper.selectById(channelId);
         if (channel == null) {
@@ -391,10 +436,6 @@ public class RedeemServiceImpl implements RedeemService {
                 return resolveCourse(no);
             case "bk":
                 return resolveBook(no);
-            case "tl":
-                return resolveTool(no);
-            case "mp":
-                return resolveMemberPlan(no);
             default:
                 return null;
         }
@@ -409,11 +450,7 @@ public class RedeemServiceImpl implements RedeemService {
         if (resource != null) {
             return resource;
         }
-        resource = resolveTool(no);
-        if (resource != null) {
-            return resource;
-        }
-        return resolveMemberPlan(no);
+        return null;
     }
 
     private RedeemResourceVO resolveCourse(String no) {
@@ -421,6 +458,7 @@ public class RedeemServiceImpl implements RedeemService {
         if (course == null) {
             return null;
         }
+        assertVipLevel(course.getLevel());
         return buildResource(no, ResourceTypeEnum.COURSE.getType(), ProductTypeEnum.COURSE,
                 course.getId(), course.getTitle(), course.getPrice(), course.getTPrice());
     }
@@ -430,29 +468,40 @@ public class RedeemServiceImpl implements RedeemService {
         if (book == null) {
             return null;
         }
+        assertVipLevel(book.getLevel());
         return buildResource(no, ResourceTypeEnum.BOOK.getType(), ProductTypeEnum.BOOK,
                 book.getId(), book.getTitle(), book.getPrice(), book.getOriginalPrice());
     }
 
-    private RedeemResourceVO resolveTool(String no) {
-        OshTool tool = oshToolMapper.selectToolByNo(no);
-        if (tool == null) {
-            return null;
+    private void assertCodeResourceRedeemable(OshRedeemCode code) {
+        ProductTypeEnum productType = ProductTypeEnum.fromCode(code.getProductType());
+        if (productType == null) {
+            throw new ServiceException("不支持的资源类型");
         }
-        return buildResource(no, ResourceTypeEnum.TOOL.getType(), ProductTypeEnum.TOOL,
-                tool.getId(), tool.getToolName(), BigDecimal.ZERO, BigDecimal.ZERO);
+        switch (productType) {
+            case COURSE:
+                OshCourse course = oshCourseMapper.selectCourseById(code.getProductId());
+                if (course == null) {
+                    throw new ServiceException("资源不存在或不支持核销");
+                }
+                assertVipLevel(course.getLevel());
+                break;
+            case BOOK:
+                BookDO book = bookMapper.selectReadableById(code.getProductId());
+                if (book == null) {
+                    throw new ServiceException("资源不存在或不支持核销");
+                }
+                assertVipLevel(book.getLevel());
+                break;
+            default:
+                throw new ServiceException("当前资源类型暂不支持核销");
+        }
     }
 
-    private RedeemResourceVO resolveMemberPlan(String no) {
-        OshMemberPlan plan = memberPlanMapper.selectOne(new LambdaQueryWrapper<OshMemberPlan>()
-                .eq(OshMemberPlan::getNo, no)
-                .eq(OshMemberPlan::getDeleteFlag, (byte) 0)
-                .last("limit 1"));
-        if (plan == null) {
-            return null;
+    private void assertVipLevel(Integer level) {
+        if (!Integer.valueOf(VIP_REDEEMABLE_LEVEL).equals(level)) {
+            throw new ServiceException("仅VIP付费资源可以核销");
         }
-        return buildResource(no, ResourceTypeEnum.MEMBER_PLAN.getType(), ProductTypeEnum.MEMBER,
-                plan.getId(), plan.getPlanName(), plan.getPrice(), plan.getOriginalPrice());
     }
 
     private RedeemResourceVO buildResource(String resourceNo, String resourceType, ProductTypeEnum productType,
@@ -521,12 +570,6 @@ public class RedeemServiceImpl implements RedeemService {
             case BOOK:
                 grantBook(code, orderNo);
                 break;
-            case TOOL:
-                grantTool(code);
-                break;
-            case MEMBER:
-                grantMember(code, orderNo);
-                break;
             default:
                 throw new ServiceException("当前资源类型暂不支持核销");
         }
@@ -547,46 +590,6 @@ public class RedeemServiceImpl implements RedeemService {
             throw new ServiceException("用户已购买该电子书");
         }
         userBookRelationMapper.upsertPurchased(code.getUserId(), code.getProductId(), code.getAmount(), orderNo, SYSTEM_OPERATOR);
-    }
-
-    private void grantTool(OshRedeemCode code) {
-        OshTool tool = oshToolMapper.selectToolById(code.getProductId());
-        int count = 1;
-        if (tool != null && tool.getQuotaCost() != null && tool.getQuotaCost() > 0) {
-            count = tool.getQuotaCost();
-        }
-        int updated = oshToolQuotaMapper.increaseUserQuota(code.getUserId(), count, SYSTEM_OPERATOR);
-        if (updated <= 0) {
-            oshToolQuotaMapper.insertUserQuota(code.getUserId(), count, SYSTEM_OPERATOR);
-        }
-    }
-
-    private void grantMember(OshRedeemCode code, String orderNo) {
-        OshMemberPlan plan = memberPlanMapper.selectById(code.getProductId());
-        if (plan == null || !Byte.valueOf((byte) 0).equals(plan.getDeleteFlag())) {
-            throw new ServiceException("会员套餐不存在");
-        }
-        OshMemberOrder memberOrder = new OshMemberOrder();
-        LocalDateTime now = LocalDateTime.now();
-        memberOrder.setUserId(code.getUserId());
-        memberOrder.setPlanId(plan.getId());
-        memberOrder.setOrderNo(orderNo);
-        memberOrder.setMemberType(plan.getMemberType());
-        memberOrder.setPlanNameSnapshot(plan.getPlanName());
-        memberOrder.setPurchaseQuantity(1);
-        memberOrder.setDurationMonths(plan.getDurationMonths());
-        memberOrder.setOriginalAmount(defaultMoney(plan.getOriginalPrice()));
-        memberOrder.setPayAmount(code.getAmount());
-        memberOrder.setPayStatus(MEMBER_PAY_STATUS_PAID);
-        memberOrder.setGrantStatus(MEMBER_GRANT_PENDING);
-        memberOrder.setPayTime(now);
-        memberOrder.setCreateTime(now);
-        memberOrder.setCreateBy(code.getUserId());
-        memberOrder.setUpdateTime(now);
-        memberOrder.setUpdateBy(code.getUserId());
-        memberOrder.setDeleteFlag((byte) 0);
-        memberOrderMapper.insert(memberOrder);
-        memberEntitlementService.handlePaid(orderNo);
     }
 
     private void recordContribution(OshOrder order) {
@@ -636,9 +639,7 @@ public class RedeemServiceImpl implements RedeemService {
         }
         String resourceType = normalized.getResourceType().trim();
         if (!ResourceTypeEnum.COURSE.getType().equals(resourceType)
-                && !ResourceTypeEnum.BOOK.getType().equals(resourceType)
-                && !ResourceTypeEnum.TOOL.getType().equals(resourceType)
-                && !ResourceTypeEnum.MEMBER_PLAN.getType().equals(resourceType)) {
+                && !ResourceTypeEnum.BOOK.getType().equals(resourceType)) {
             throw new ServiceException("当前资源类型暂不支持核销");
         }
         normalized.setResourceType(resourceType);
@@ -686,6 +687,18 @@ public class RedeemServiceImpl implements RedeemService {
             }
         }
         throw new ServiceException("核销码生成失败，请重试");
+    }
+
+    private String generateUniqueLinkToken() {
+        for (int i = 0; i < 10; i++) {
+            String token = UUID.randomUUID().toString().replace("-", "");
+            Long count = redeemInviteLinkMapper.selectCount(new LambdaQueryWrapper<OshRedeemInviteLink>()
+                    .eq(OshRedeemInviteLink::getLinkToken, token));
+            if (count == null || count == 0) {
+                return token;
+            }
+        }
+        throw new ServiceException("核销邀请链接生成失败，请重试");
     }
 
     private String toChannelCode(String channelName) {

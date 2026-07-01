@@ -1,6 +1,7 @@
 package com.backstage.system.service.impl;
 
 import cn.hutool.core.util.StrUtil;
+import com.backstage.common.enums.AnnouncementModuleEnum;
 import com.backstage.common.enums.ResourceCodePrefixEnum;
 import com.backstage.common.exception.ServiceException;
 import com.backstage.common.async.AsyncExecutorNames;
@@ -28,7 +29,9 @@ import com.backstage.system.domain.vo.pay.OrderCheckoutReqVO;
 import com.backstage.system.domain.vo.pay.OrderCheckoutRespVO;
 import com.backstage.system.domain.order.OshOrder;
 import com.backstage.system.domain.order.enums.ProductTypeEnum;
+import com.backstage.system.mapper.announcement.OshAnnouncementMapper;
 import com.backstage.system.mapper.order.OshOrderMapper;
+import com.backstage.system.service.announcement.AnnouncementRefreshBroadcaster;
 import com.backstage.system.service.book.BookChapterService;
 import com.backstage.system.service.book.IBookService;
 import com.backstage.system.service.order.OrderCheckoutService;
@@ -36,6 +39,8 @@ import com.backstage.system.utils.UserContextUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -63,6 +68,8 @@ import java.util.stream.Collectors;
 @Service
 public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements IBookService
 {
+    private static final Logger log = LoggerFactory.getLogger(BookServiceImpl.class);
+
     @Resource
     private BookMapper bookMapper;
 
@@ -104,6 +111,12 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
 
     @Resource
     private OshOrderMapper oshOrderMapper;
+
+    @Resource
+    private OshAnnouncementMapper oshAnnouncementMapper;
+
+    @Resource
+    private AnnouncementRefreshBroadcaster announcementRefreshBroadcaster;
 
     /**
      * 查询电子书列表
@@ -226,12 +239,20 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         if (bookLevel <= 1) {
             return true;
         }
+        Long userId = UserContextUtil.getCurrentUserIdSafely();
+        if (isVipPaidBook(bookDO)) {
+            return checkUserHasBought(userId, bookDO.getId());
+        }
         int currentLevel = UserContextUtil.getCurrentLevelSafely();
         if (currentLevel >= bookLevel) {
             return true;
         }
-        Long userId = UserContextUtil.getCurrentUserIdSafely();
         return checkUserHasBought(userId, bookDO.getId());
+    }
+
+    private boolean isVipPaidBook(BookDO bookDO) {
+        return Integer.valueOf(2).equals(bookDO.getLevel())
+                && Optional.ofNullable(bookDO.getPrice()).orElse(BigDecimal.ZERO).compareTo(BigDecimal.ZERO) > 0;
     }
 
     private List<BookChapterPageVO> listComicPages(Long bookId, Long chapterId, Boolean forEdit) {
@@ -341,10 +362,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         asyncTaskSupport.awaitAll(bookFuture, chapterFuture);
 
         BookDO bookDO = asyncTaskSupport.join(bookFuture);
-        List<BookChapterVO> chapters = asyncTaskSupport.join(chapterFuture);
-        if (BookMediaTypeEnum.isComic(bookDO.getMediaType())) {
-            attachComicPages(chapters, id, false);
-        }
+        List<BookChapterVO> chapters = sanitizeChapterCatalog(asyncTaskSupport.join(chapterFuture));
 
         BookMenuVO vo = new BookMenuVO();
 
@@ -494,7 +512,28 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         batchInsertChapters(bookDO.getId(), reqVO.getChapters(), bookDO.getMediaType());
         // 同步ES
         bookEsService.syncBookToEs(bookDO.getId());
+        publishBookCreateAnnouncement(bookDO);
         return bookDO.getId();
+    }
+
+    private void publishBookCreateAnnouncement(BookDO bookDO) {
+        try {
+            String typeName = BookMediaTypeEnum.isComic(bookDO.getMediaType()) ? "漫画" : "电子书";
+            String iconCode = BookMediaTypeEnum.isComic(bookDO.getMediaType()) ? "comic" : "book";
+            String title = "新增" + typeName + "《" + Optional.ofNullable(bookDO.getTitle()).orElse("未命名") + "》";
+            oshAnnouncementMapper.insertBookAnnouncement(
+                    title,
+                    "/detail/book/" + bookDO.getId(),
+                    iconCode,
+                    2,
+                    bookDO.getId(),
+                    0,
+                    String.valueOf(UserContextUtil.getCurrentUserIdSafely())
+            );
+            announcementRefreshBroadcaster.broadcastRefresh(AnnouncementModuleEnum.BOOK);
+        } catch (Exception ex) {
+            log.warn("publish book create announcement failed, bookId={}", bookDO == null ? null : bookDO.getId(), ex);
+        }
     }
 
     /**
@@ -935,14 +974,31 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         Integer mediaType = BookMediaTypeEnum.normalize(bookDO.getMediaType());
         vo.setMediaType(mediaType);
         List<BookChapterVO> chapters = aggregate.getChapters();
-        if (BookMediaTypeEnum.isComic(mediaType)) {
+        if (Boolean.TRUE.equals(forEdit) && BookMediaTypeEnum.isComic(mediaType)) {
             attachComicPages(chapters, bookDO.getId(), forEdit);
+        } else {
+            chapters = sanitizeChapterCatalog(chapters);
         }
         vo.setBookDetails(chapters);
         vo.setTags(aggregate.getTags());
         vo.setIsbuy(aggregate.getRelationStatus().getPurchased() == 1);
         vo.setIsfava(aggregate.getRelationStatus().getFavorited() == 1);
         return vo;
+    }
+
+    private List<BookChapterVO> sanitizeChapterCatalog(List<BookChapterVO> chapters)
+    {
+        if (chapters == null || chapters.isEmpty()) {
+            return chapters;
+        }
+        for (BookChapterVO chapter : chapters) {
+            if (chapter == null) {
+                continue;
+            }
+            chapter.setContent(null);
+            chapter.setPages(null);
+        }
+        return chapters;
     }
 
     private void attachBookAuthor(BookDetailVO vo, BookDO bookDO, Boolean forEdit) {
