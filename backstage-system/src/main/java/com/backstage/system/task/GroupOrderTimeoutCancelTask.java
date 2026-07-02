@@ -129,20 +129,13 @@ public class GroupOrderTimeoutCancelTask {
             throw new RuntimeException("更新订单状态失败");
         }
         
-        // 2. 更新参团记录状态为已取消
+        // 2. 更新参团记录状态为已取消（3=已取消）
         if (order.getGroupWorkId() != null) {
-            groupServerMapper.updateGroupWorkStatus(order.getGroupWorkId(), 2); // 2-已取消
+            groupServerMapper.updateGroupWorkStatus(order.getGroupWorkId(), 3);
         }
         
-        // 3. 释放拼团活动人数
-        if (order.getGroupActivityId() != null) {
-            releaseActivityQuota(order.getGroupActivityId());
-        }
-        
-        // 4. 释放用户发起拼团人数
-        if (order.getGroupWorkId() != null) {
-            releaseUserInitiatedQuota(order.getGroupWorkId());
-        }
+        // 注意：不再释放拼团活动人数（currentNum），因为 join 时未递增 currentNum，
+        // currentNum 仅在支付成功回调中递增，取消未支付订单无需回退。
         
         log.info("订单取消成功: {}", order.getOrderNo());
     }
