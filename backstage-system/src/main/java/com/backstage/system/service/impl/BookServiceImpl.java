@@ -228,6 +228,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         if (BookMediaTypeEnum.isComic(bookDO.getMediaType())) {
             vo.setPages(listComicPages(bookId, id, false));
         }
+        bookMapper.incrementReadCount(bookId);
         return vo;
     }
 
@@ -239,20 +240,12 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         if (bookLevel <= 1) {
             return true;
         }
-        Long userId = UserContextUtil.getCurrentUserIdSafely();
-        if (isVipPaidBook(bookDO)) {
-            return checkUserHasBought(userId, bookDO.getId());
-        }
         int currentLevel = UserContextUtil.getCurrentLevelSafely();
         if (currentLevel >= bookLevel) {
             return true;
         }
+        Long userId = UserContextUtil.getCurrentUserIdSafely();
         return checkUserHasBought(userId, bookDO.getId());
-    }
-
-    private boolean isVipPaidBook(BookDO bookDO) {
-        return Integer.valueOf(2).equals(bookDO.getLevel())
-                && Optional.ofNullable(bookDO.getPrice()).orElse(BigDecimal.ZERO).compareTo(BigDecimal.ZERO) > 0;
     }
 
     private List<BookChapterPageVO> listComicPages(Long bookId, Long chapterId, Boolean forEdit) {
@@ -966,6 +959,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         vo.setPrice(Optional.ofNullable(bookDO.getPrice()).map(Object::toString).orElse("0"));
         vo.setTPrice(Optional.ofNullable(bookDO.getOriginalPrice()).map(Object::toString).orElse("0"));
         vo.setSubCount(Optional.ofNullable(bookDO.getSubCount()).orElse(0));
+        vo.setFavoriteCount(Optional.ofNullable(userBookRelationMapper.countFavoritedByBookId(bookDO.getId())).orElse(0));
         vo.setLevel(bookDO.getLevel());
         vo.setStatus(bookDO.getStatus());
         vo.setDeleteFlag(bookDO.getDeleteFlag() == null ? 0 : bookDO.getDeleteFlag().intValue());
