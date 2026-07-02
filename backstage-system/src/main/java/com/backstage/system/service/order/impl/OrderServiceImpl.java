@@ -749,20 +749,33 @@ public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> impl
      * @param orderNo 订单号
      */
     private void handleOrderProductPaid(String orderNo) {
-        recordContributionRevenue(orderNo);
+            Runnable paidTask = () -> {
+            recordContributionRevenue(orderNo);
 
-        try {
-            PaySuccessMessage message = packgePaySuccessMessage(orderNo);
-            KafkaMessageUtil.sendMessage(
-                    KafkaConstants.PAY_SUCCESS_TOPIC,
-                    orderNo,
-                    JSON.toJSONString(message)
-            );
-            log.info("【支付】发送支付成功消息成功，orderNo={}, userId={}", orderNo,UserContextUtil.getCurrentUserId());
-        }catch (Exception e) {
-            log.info("【支付】发送支付成功消息失败，orderNo={}, userId={}", orderNo, UserContextUtil.getCurrentUserId());
+            try {
+                PaySuccessMessage message = packgePaySuccessMessage(orderNo);
+                KafkaMessageUtil.sendMessage(
+                        KafkaConstants.PAY_SUCCESS_TOPIC,
+                        orderNo,
+                        JSON.toJSONString(message)
+                );
+                log.info("【支付】发送支付成功消息成功，orderNo={}, userId={}", orderNo, UserContextUtil.getCurrentUserId());
+            } catch (Exception e) {
+                log.info("【支付】发送支付成功消息失败，orderNo={}, userId={}", orderNo, UserContextUtil.getCurrentUserId());
+            }
+        };
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    paidTask.run();
+                }
+            });
+            return;
         }
 
+        paidTask.run();
     }
 
     private void recordContributionRevenue(String orderNo) {

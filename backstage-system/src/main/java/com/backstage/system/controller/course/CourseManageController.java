@@ -366,6 +366,30 @@ public class CourseManageController extends BaseController {
     }
 
     /**
+     * 转存外链图片到 OSS（Markdown 导入时使用，服务端下载避免 CORS/防盗链）
+     */
+    @Anonymous
+    @ApiOperation("转存外链图片到OSS")
+    @PostMapping("/content/import-remote-image")
+    public R<Map<String, Object>> importRemoteImage(@RequestBody Map<String, String> body) {
+        String url = body != null ? body.get("url") : null;
+        return R.ok(courseManageService.importRemoteImage(url));
+    }
+
+    /**
+     * 批量删除课程内容图片（Markdown 重新导入时清理旧 OSS 资源）
+     */
+    @Anonymous
+    @ApiOperation("批量删除课程内容图片")
+    @PostMapping("/content/delete-images")
+    public R<Void> deleteContentImages(@RequestBody Map<String, Object> body) {
+        @SuppressWarnings("unchecked")
+        List<String> paths = body != null ? (List<String>) body.get("paths") : null;
+        courseManageService.deleteContentImages(paths);
+        return R.ok();
+    }
+
+    /**
      * 获取课程资料列表
      */
     @Anonymous

@@ -6,6 +6,10 @@ import java.util.List;
 
 public interface IToolAnnouncementService {
 
+    List<ToolAnnouncementVO> listNoticeAnnouncements();
+
+    List<ToolAnnouncementVO> listDynamicAnnouncements();
+
     List<ToolAnnouncementVO> listLatestSystemNotices();
 
     List<ToolAnnouncementVO> listLatestUserNotices();

@@ -5,6 +5,7 @@ import com.backstage.common.core.domain.R;
 import com.backstage.common.core.redis.RedisCache;
 import com.backstage.common.enums.ResultCode;
 import com.backstage.common.enums.UploadPathEnum;
+import com.backstage.common.exception.ServiceException;
 import com.backstage.common.threadlocal.ThreadLocalUtil;
 import com.backstage.common.utils.email.EmailUtil;
 import com.backstage.common.utils.generate.GenerateUtil;
@@ -12,10 +13,15 @@ import com.backstage.common.utils.jwt.JwtUtil;
 import com.backstage.common.utils.SecurityUtils;
 import com.backstage.common.utils.StringUtils;
 import com.backstage.system.domain.user.*;
+import com.backstage.system.domain.redeem.OshRedeemInviteLink;
+import com.backstage.system.domain.redeem.vo.RedeemInviteLinkVO;
 import com.backstage.system.domain.user.vo.OshUserCardVO;
 import com.backstage.system.domain.user.vo.OshUserLoginVO;
+import com.backstage.system.domain.vo.tool.ToolQuotaCurrentVO;
+import com.backstage.system.mapper.tool.OshToolQuotaMapper;
 import com.backstage.system.mapper.user.*;
 import com.backstage.system.mapper.user.OshUserInvitationMapper;
+import com.backstage.system.mapper.redeem.OshRedeemInviteLinkMapper;
 import com.backstage.system.request.UserListRequest;
 import com.backstage.system.service.common.OssService;
 import com.backstage.system.service.user.IOshUserService;
@@ -45,9 +51,15 @@ import java.util.stream.Collectors;
 public class OshUserServiceImpl implements IOshUserService {
     private static final int ASSET_INCOME = 0;
     private static final int ASSET_EXPENSE = 1;
+    private static final int DEFAULT_INIT_TOOL_QUOTA = 10;
     private static final String DEFAULT_ROLE_NAME = "普通用户";
     private static final String DEFAULT_ROLE_CODE = "user";
     private static final String DEFAULT_ROLE_LEVEL = "1";
+    private static final String REDEEM_INVITE_TOKEN = "redeemInviteToken";
+    private static final String REDEEM_INVITE_REDEEM_CODE = "redeemInviteRedeemCode";
+    private static final String REDEEM_INVITE_PRODUCT_NAME = "redeemInviteProductName";
+    private static final int REDEEM_PENDING = 0;
+    private static final int LINK_ENABLED = 1;
 
     @Autowired
     private OshUserMapper oshUserMapper;
@@ -67,6 +79,10 @@ public class OshUserServiceImpl implements IOshUserService {
     private OshUserInvitationMapper oshUserInvitationMapper;
     @Autowired
     private UserManageMapper userManageMapper;
+    @Autowired
+    private OshToolQuotaMapper oshToolQuotaMapper;
+    @Autowired
+    private OshRedeemInviteLinkMapper redeemInviteLinkMapper;
 
     @Override
     public R<OshUserLoginVO> login(String username, String password) {
@@ -129,6 +145,11 @@ public class OshUserServiceImpl implements IOshUserService {
 
     @Override
     public R<String> registerSubmit(String username, String password, String repassword, String email, String inviteCode) throws MessagingException {
+        return registerSubmit(username, password, repassword, email, inviteCode, null);
+    }
+
+    @Override
+    public R<String> registerSubmit(String username, String password, String repassword, String email, String inviteCode, String redeemInviteToken) throws MessagingException {
         if (StringUtils.isEmpty(username) || StringUtils.isEmpty(password)) {
             return R.fail(ResultCode.FAILED_USER_NAME_OR_PASSWORD_EMPTY.getMsg());
         }
@@ -153,6 +174,15 @@ public class OshUserServiceImpl implements IOshUserService {
         if (oshUser != null && oshUser.getEmail().equals(email)) {
             return R.fail(ResultCode.FAILED_USER_EMAIL_BOUND.getMsg());
         }
+        RedeemInviteLinkVO redeemInviteLink;
+        try {
+            redeemInviteLink = resolveRedeemInviteLink(redeemInviteToken);
+        } catch (ServiceException ex) {
+            return R.fail(ex.getMessage());
+        }
+        if (redeemInviteLink != null && StringUtils.isNotEmpty(redeemInviteLink.getInviteCode())) {
+            inviteCode = redeemInviteLink.getInviteCode();
+        }
         // 校验邀请码（选填，填了就必须有效）
         if (StringUtils.isNotEmpty(inviteCode)) {
             LambdaQueryWrapper<OshUser> inviteWrapper = new LambdaQueryWrapper<>();
@@ -162,7 +192,9 @@ public class OshUserServiceImpl implements IOshUserService {
                 return R.fail("邀请码无效");
             }
         }
-        String uniqueId = emailUtil.sendEmailGetUniqueId(username, email);
+        String uniqueId = redeemInviteLink == null
+                ? emailUtil.sendEmailGetUniqueId(username, email)
+                : emailUtil.sendEmailGetUniqueId(username, email, redeemInviteLink.getCode(), redeemInviteLink.getProductName());
         Map<String,String> userMap = new HashMap<>();
         userMap.put(OshUserConstants.USERNAME, username);
         userMap.put(OshUserConstants.PASSWORD, password);
@@ -170,11 +202,18 @@ public class OshUserServiceImpl implements IOshUserService {
         if (StringUtils.isNotEmpty(inviteCode)) {
             userMap.put(OshUserConstants.INVITE_CODE, inviteCode);
         }
+        if (redeemInviteLink != null) {
+            userMap.put(REDEEM_INVITE_TOKEN, redeemInviteLink.getLinkToken());
+            userMap.put(REDEEM_INVITE_REDEEM_CODE, redeemInviteLink.getCode());
+            userMap.put(REDEEM_INVITE_PRODUCT_NAME, redeemInviteLink.getProductName());
+            markRedeemInviteRegisterSubmit(redeemInviteLink.getLinkToken(), email);
+        }
         redisCache.setCacheObject(OshUserConstants.UNIQUE_ID + uniqueId, userMap, 500, TimeUnit.MINUTES);
         return R.ok(ResultCode.SUCCESS.getMsg());
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public R<String> registerVerity(String uniqueId) {
         Map<String,String> userMap = redisCache.getCacheObject(OshUserConstants.UNIQUE_ID + uniqueId);
         if(userMap == null) return R.fail("唯一标识错误或已过期");
@@ -195,6 +234,7 @@ public class OshUserServiceImpl implements IOshUserService {
         oshUserAsset.setPoints(188L);
         oshUserAsset.setUserId(oshUser.getId());
         oshUserAssetMapper.insert(oshUserAsset);
+        initUserToolQuotaIfAbsent(oshUser.getId(), oshUser.getUsername());
         // 记录邀请关系
         String inviteCode = userMap.get(OshUserConstants.INVITE_CODE);
         if (StringUtils.isNotEmpty(inviteCode)) {
@@ -210,8 +250,62 @@ public class OshUserServiceImpl implements IOshUserService {
                 oshUserInvitationMapper.insertInvitation(invitation);
             }
         }
+        String redeemInviteToken = userMap.get(REDEEM_INVITE_TOKEN);
+        if (StringUtils.isNotEmpty(redeemInviteToken)) {
+            markRedeemInviteRegistered(redeemInviteToken, userId, oshUser.getEmail());
+        }
         redisCache.deleteObject(OshUserConstants.UNIQUE_ID + uniqueId);
         return R.ok(ResultCode.SUCCESS.getMsg());
+    }
+
+    private RedeemInviteLinkVO resolveRedeemInviteLink(String token) {
+        if (StringUtils.isEmpty(token)) {
+            return null;
+        }
+        RedeemInviteLinkVO link = redeemInviteLinkMapper.selectByToken(token.trim());
+        if (link == null) {
+            throw new ServiceException("核销邀请链接不存在");
+        }
+        if (!Integer.valueOf(LINK_ENABLED).equals(link.getLinkStatus())) {
+            throw new ServiceException("核销邀请链接已停用");
+        }
+        if (link.getExpireTime() != null && link.getExpireTime().isBefore(LocalDateTime.now())) {
+            throw new ServiceException("核销邀请链接已过期");
+        }
+        if (!Integer.valueOf(REDEEM_PENDING).equals(link.getRedeemStatus())) {
+            throw new ServiceException("核销码已使用或已作废");
+        }
+        return link;
+    }
+
+    private void markRedeemInviteRegisterSubmit(String token, String email) {
+        OshRedeemInviteLink update = new OshRedeemInviteLink();
+        update.setRegisterEmail(email);
+        update.setUpdateBy(0L);
+        update.setUpdateTime(LocalDateTime.now());
+        redeemInviteLinkMapper.update(update, new LambdaQueryWrapper<OshRedeemInviteLink>()
+                .eq(OshRedeemInviteLink::getLinkToken, token)
+                .eq(OshRedeemInviteLink::getDeleteFlag, (byte) 0));
+    }
+
+    private void markRedeemInviteRegistered(String token, Long userId, String email) {
+        OshRedeemInviteLink update = new OshRedeemInviteLink();
+        update.setRegisterEmail(email);
+        update.setRegisterUserId(userId);
+        update.setRegisterTime(LocalDateTime.now());
+        update.setUpdateBy(userId);
+        update.setUpdateTime(LocalDateTime.now());
+        redeemInviteLinkMapper.update(update, new LambdaQueryWrapper<OshRedeemInviteLink>()
+                .eq(OshRedeemInviteLink::getLinkToken, token)
+                .eq(OshRedeemInviteLink::getDeleteFlag, (byte) 0));
+    }
+
+    private void initUserToolQuotaIfAbsent(Long userId, String operator) {
+        ToolQuotaCurrentVO quota = oshToolQuotaMapper.selectUserQuotaByUserId(userId);
+        if (quota != null) {
+            return;
+        }
+        oshToolQuotaMapper.insertUserQuota(userId, DEFAULT_INIT_TOOL_QUOTA, operator);
     }
 
     /**

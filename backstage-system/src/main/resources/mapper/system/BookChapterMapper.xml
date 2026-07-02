@@ -13,28 +13,37 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="content" column="content" />
     </resultMap>
 
+    <resultMap type="com.backstage.system.domain.BookChapter" id="BookChapterResult" autoMapping="false">
+        <id property="id" column="id" />
+        <result property="bookId" column="book_id" />
+        <result property="title" column="title" />
+        <result property="content" column="content" />
+        <result property="chapterNo" column="chapter_no" />
+        <result property="sortOrder" column="sort_order" />
+        <result property="isFree" column="is_free" />
+    </resultMap>
+
     <sql id="selectBookChapterVo">
-        select id, book_id, title, content, chapter_no, sort_order, is_free, del_flag,
-               create_by, create_time, update_by, update_time, remark
+        select id, book_id, title, content, chapter_no, sort_order, is_free
         from osh_book_chapter
     </sql>
 
-    <select id="selectBookChapterByBookIdAndId" resultType="com.backstage.system.domain.BookChapter">
+    <select id="selectBookChapterByBookIdAndId" resultMap="BookChapterResult">
         <include refid="selectBookChapterVo"/>
-        where book_id = #{bookId} and id = #{id} and del_flag = '0'
+        where book_id = #{bookId} and id = #{id} and delete_flag = 0
     </select>
 
     <select id="selectBookChapterListByBookId" parameterType="Long" resultMap="BookChapterVOResult">
         select id, title, content, chapter_no, sort_order, is_free as isfree
         from osh_book_chapter
-        where book_id = #{bookId} and del_flag = '0'
+        where book_id = #{bookId} and delete_flag = 0
         order by sort_order asc, chapter_no asc
     </select>
 
     <select id="selectMaxChapterNoByBookId" resultType="java.lang.Integer">
         select max(chapter_no)
         from osh_book_chapter
-        where book_id = #{bookId} and del_flag = '0'
+        where book_id = #{bookId} and delete_flag = 0
     </select>
 
 </mapper>

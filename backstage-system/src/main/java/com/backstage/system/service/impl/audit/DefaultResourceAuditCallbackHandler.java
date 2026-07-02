@@ -8,6 +8,7 @@ import com.backstage.system.domain.user.OshUser;
 import com.backstage.system.domain.websocket.WsNotifyMessage;
 import com.backstage.system.mapper.audit.ResourceAuditMapper;
 import com.backstage.system.mapper.user.OshUserMapper;
+import com.backstage.system.service.audit.AuditAnnouncementPublisher;
 import com.backstage.system.service.audit.ResourceAuditCallbackContext;
 import com.backstage.system.service.audit.ResourceAuditCallbackHandler;
 import com.backstage.system.service.websocket.WebSocketNotifyService;
@@ -36,10 +37,12 @@ public class DefaultResourceAuditCallbackHandler implements ResourceAuditCallbac
     @Resource
     private WebSocketNotifyService webSocketNotifyService;
 
+    @Resource
+    private AuditAnnouncementPublisher auditAnnouncementPublisher;
+
     @Override
     public List<ResourceTypeEnum> resourceTypes() {
         return Arrays.asList(
-                ResourceTypeEnum.COURSE,
                 ResourceTypeEnum.QA_QUESTION,
                 ResourceTypeEnum.QA_ANSWER,
                 ResourceTypeEnum.BOOK,
@@ -50,15 +53,31 @@ public class DefaultResourceAuditCallbackHandler implements ResourceAuditCallbac
 
     @Override
     public void handle(ResourceAuditCallbackContext context) {
-        notifyResourceCreator(context.getResourceType(), context.getResourceId(), context.getResourceStatus());
+        handleAuditCallback(context.getResourceType(), context.getResourceId(), context.getResourceStatus());
     }
 
-    private void notifyResourceCreator(ResourceTypeEnum resourceType, Long resourceId, Integer resourceStatus) {
+    private void handleAuditCallback(ResourceTypeEnum resourceType, Long resourceId, Integer resourceStatus) {
         try {
             ResourceAuditItemVO resource = resourceAuditMapper.selectAuditNotifyItem(resourceType.getMysqlTableName(), resourceId);
-            if (resource == null || StringUtils.isEmpty(resource.getCreateBy())) {
+            if (resource == null) {
                 return;
             }
+            notifyResourceCreator(resourceType, resourceId, resourceStatus, resource);
+            publishAuditAnnouncement(resourceType, resourceId, resourceStatus, resource);
+        } catch (Exception ex) {
+            log.error("审核结果后置处理失败, resourceType={}, resourceId={}, error={}",
+                    resourceType.getType(), resourceId, ex.getMessage(), ex);
+        }
+    }
+
+    private void notifyResourceCreator(ResourceTypeEnum resourceType,
+                                       Long resourceId,
+                                       Integer resourceStatus,
+                                       ResourceAuditItemVO resource) {
+        if (StringUtils.isEmpty(resource.getCreateBy())) {
+            return;
+        }
+        try {
             Long targetUserId = parseTargetUserId(resource.getCreateBy());
             if (targetUserId == null) {
                 log.warn("审核通知跳过：无法解析资源创建人ID, resourceType={}, resourceId={}, createBy={}",
@@ -76,6 +95,14 @@ public class DefaultResourceAuditCallbackHandler implements ResourceAuditCallbac
             log.error("审核结果WebSocket通知失败, resourceType={}, resourceId={}, error={}",
                     resourceType.getType(), resourceId, ex.getMessage(), ex);
         }
+    }
+
+    private void publishAuditAnnouncement(ResourceTypeEnum resourceType,
+                                          Long resourceId,
+                                          Integer resourceStatus,
+                                          ResourceAuditItemVO resource) {
+        String resourceName = StringUtils.isEmpty(resource.getTitle()) ? String.valueOf(resourceId) : resource.getTitle();
+        auditAnnouncementPublisher.publishResult(resourceType, resourceId, resourceName, resourceStatus, "/audit");
     }
 
     private Long parseTargetUserId(String createBy) {

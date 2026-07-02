@@ -5,8 +5,12 @@ import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.S3ClientOptions;
 import com.amazonaws.services.s3.model.CopyObjectRequest;
 import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
+import com.amazonaws.services.s3.model.ListObjectsV2Request;
+import com.amazonaws.services.s3.model.ListObjectsV2Result;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
+import com.amazonaws.services.s3.model.S3Object;
+import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.backstage.common.config.OssProperties;
 import com.backstage.common.utils.ServletUtils;
 import com.backstage.common.utils.ip.IpUtils;
@@ -19,7 +23,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 
 @Component
@@ -49,6 +60,84 @@ public class OssUtil {
         s3.setEndpoint(ossProperties.getEndpoint());
         s3.setS3ClientOptions(S3ClientOptions.builder().setPathStyleAccess(true).build());
         return s3;
+    }
+
+    public boolean bucketExists(String bucketName) {
+        AmazonS3Client s3 = createS3Client();
+        return s3.doesBucketExistV2(bucketName);
+    }
+
+    public void ensureBucket(String bucketName) {
+        AmazonS3Client s3 = createS3Client();
+        if (!s3.doesBucketExistV2(bucketName)) {
+            s3.createBucket(bucketName);
+        }
+    }
+
+    public boolean objectExists(String bucketName, String fileName) {
+        AmazonS3Client s3 = createS3Client();
+        return s3.doesObjectExist(bucketName, fileName);
+    }
+
+    public ObjectMetadata getObjectMetadata(String bucketName, String fileName) {
+        AmazonS3Client s3 = createS3Client();
+        return s3.getObjectMetadata(bucketName, fileName);
+    }
+
+    public List<S3ObjectSummary> listObjects(String bucketName, String prefix, int limit) {
+        AmazonS3Client s3 = createS3Client();
+        List<S3ObjectSummary> summaries = new ArrayList<>();
+        String token = null;
+        int maxKeys = Math.max(1, Math.min(limit, 1000));
+        do {
+            ListObjectsV2Request request = new ListObjectsV2Request()
+                    .withBucketName(bucketName)
+                    .withPrefix(prefix == null ? "" : prefix)
+                    .withMaxKeys(Math.min(maxKeys, limit - summaries.size()))
+                    .withContinuationToken(token);
+            ListObjectsV2Result result = s3.listObjectsV2(request);
+            summaries.addAll(result.getObjectSummaries());
+            token = result.getNextContinuationToken();
+        } while (token != null && summaries.size() < limit);
+        if (summaries.size() > limit) {
+            return summaries.subList(0, limit);
+        }
+        return summaries;
+    }
+
+    public void copyObject(String sourceBucket, String sourceKey, String targetBucket, String targetKey) {
+        AmazonS3Client s3 = createS3Client();
+        CopyObjectRequest request = new CopyObjectRequest(sourceBucket, sourceKey, targetBucket, targetKey);
+        s3.copyObject(request);
+    }
+
+    public void downloadObject(String bucketName, String objectKey, File targetFile) throws Exception {
+        AmazonS3Client s3 = createS3Client();
+        S3Object object = s3.getObject(bucketName, objectKey);
+        try {
+            InputStream input = object.getObjectContent();
+            Files.copy(input, targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        } finally {
+            object.close();
+        }
+    }
+
+    public void uploadObject(String bucketName, String objectKey, File sourceFile, String contentType) throws Exception {
+        AmazonS3Client s3 = createS3Client();
+        ObjectMetadata metadata = new ObjectMetadata();
+        metadata.setContentLength(sourceFile.length());
+        if (contentType != null && !contentType.trim().isEmpty()) {
+            metadata.setContentType(contentType);
+        }
+        try (FileInputStream input = new FileInputStream(sourceFile)) {
+            PutObjectRequest request = new PutObjectRequest(bucketName, objectKey, input, metadata);
+            s3.putObject(request);
+        }
+    }
+
+    public void deleteObject(String bucketName, String objectKey) {
+        AmazonS3Client s3 = createS3Client();
+        s3.deleteObject(bucketName, objectKey);
     }
 
     // 上传文件默认配置路径
@@ -162,6 +251,10 @@ public class OssUtil {
 
     // 获取文件签名URL
     public String getSignedUrl(String fileKey, int expireMinutes) {
+        return getSignedUrl(ossProperties.getBucketName(), fileKey, expireMinutes);
+    }
+
+    public String getSignedUrl(String bucketName, String fileKey, int expireMinutes) {
         AmazonS3Client s3 = createS3Client();
 
         // 过期时间 分钟*60*1000 毫秒
@@ -177,7 +270,7 @@ public class OssUtil {
         }
 
         GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(
-                ossProperties.getBucketName(),
+                bucketName,
                 decodedKey
         ).withExpiration(expiration);
 

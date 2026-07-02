@@ -22,7 +22,7 @@ public interface OshOpenProjectResourceSearchMapper {
     @Select("<script>" +
             "SELECT id, 'book' AS resourceType, title AS resourceName, CONCAT('/detail/book/', id) AS resourceUrl " +
             "FROM osh_book " +
-            "WHERE del_flag = '0' AND status = '0' " +
+            "WHERE delete_flag = 0 AND status = '0' " +
             "<if test='keyword != null and keyword != \"\"'>AND title LIKE CONCAT('%', #{keyword}, '%') </if>" +
             "ORDER BY update_time DESC, id DESC LIMIT #{limit}" +
             "</script>")
@@ -42,7 +42,7 @@ public interface OshOpenProjectResourceSearchMapper {
     OpenProjectResourceOptionVO selectCourseById(@Param("id") Long id);
 
     @Select("SELECT id, 'book' AS resourceType, title AS resourceName, CONCAT('/detail/book/', id) AS resourceUrl " +
-            "FROM osh_book WHERE id = #{id} AND del_flag = '0' AND status = '0' LIMIT 1")
+            "FROM osh_book WHERE id = #{id} AND delete_flag = 0 AND status = '0' LIMIT 1")
     OpenProjectResourceOptionVO selectBookById(@Param("id") Long id);
 
     @Select("SELECT id, 'tool' AS resourceType, tool_name AS resourceName, CONCAT('/tool?toolId=', id, '&amp;autoOpen=1') AS resourceUrl " +

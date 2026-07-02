@@ -44,6 +44,36 @@ public class BookDetailVO implements Serializable
     /** 权限等级 */
     private Integer level;
 
+    /** Book media type: 1 ebook, 2 comic. */
+    private Integer mediaType;
+
+    /** 状态：0正常，1下架 */
+    private String status;
+
+    /** 逻辑删除：0正常，1删除 */
+    private Integer deleteFlag;
+
+    /** 作者用户ID */
+    private Long authorUserId;
+
+    /** 作者用户名 */
+    private String authorName;
+
+    /** 作者头像 */
+    private String authorAvatar;
+
+    /** 作者个人简介 */
+    private String authorIntroduction;
+
+    /** 作者最高角色名称 */
+    private String authorRoleName;
+
+    /** 作者最高角色等级 */
+    private Integer authorRoleLevel;
+
+    /** 作者 GitHub 账号，用于用户名片兼容匹配 */
+    private String authorGithubAccount;
+
     /** 章节列表 */
     @JsonProperty("book_details")
     private List<BookChapterVO> bookDetails;
@@ -147,6 +177,86 @@ public class BookDetailVO implements Serializable
     public void setLevel(Integer level)
     {
         this.level = level;
+    }
+
+    public Integer getMediaType() {
+        return mediaType;
+    }
+
+    public void setMediaType(Integer mediaType) {
+        this.mediaType = mediaType;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public Integer getDeleteFlag() {
+        return deleteFlag;
+    }
+
+    public void setDeleteFlag(Integer deleteFlag) {
+        this.deleteFlag = deleteFlag;
+    }
+
+    public Long getAuthorUserId() {
+        return authorUserId;
+    }
+
+    public void setAuthorUserId(Long authorUserId) {
+        this.authorUserId = authorUserId;
+    }
+
+    public String getAuthorName() {
+        return authorName;
+    }
+
+    public void setAuthorName(String authorName) {
+        this.authorName = authorName;
+    }
+
+    public String getAuthorAvatar() {
+        return authorAvatar;
+    }
+
+    public void setAuthorAvatar(String authorAvatar) {
+        this.authorAvatar = authorAvatar;
+    }
+
+    public String getAuthorIntroduction() {
+        return authorIntroduction;
+    }
+
+    public void setAuthorIntroduction(String authorIntroduction) {
+        this.authorIntroduction = authorIntroduction;
+    }
+
+    public String getAuthorRoleName() {
+        return authorRoleName;
+    }
+
+    public void setAuthorRoleName(String authorRoleName) {
+        this.authorRoleName = authorRoleName;
+    }
+
+    public Integer getAuthorRoleLevel() {
+        return authorRoleLevel;
+    }
+
+    public void setAuthorRoleLevel(Integer authorRoleLevel) {
+        this.authorRoleLevel = authorRoleLevel;
+    }
+
+    public String getAuthorGithubAccount() {
+        return authorGithubAccount;
+    }
+
+    public void setAuthorGithubAccount(String authorGithubAccount) {
+        this.authorGithubAccount = authorGithubAccount;
     }
 
     public List<BookChapterVO> getBookDetails()

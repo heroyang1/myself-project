@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.backstage.system.mapper.redeem.OshRedeemInviteLinkMapper">
+
+    <resultMap id="RedeemInviteLinkVOResult" type="com.backstage.system.domain.redeem.vo.RedeemInviteLinkVO">
+        <id property="id" column="id"/>
+        <result property="redeemCodeId" column="redeem_code_id"/>
+        <result property="linkToken" column="link_token"/>
+        <result property="code" column="code"/>
+        <result property="inviteCode" column="invite_code"/>
+        <result property="inviterId" column="inviter_id"/>
+        <result property="resourceType" column="resource_type"/>
+        <result property="productName" column="product_name"/>
+        <result property="amount" column="amount"/>
+        <result property="channelName" column="channel_name"/>
+        <result property="linkStatus" column="link_status"/>
+        <result property="redeemStatus" column="redeem_status"/>
+        <result property="expireTime" column="expire_time"/>
+    </resultMap>
+
+    <select id="selectByToken" resultMap="RedeemInviteLinkVOResult">
+        select
+            ril.id,
+            ril.redeem_code_id,
+            ril.link_token,
+            ril.invite_code,
+            ril.inviter_id,
+            ril.status as link_status,
+            ril.expire_time,
+            rc.code,
+            rc.resource_type,
+            rc.product_name,
+            rc.amount,
+            rc.channel_name,
+            rc.status as redeem_status
+        from osh_redeem_invite_link ril
+        inner join osh_redeem_code rc on rc.id = ril.redeem_code_id and rc.delete_flag = 0
+        where ril.link_token = #{token}
+          and ril.delete_flag = 0
+        limit 1
+    </select>
+</mapper>

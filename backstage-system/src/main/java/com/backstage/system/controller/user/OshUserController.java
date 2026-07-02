@@ -2,6 +2,7 @@ package com.backstage.system.controller.user;
 
 import com.backstage.common.annotation.Anonymous;
 import com.backstage.common.annotation.OshUserEvent;
+import com.backstage.common.annotation.OshUserLevel;
 import com.backstage.common.core.controller.BaseController;
 import com.backstage.common.core.domain.R;
 import com.backstage.system.domain.user.OshUser;
@@ -54,7 +55,8 @@ public class OshUserController extends BaseController {
     public R<String> registerSubmit(
             @ApiParam("网校 appid") @RequestHeader(value = "appid", required = false) String appid,
             @RequestBody UserRegisterDTO userRegisterDTO) throws MessagingException {
-        return userService.registerSubmit(userRegisterDTO.getUsername(),userRegisterDTO.getPassword(),userRegisterDTO.getRepassword(),userRegisterDTO.getEmail(),userRegisterDTO.getInviteCode());
+        return userService.registerSubmit(userRegisterDTO.getUsername(), userRegisterDTO.getPassword(), userRegisterDTO.getRepassword(),
+                userRegisterDTO.getEmail(), userRegisterDTO.getInviteCode(), userRegisterDTO.getRedeemInviteToken());
     }
 
     @ApiOperation("账号注册")
@@ -147,7 +149,7 @@ public class OshUserController extends BaseController {
 
     @ApiOperation("获取用户名片")
     @GetMapping("/card")
-    @Anonymous
+    @OshUserLevel(value = 4)
     public R<?> getUserCard(
             @ApiParam("网校 appid") @RequestHeader(value = "appid", required = false) String appid,
             @RequestParam(value = "userId", required = false) Long userId,
