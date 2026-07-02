@@ -40,15 +40,16 @@ public interface OshGroupServerMapper {
      * @return 拼团活动
      */
     OshGroupActivity selectGroupActivityById(@Param("id") Long id);
-    
+
     /**
-     * 查询我的拼团列表
-     * 
-     * @param userId 用户ID
-     * @param groupStatus 组团状态筛选（可选）
-     * @return 我的拼团列表
+     * 查询我加入的拼团列表（性能优化拆分版）
      */
-    List<MyGroupListVO> selectMyGroupList(@Param("userId") Long userId, @Param("groupStatus") Integer groupStatus);
+    List<MyGroupListVO> selectMyJoinedGroupList(@Param("userId") Long userId, @Param("groupStatus") Integer groupStatus);
+
+    /**
+     * 查询我发起的拼团列表（性能优化拆分版）
+     */
+    List<MyGroupListVO> selectMyInitiatedGroupList(@Param("userId") Long userId, @Param("groupStatus") Integer groupStatus);
     
     /**
      * 查询拼团详情
@@ -244,7 +245,7 @@ public interface OshGroupServerMapper {
      * @return 影响行数
      */
     int insertGroupPayment(@Param("paymentNo") String paymentNo, @Param("orderNo") String orderNo, 
-                           @Param("orderId") Long orderId, @Param("amount") BigDecimal amount, @Param("clientIp") String clientIp);
+                           @Param("orderId") Long orderId, @Param("amount") BigDecimal amount, @Param("requestPayload") String requestPayload);
 
     /**
      * 校验支付流水是否已存在（按 payment_no，仅统计未逻辑删除的记录）
@@ -254,6 +255,15 @@ public interface OshGroupServerMapper {
      * @return 已存在的未删除记录数
      */
     int existsPaymentByPaymentNo(@Param("paymentNo") String paymentNo);
+
+    /**
+     * 回写订单的 group_work_id（订单创建时 work 尚未生成，插入后再更新）
+     *
+     * @param orderId     订单ID
+     * @param groupWorkId 参团记录ID
+     * @return 影响行数
+     */
+    int updateOrderGroupWorkId(@Param("orderId") Long orderId, @Param("groupWorkId") Long groupWorkId);
 
     // ==================== 定时任务 + 安全校验相关方法 ====================
 
@@ -359,4 +369,27 @@ public interface OshGroupServerMapper {
      * @return 影响行数
      */
     int updateGroupActivityStatus(@Param("id") Long id, @Param("status") Integer status, @Param("updateTime") LocalDateTime updateTime);
+
+    /**
+     * 原子递减活动 current_num（订单取消时释放名额）
+     *
+     * @param id 活动ID
+     * @return 影响行数
+     */
+    int decrementActivityCurrentNum(@Param("id") Long id);
+
+    /**
+     * 批量更新指定活动下所有进行中的 work 记录为已成团，并设置服务器时间
+     *
+     * @param activityId      活动ID（osh_group_work.group_activity_id）
+     * @param groupStatus     目标状态
+     * @param serverStartTime 服务器开始时间
+     * @param serverExpireTime 服务器到期时间
+     * @return 影响行数
+     */
+    int batchUpdateWorkStatusByActivity(
+            @Param("activityId") Long activityId,
+            @Param("groupStatus") Integer groupStatus,
+            @Param("serverStartTime") LocalDateTime serverStartTime,
+            @Param("serverExpireTime") LocalDateTime serverExpireTime);
 }

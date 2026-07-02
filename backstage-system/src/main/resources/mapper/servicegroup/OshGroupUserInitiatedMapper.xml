@@ -275,4 +275,24 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
           AND delete_flag = 0
     </select>
 
+    <!-- 原子递增用户发起拼团的 current_num（CAS 模式，防超卖） -->
+    <update id="incrementCurrentNumAtomic">
+        UPDATE osh_group_user_initiated
+        SET current_num = current_num + 1,
+            update_time = NOW()
+        WHERE id = #{id}
+          AND current_num &lt; max_num
+          AND delete_flag = 0
+    </update>
+
+    <!-- 批量更新用户发起拼团下所有已支付的参团记录的状态和服务器时间 -->
+    <update id="batchUpdateWorkStatusByInitiatedId">
+        UPDATE osh_group_work
+        SET group_status = #{groupStatus},
+            server_start_time = #{serverStartTime},
+            server_expire_time = #{serverExpireTime}
+        WHERE group_activity_id = #{initiatedId}
+          AND group_status = 1
+    </update>
+
 </mapper>

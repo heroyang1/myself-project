@@ -12,6 +12,7 @@ import com.backstage.system.domain.vo.UserInitiatedActivityListVO;
 import com.backstage.system.domain.vo.UserSearchVO;
 import com.backstage.system.domain.vo.group.JoinGroupVO;
 import com.backstage.system.domain.vo.group.ServerTutorialVO;
+import com.backstage.system.domain.vo.group.SharePosterVO;
 
 import java.util.HashMap;
 import java.util.List;
@@ -75,6 +76,16 @@ public interface IOshGroupServerService {
      * @return 拼团详情
      */
     GroupDetailVO selectGroupDetailByInitiatedId(Long initiatedId, Long userId);
+
+    /**
+     * 查询拼团详情（双数据源回退）
+     * 先查 osh_group_user_initiated，未找到则回退到 osh_group_activity
+     *
+     * @param activityId 拼团活动ID或用户发起记录ID
+     * @param userId 当前用户ID（可为null）
+     * @return 拼团详情
+     */
+    GroupDetailVO selectGroupDetailWithFallback(Long activityId, Long userId);
     
     /**
      * 参与拼团
@@ -247,4 +258,22 @@ public interface IOshGroupServerService {
      * @return 是否为订单所有者
      */
     boolean checkOrderOwnership(String orderNo, Long userId);
+
+    /**
+     * 获取分享海报数据（系统活动）
+     *
+     * @param activityId 活动ID
+     * @param userId     当前用户ID（用于生成邀请码）
+     * @return 分享海报数据
+     */
+    SharePosterVO getSharePosterData(Long activityId, Long userId);
+
+    /**
+     * 获取分享海报数据（用户发起拼团）
+     *
+     * @param initiatedId 用户发起拼团ID
+     * @param userId      当前用户ID
+     * @return 分享海报数据
+     */
+    SharePosterVO getSharePosterDataByInitiated(Long initiatedId, Long userId);
 }

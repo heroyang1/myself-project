@@ -95,7 +95,6 @@ public class OshGroupServerController extends BaseController {
      * @param type 类型筛选（可选）
      * @return 用户发起拼团活动列表
      */
-    @Anonymous
     @ApiOperation("查询用户发起拼团列表")
     @GetMapping("/activity/initiated/list")
     public TableDataInfo initiatedList(
@@ -160,8 +159,8 @@ public class OshGroupServerController extends BaseController {
         
         GroupDetailVO detail;
         if (activityId != null) {
-            // 从用户发起记录查询
-            detail = groupServerService.selectGroupDetailByInitiatedId(activityId, userId);
+            // 双数据源策略：先查用户发起记录，未找到则回退到系统活动模板
+            detail = groupServerService.selectGroupDetailWithFallback(activityId, userId);
         }  else {
             return R.fail("拼团id为空");
         }
@@ -182,6 +181,7 @@ public class OshGroupServerController extends BaseController {
      * @return 参团结果（包含订单号、支付状态等）
      */
     @ApiOperation("参与拼团")
+    @RateLimiter(count = 5, time = 60)
     @PostMapping("/work/join")
     public R<com.backstage.system.domain.vo.group.JoinGroupVO> join(
             @ApiParam("拼团记录ID或活动模板ID") @RequestParam(value = "activityId") Long activityId,
@@ -351,6 +351,7 @@ public class OshGroupServerController extends BaseController {
      * @return 支付二维码链接
      */
     @ApiOperation("拼团订单支付")
+    @RateLimiter(count = 5, time = 60)
     @PostMapping("/work/pay")
     public R<PayResponse> pay(
             @ApiParam("订单号") @RequestParam(value = "orderNo") String orderNo,
@@ -446,6 +447,13 @@ public class OshGroupServerController extends BaseController {
             result.put("payableAmount", order.getPayableAmount());
             result.put("productName", order.getProductName());
             
+            // 支付倒计时（待支付订单：创建后30分钟内需完成支付）
+            if (order.getStatus() != null && order.getStatus() == OrderStatusEnum.PENDING.getCode() && order.getCreatedTime() != null) {
+                long elapsedSeconds = java.time.Duration.between(order.getCreatedTime(), java.time.LocalDateTime.now()).getSeconds();
+                long countdownSeconds = Math.max(30 * 60 - elapsedSeconds, 0);
+                result.put("countdownSeconds", countdownSeconds);
+            }
+            
             return R.ok(result, "查询成功");
         } catch (Exception e) {
             logger.error("查询订单状态失败", e);
@@ -533,6 +541,46 @@ public class OshGroupServerController extends BaseController {
         } catch (Exception e) {
             logger.error("获取服务器SSH信息失败", e);
             return R.fail("获取服务器信息失败，请稍后重试");
+        }
+    }
+
+    // ==================== 分享海报接口 ====================
+
+    /**
+     * 获取系统活动分享海报数据
+     */
+    @GetMapping("/share/poster")
+    public R<com.backstage.system.domain.vo.group.SharePosterVO> getSharePoster(@RequestParam("activityId") Long activityId) {
+        try {
+            Long userId = getUserId();
+            if (userId == null) {
+                return R.fail("请先登录");
+            }
+            com.backstage.system.domain.vo.group.SharePosterVO poster =
+                groupServerService.getSharePosterData(activityId, userId);
+            return R.ok(poster, "获取成功");
+        } catch (Exception e) {
+            logger.error("获取分享海报数据失败, activityId={}", activityId, e);
+            return R.fail("获取分享海报数据失败");
+        }
+    }
+
+    /**
+     * 获取用户发起拼团分享海报数据
+     */
+    @GetMapping("/share/poster/initiated")
+    public R<com.backstage.system.domain.vo.group.SharePosterVO> getSharePosterInitiated(@RequestParam("initiatedId") Long initiatedId) {
+        try {
+            Long userId = getUserId();
+            if (userId == null) {
+                return R.fail("请先登录");
+            }
+            com.backstage.system.domain.vo.group.SharePosterVO poster =
+                groupServerService.getSharePosterDataByInitiated(initiatedId, userId);
+            return R.ok(poster, "获取成功");
+        } catch (Exception e) {
+            logger.error("获取分享海报数据失败, initiatedId={}", initiatedId, e);
+            return R.fail("获取分享海报数据失败");
         }
     }
 }
