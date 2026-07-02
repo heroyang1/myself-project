@@ -49,4 +49,7 @@ public interface BookMapper extends BaseMapper<BookDO> {
 
     @Update("update osh_book set delete_flag = 0, update_time = now() where id = #{id} and delete_flag = 1")
     int restoreById(@Param("id") Long id);
+
+    @Update("update osh_book set sub_count = ifnull(sub_count, 0) + 1 where id = #{id} and delete_flag = 0")
+    int incrementReadCount(@Param("id") Long id);
 }

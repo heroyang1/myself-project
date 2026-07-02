@@ -35,4 +35,6 @@ public interface UserBookRelationMapper extends BaseMapper<UserBookRelation>
                         @Param("purchasePrice") BigDecimal purchasePrice,
                         @Param("orderNo") String orderNo,
                         @Param("operator") String operator);
+
+    Integer countFavoritedByBookId(@Param("bookId") Long bookId);
 }

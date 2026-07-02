@@ -47,4 +47,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             delete_flag = 0
     </insert>
 
+    <select id="countFavoritedByBookId" resultType="java.lang.Integer">
+        select count(1)
+        from osh_user_book_relation
+        where book_id = #{bookId}
+          and favorited = 1
+          and deleted = 0
+          and delete_flag = 0
+    </select>
+
 </mapper>

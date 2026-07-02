@@ -13,8 +13,10 @@ import com.backstage.common.utils.email.EmailUtil;
 import com.backstage.system.domain.user.OshUser;
 import com.backstage.system.domain.user.OshRole;
 import com.backstage.system.domain.user.OshUserAsset;
+import com.backstage.system.domain.user.OshUserInvitation;
 import com.backstage.system.mapper.user.OshRoleMapper;
 import com.backstage.system.mapper.user.OshUserAssetMapper;
+import com.backstage.system.mapper.user.OshUserInvitationMapper;
 import com.backstage.system.mapper.user.OshUserMapper;
 import com.backstage.system.mapper.user.UserManageMapper;
 import com.backstage.system.utils.UserContextUtil;
@@ -27,6 +29,7 @@ import javax.naming.directory.Attributes;
 import javax.naming.directory.InitialDirContext;
 import javax.servlet.http.HttpServletRequest;
 import java.net.URL;
+import java.time.LocalDateTime;
 
 import javax.annotation.Resource;
 import java.util.*;
@@ -61,6 +64,8 @@ public class AdminInviteController {
     private OshRoleMapper oshRoleMapper;
     @Resource
     private EmailUtil emailUtil;
+    @Resource
+    private OshUserInvitationMapper oshUserInvitationMapper;
 
     /**
      * 创建用户邀请（创始人专属）
@@ -440,6 +445,8 @@ public class AdminInviteController {
         oshUserAsset.setUserId(userId);
         oshUserAssetMapper.insert(oshUserAsset);
 
+        recordInviteRelation(operatorId, userId);
+
         // 删除 Redis 邀请数据
         redisCache.deleteObject(INVITE_KEY_PREFIX + token);
         redisCache.deleteObject(INVITE_EMAIL_KEY_PREFIX + normalizeEmail(email));
@@ -456,6 +463,26 @@ public class AdminInviteController {
         return R.ok("注册成功");
     }
 
+    private void recordInviteRelation(Long inviterId, Long inviteeId) {
+        if (inviterId == null || inviteeId == null) {
+            return;
+        }
+        OshUser inviter = oshUserMapper.selectById(inviterId);
+        String inviteCode = inviter == null ? null : inviter.getInviteCode();
+        if (StringUtils.isEmpty(inviteCode)) {
+            inviteCode = "ADMIN_INVITE";
+        }
+        try {
+            OshUserInvitation invitation = new OshUserInvitation();
+            invitation.setInviterId(inviterId);
+            invitation.setInviteeId(inviteeId);
+            invitation.setInviteCode(inviteCode);
+            invitation.setCreateTime(LocalDateTime.now());
+            oshUserInvitationMapper.insertInvitation(invitation);
+        } catch (Exception e) {
+            log.warn("记录管理员邀请关系失败, inviterId={}, inviteeId={}", inviterId, inviteeId, e);
+        }
+    }
     /**
      * 查询可邀请的角色列表（level 2~5）
      */
