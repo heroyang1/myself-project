@@ -4,6 +4,16 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.backstage.system.mapper.questionanswer.OshQATagMapper">
 
+    <insert id="addQuestionTags">
+        insert into osh_question_answer_question_tag (question_id, tag_id, create_time, create_by, update_time, update_by)
+        values (#{questionId}, #{tagId}, now(), #{createBy}, now(), #{createBy})
+    </insert>
+
+    <delete id="deleteQuestionTags">
+        delete from osh_question_answer_question_tag
+        where question_id = #{questionId}
+    </delete>
+
     <select id="selectTagIdsByQuestionId" resultType="java.lang.Long">
         select tag_id from osh_question_answer_question_tag where question_id = #{questionId}
     </select>

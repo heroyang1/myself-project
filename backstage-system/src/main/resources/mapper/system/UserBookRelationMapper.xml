@@ -16,7 +16,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         select b.id, b.title, b.cover, b.description
         from osh_user_book_relation ubr
         left join osh_book b on ubr.book_id = b.id
-        where ubr.user_id = #{userId} and ubr.purchased = 1 and ubr.deleted = 0 and b.del_flag = '0'
+        where ubr.user_id = #{userId} and ubr.purchased = 1 and ubr.deleted = 0 and b.delete_flag = 0
         order by ubr.pay_time desc
     </select>
 
@@ -24,8 +24,36 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         select b.id, b.title, b.cover, b.description
         from osh_user_book_relation ubr
         left join osh_book b on ubr.book_id = b.id
-        where ubr.user_id = #{userId} and ubr.purchased = 1 and ubr.deleted = 0 and b.del_flag = '0'
+        where ubr.user_id = #{userId} and ubr.purchased = 1 and ubr.deleted = 0 and b.delete_flag = 0
         order by ubr.pay_time desc
+    </select>
+
+    <insert id="upsertPurchased">
+        insert into osh_user_book_relation (
+            user_id, book_id, favorited, followed, purchased, purchase_price, order_no, pay_time,
+            create_by, create_time, update_by, update_time, remark, deleted, delete_flag
+        ) values (
+            #{userId}, #{bookId}, 0, 0, 1, #{purchasePrice}, #{orderNo}, now(),
+            #{operator}, now(), #{operator}, now(), null, 0, 0
+        )
+        on duplicate key update
+            purchased = 1,
+            purchase_price = values(purchase_price),
+            order_no = values(order_no),
+            pay_time = values(pay_time),
+            update_by = values(update_by),
+            update_time = now(),
+            deleted = 0,
+            delete_flag = 0
+    </insert>
+
+    <select id="countFavoritedByBookId" resultType="java.lang.Integer">
+        select count(1)
+        from osh_user_book_relation
+        where book_id = #{bookId}
+          and favorited = 1
+          and deleted = 0
+          and delete_flag = 0
     </select>
 
 </mapper>

@@ -22,7 +22,7 @@ public interface OshAnnouncementMapper {
      * @param channel 栏目：1-公告 2-动态
      * @param limit   返回条数上限
      */
-    @Select("SELECT id, title, icon_code AS icon, channel, resource_type AS resourceType, " +
+    @Select("SELECT id, title, link, icon_code AS icon, channel, resource_type AS resourceType, " +
             "resource_id AS resourceId, create_time AS createTime " +
             "FROM osh_announcement " +
             "WHERE delete_flag = 0 AND status = 4 AND resource_type = #{module} AND channel = #{channel} " +
@@ -52,6 +52,23 @@ public interface OshAnnouncementMapper {
                                   @Param("resourceId") Long resourceId,
                                   @Param("sort") int sort,
                                   @Param("channel") int channel);
+
+    /**
+     * 插入一条审核模块公告记录，供各资源审核通过后展示在审核页公告栏。
+     */
+    @Insert("INSERT INTO osh_announcement " +
+            "(title, link, icon_code, channel, resource_type, resource_id, " +
+            " sort, status, source, source_module, delete_flag, create_by, create_time, update_by, update_time) " +
+            "VALUES " +
+            "(#{title}, #{link}, #{icon}, #{channel}, #{resourceType}, #{resourceId}, " +
+            " 0, 4, 'system', 'audit', 0, #{operator}, NOW(), #{operator}, NOW())")
+    int insertAuditAnnouncement(@Param("title") String title,
+                                @Param("link") String link,
+                                @Param("icon") String icon,
+                                @Param("resourceType") String resourceType,
+                                @Param("resourceId") Long resourceId,
+                                @Param("channel") int channel,
+                                @Param("operator") String operator);
 
     /**
      * 查询秒杀公告栏（channel=1），按 sort 降序、create_time 降序
@@ -118,6 +135,23 @@ public interface OshAnnouncementMapper {
                                   @Param("channel") int channel);
 
     /**
+     * 插入一条电子书模块公告或动态记录。
+     */
+    @Insert("INSERT INTO osh_announcement " +
+            "(title, link, icon_code, status, channel, resource_type, resource_id, " +
+            " sort, delete_flag, source, source_module, create_by, create_time, update_by, update_time) " +
+            "VALUES " +
+            "(#{title}, #{link}, #{iconCode}, 4, #{channel}, 'book', #{resourceId}, " +
+            " #{sort}, 0, 'system', 'book', #{operator}, NOW(), #{operator}, NOW())")
+    int insertBookAnnouncement(@Param("title") String title,
+                               @Param("link") String link,
+                               @Param("iconCode") String iconCode,
+                               @Param("channel") int channel,
+                               @Param("resourceId") Long resourceId,
+                               @Param("sort") int sort,
+                               @Param("operator") String operator);
+
+    /**
      * 查询实用网站公告栏（channel=1），按 sort 降序、create_time 降序
      */
     @Select("SELECT id, title, link, icon_code AS icon, channel, resource_type AS resourceType, " +
@@ -148,6 +182,25 @@ public interface OshAnnouncementMapper {
     int countWebsiteAnnouncementByResourceAndTitle(@Param("resourceId") Long resourceId,
                                                    @Param("title") String title,
                                                    @Param("channel") int channel);
+
+    // ==================== 反馈公告/动态 ====================
+
+    /**
+     * 插入一条反馈状态公告记录
+     */
+    @Insert("INSERT INTO osh_announcement " +
+            "(title, link, icon_code, status, channel, resource_type, resource_id, " +
+            " sort, delete_flag, source, source_module, create_by, create_time, update_by, update_time) " +
+            "VALUES " +
+            "(#{title}, #{link}, #{iconCode}, 4, #{channel}, 'feedback', #{resourceId}, " +
+            " #{sort}, 0, 'system', 'feedback', #{operator}, NOW(), #{operator}, NOW())")
+    int insertFeedbackAnnouncement(@Param("title") String title,
+                                   @Param("link") String link,
+                                   @Param("iconCode") String iconCode,
+                                   @Param("channel") int channel,
+                                   @Param("resourceId") Long resourceId,
+                                   @Param("sort") int sort,
+                                   @Param("operator") String operator);
 
     // ==================== 首页公告栏按资源类型查询 ====================
 

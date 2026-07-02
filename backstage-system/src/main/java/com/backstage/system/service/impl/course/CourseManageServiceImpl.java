@@ -40,8 +40,15 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.backstage.common.utils.file.ImageUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.URI;
 import java.util.*;
 
 /**
@@ -2276,13 +2283,192 @@ public class CourseManageServiceImpl implements ICourseManageService {
     }
 
     @Override
+    public Map<String, Object> importRemoteImage(String url) {
+        String normalizedUrl = normalizeRemoteImageUrl(url);
+        byte[] bytes = ImageUtils.readFile(normalizedUrl);
+        if (bytes == null || bytes.length == 0) {
+            throw new ServiceException("下载图片失败：内容为空");
+        }
+        if (bytes.length > CourseUploadConstants.MAX_IMAGE_SIZE) {
+            throw new ServiceException(CourseUploadConstants.IMAGE_SIZE_ERROR);
+        }
+
+        String fileName = extractRemoteImageFileName(normalizedUrl);
+        String contentType = guessRemoteImageContentType(bytes, fileName);
+        MultipartFile file = new ByteArrayMultipartFile(bytes, fileName, contentType);
+        return uploadCourseCover(file, fileName);
+    }
+
+    private String normalizeRemoteImageUrl(String url) {
+        if (StringUtils.isEmpty(url)) {
+            throw new ServiceException("图片地址不能为空");
+        }
+        String value = url.trim();
+        if (value.startsWith("//")) {
+            value = "https:" + value;
+        }
+        if (!value.startsWith("http://") && !value.startsWith("https://")) {
+            throw new ServiceException("仅支持 http/https 图片地址");
+        }
+        validateRemoteImageHost(value);
+        return value;
+    }
+
+    private void validateRemoteImageHost(String url) {
+        try {
+            URI uri = new URI(url);
+            String host = uri.getHost();
+            if (StringUtils.isEmpty(host)) {
+                throw new ServiceException("无效的图片地址");
+            }
+            if ("localhost".equalsIgnoreCase(host) || host.endsWith(".local")) {
+                throw new ServiceException("不允许访问内网地址");
+            }
+            InetAddress[] addresses = InetAddress.getAllByName(host);
+            for (InetAddress address : addresses) {
+                if (address.isAnyLocalAddress()
+                        || address.isLoopbackAddress()
+                        || address.isLinkLocalAddress()
+                        || address.isSiteLocalAddress()) {
+                    throw new ServiceException("不允许访问内网地址");
+                }
+            }
+        } catch (ServiceException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ServiceException("无效的图片地址");
+        }
+    }
+
+    private String extractRemoteImageFileName(String url) {
+        String path = url;
+        int queryIdx = path.indexOf('?');
+        if (queryIdx >= 0) {
+            path = path.substring(0, queryIdx);
+        }
+        int slashIdx = path.lastIndexOf('/');
+        String fileName = slashIdx >= 0 ? path.substring(slashIdx + 1) : "remote-image.jpg";
+        if (!fileName.contains(".")) {
+            fileName = fileName + ".jpg";
+        }
+        return fileName;
+    }
+
+    private String guessRemoteImageContentType(byte[] bytes, String fileName) {
+        if (bytes.length >= 3 && bytes[0] == (byte) 0xFF && bytes[1] == (byte) 0xD8) {
+            return "image/jpeg";
+        }
+        if (bytes.length >= 8
+                && bytes[0] == (byte) 0x89
+                && bytes[1] == 0x50
+                && bytes[2] == 0x4E
+                && bytes[3] == 0x47) {
+            return "image/png";
+        }
+        if (bytes.length >= 3 && "GIF".equals(new String(bytes, 0, 3))) {
+            return "image/gif";
+        }
+        if (fileName.toLowerCase().endsWith(".png")) {
+            return "image/png";
+        }
+        if (fileName.toLowerCase().endsWith(".gif")) {
+            return "image/gif";
+        }
+        if (fileName.toLowerCase().endsWith(".bmp")) {
+            return "image/bmp";
+        }
+        return "image/jpeg";
+    }
+
+    private static final class ByteArrayMultipartFile implements MultipartFile {
+        private final byte[] content;
+        private final String originalFilename;
+        private final String contentType;
+
+        private ByteArrayMultipartFile(byte[] content, String originalFilename, String contentType) {
+            this.content = content != null ? content : new byte[0];
+            this.originalFilename = originalFilename;
+            this.contentType = contentType;
+        }
+
+        @Override
+        public String getName() {
+            return "file";
+        }
+
+        @Override
+        public String getOriginalFilename() {
+            return originalFilename;
+        }
+
+        @Override
+        public String getContentType() {
+            return contentType;
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return content.length == 0;
+        }
+
+        @Override
+        public long getSize() {
+            return content.length;
+        }
+
+        @Override
+        public byte[] getBytes() {
+            return content;
+        }
+
+        @Override
+        public InputStream getInputStream() {
+            return new ByteArrayInputStream(content);
+        }
+
+        @Override
+        public void transferTo(File dest) throws IOException {
+            throw new IOException("transferTo is not supported");
+        }
+    }
+
+    @Override
+    public void deleteContentImages(List<String> paths) {
+        if (paths == null || paths.isEmpty()) {
+            return;
+        }
+        for (String path : paths) {
+            if (StringUtils.isEmpty(path)) {
+                continue;
+            }
+            String normalized = path.trim();
+            if (!normalized.contains("common/image/courseCover/")) {
+                log.warn("跳过非法课程内容图片删除路径: {}", normalized);
+                continue;
+            }
+            String objectKey = normalized.startsWith("/") ? normalized.substring(1) : normalized;
+            try {
+                boolean deleted = ossUtil.deleteFile(objectKey);
+                log.info("删除课程内容图片: key={}, deleted={}", objectKey, deleted);
+            } catch (Exception e) {
+                log.warn("删除课程内容图片失败: key={}, error={}", objectKey, e.getMessage());
+            }
+        }
+    }
+
+    @Override
     public Map<String, String> batchGetContentImageUrls(List<String> paths, int minute) {
         Map<String, String> result = new HashMap<>();
         if (paths == null || paths.isEmpty()) {
             return result;
         }
-        // 获取 OSS 配置，用于从完整临时 URL 中提取 fileKey
-        String bucketName = ossUtil.getOssProperties().getBucketName();
+        String bucketName;
+        try {
+            bucketName = ossUtil.getOssProperties().getBucketName();
+        } catch (Exception e) {
+            log.warn("获取 OSS 配置失败，无法批量生成图片临时URL: {}", e.getMessage());
+            return result;
+        }
         for (String path : paths) {
             if (StringUtils.isEmpty(path)) {
                 continue;

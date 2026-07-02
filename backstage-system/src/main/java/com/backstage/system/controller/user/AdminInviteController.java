@@ -9,25 +9,27 @@ import com.backstage.common.utils.StringUtils;
 import com.backstage.common.utils.generate.GenerateUtil;
 import com.backstage.common.constant.OshUserConstants;
 import com.backstage.common.threadlocal.ThreadLocalUtil;
+import com.backstage.common.utils.email.EmailUtil;
 import com.backstage.system.domain.user.OshUser;
 import com.backstage.system.domain.user.OshRole;
 import com.backstage.system.domain.user.OshUserAsset;
+import com.backstage.system.domain.user.OshUserInvitation;
 import com.backstage.system.mapper.user.OshRoleMapper;
 import com.backstage.system.mapper.user.OshUserAssetMapper;
+import com.backstage.system.mapper.user.OshUserInvitationMapper;
 import com.backstage.system.mapper.user.OshUserMapper;
 import com.backstage.system.mapper.user.UserManageMapper;
 import com.backstage.system.utils.UserContextUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.web.bind.annotation.*;
 import javax.naming.NamingException;
 import javax.naming.directory.Attributes;
 import javax.naming.directory.InitialDirContext;
 import javax.servlet.http.HttpServletRequest;
 import java.net.URL;
+import java.time.LocalDateTime;
 
 import javax.annotation.Resource;
 import java.util.*;
@@ -61,9 +63,9 @@ public class AdminInviteController {
     @Resource
     private OshRoleMapper oshRoleMapper;
     @Resource
-    private JavaMailSender javaMailSender;
-
-    private static final String MAIL_FROM = "18482663265@163.com";
+    private EmailUtil emailUtil;
+    @Resource
+    private OshUserInvitationMapper oshUserInvitationMapper;
 
     /**
      * 创建用户邀请（创始人专属）
@@ -204,19 +206,8 @@ public class AdminInviteController {
             }
         }
         String inviteLink = origin + "/admin-register?token=" + inviteToken;
-        String subject = "您被邀请成为平台" + roleName;
-        String content = "您好，\n\n"
-                + "您已被邀请注册为平台「" + roleName + "」。\n"
-                + "请点击以下链接完成注册（7天内有效）：\n\n"
-                + inviteLink + "\n\n"
-                + "如非本人操作，请忽略此邮件。";
         try {
-            SimpleMailMessage mail = new SimpleMailMessage();
-            mail.setFrom(MAIL_FROM);
-            mail.setTo(email);
-            mail.setSubject(subject);
-            mail.setText(content);
-            javaMailSender.send(mail);
+            emailUtil.sendAdminInviteEmail(email, roleName, inviteLink, INVITE_EXPIRE_DAYS, expireTime, points);
         } catch (Exception e) {
             log.warn("发送邀请邮件失败, email={}", email, e);
             redisCache.deleteObject(INVITE_KEY_PREFIX + inviteToken);
@@ -454,6 +445,8 @@ public class AdminInviteController {
         oshUserAsset.setUserId(userId);
         oshUserAssetMapper.insert(oshUserAsset);
 
+        recordInviteRelation(operatorId, userId);
+
         // 删除 Redis 邀请数据
         redisCache.deleteObject(INVITE_KEY_PREFIX + token);
         redisCache.deleteObject(INVITE_EMAIL_KEY_PREFIX + normalizeEmail(email));
@@ -462,17 +455,7 @@ public class AdminInviteController {
         try {
             OshRole role = findRoleById(roleId);
             String roleName = role != null ? role.getRoleName() : "用户";
-            String successContent = "恭喜 " + username + "，\n\n"
-                    + "您已成功注册为平台「" + roleName + "」。\n"
-                    + "您的唯一标识为：" + uniqueId + "\n"
-                    + "请妥善保管，用于找回密码等操作。\n\n"
-                    + "现在可以使用用户名和密码登录平台。";
-            SimpleMailMessage mail = new SimpleMailMessage();
-            mail.setFrom(MAIL_FROM);
-            mail.setTo(email);
-            mail.setSubject("注册成功通知");
-            mail.setText(successContent);
-            javaMailSender.send(mail);
+            emailUtil.sendAdminInviteRegisterSuccessEmail(username, email, uniqueId, roleName);
         } catch (Exception e) {
             log.warn("发送注册成功邮件失败, email={}", email, e);
         }
@@ -480,6 +463,26 @@ public class AdminInviteController {
         return R.ok("注册成功");
     }
 
+    private void recordInviteRelation(Long inviterId, Long inviteeId) {
+        if (inviterId == null || inviteeId == null) {
+            return;
+        }
+        OshUser inviter = oshUserMapper.selectById(inviterId);
+        String inviteCode = inviter == null ? null : inviter.getInviteCode();
+        if (StringUtils.isEmpty(inviteCode)) {
+            inviteCode = "ADMIN_INVITE";
+        }
+        try {
+            OshUserInvitation invitation = new OshUserInvitation();
+            invitation.setInviterId(inviterId);
+            invitation.setInviteeId(inviteeId);
+            invitation.setInviteCode(inviteCode);
+            invitation.setCreateTime(LocalDateTime.now());
+            oshUserInvitationMapper.insertInvitation(invitation);
+        } catch (Exception e) {
+            log.warn("记录管理员邀请关系失败, inviterId={}, inviteeId={}", inviterId, inviteeId, e);
+        }
+    }
     /**
      * 查询可邀请的角色列表（level 2~5）
      */

@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.backstage.system.mapper.redeem.OshRedeemCodeMapper">
+
+    <resultMap id="RedeemCodeVOResult" type="com.backstage.system.domain.redeem.vo.RedeemCodeVO">
+        <id property="id" column="id"/>
+        <result property="code" column="code"/>
+        <result property="inviteLinkToken" column="invite_link_token"/>
+        <result property="username" column="username"/>
+        <result property="userEmail" column="user_email"/>
+        <result property="resourceNo" column="resource_no"/>
+        <result property="resourceType" column="resource_type"/>
+        <result property="productType" column="product_type"/>
+        <result property="productId" column="product_id"/>
+        <result property="productName" column="product_name"/>
+        <result property="amount" column="amount"/>
+        <result property="channelId" column="channel_id"/>
+        <result property="channelName" column="channel_name"/>
+        <result property="orderNo" column="order_no"/>
+        <result property="paymentNo" column="payment_no"/>
+        <result property="status" column="status"/>
+        <result property="redeemTime" column="redeem_time"/>
+        <result property="cancelTime" column="cancel_time"/>
+        <result property="remark" column="remark"/>
+        <result property="createTime" column="create_time"/>
+    </resultMap>
+
+    <sql id="selectRedeemCodeVOColumns">
+        rc.id, rc.code, ril.link_token as invite_link_token, u.username, u.email as user_email, rc.resource_no, rc.resource_type,
+        rc.product_type, rc.product_id, rc.product_name, rc.amount, rc.channel_id,
+        rc.channel_name, rc.order_no, rc.payment_no, rc.status, rc.redeem_time,
+        rc.cancel_time, rc.remark, rc.create_time
+    </sql>
+
+    <select id="selectAdminPage" resultMap="RedeemCodeVOResult">
+        select <include refid="selectRedeemCodeVOColumns"/>
+        from osh_redeem_code rc
+        left join osh_redeem_invite_link ril on ril.redeem_code_id = rc.id and ril.delete_flag = 0
+        left join osh_user u on u.id = rc.user_id and u.delete_flag = 0
+        where rc.delete_flag = 0
+        <if test="query.userEmail != null and query.userEmail != ''">
+            and u.email = #{query.userEmail}
+        </if>
+        <if test="query.status != null">
+            and rc.status = #{query.status}
+        </if>
+        <if test="query.keyword != null and query.keyword != ''">
+            and (
+                rc.code like concat('%', #{query.keyword}, '%')
+                or rc.resource_no like concat('%', #{query.keyword}, '%')
+                or rc.product_name like concat('%', #{query.keyword}, '%')
+                or u.username like concat('%', #{query.keyword}, '%')
+                or u.email like concat('%', #{query.keyword}, '%')
+            )
+        </if>
+        order by rc.create_time desc, rc.id desc
+    </select>
+
+    <select id="selectUserPage" resultMap="RedeemCodeVOResult">
+        select <include refid="selectRedeemCodeVOColumns"/>
+        from osh_redeem_code rc
+        left join osh_redeem_invite_link ril on ril.redeem_code_id = rc.id and ril.delete_flag = 0
+        left join osh_user u on u.id = rc.user_id and u.delete_flag = 0
+        where rc.delete_flag = 0
+          and rc.user_id = #{userId}
+        <if test="query.status != null">
+            and rc.status = #{query.status}
+        </if>
+        <if test="query.keyword != null and query.keyword != ''">
+            and (
+                rc.code like concat('%', #{query.keyword}, '%')
+                or rc.resource_no like concat('%', #{query.keyword}, '%')
+                or rc.product_name like concat('%', #{query.keyword}, '%')
+            )
+        </if>
+        order by rc.create_time desc, rc.id desc
+    </select>
+
+    <select id="selectByIdForUpdate" resultType="com.backstage.system.domain.redeem.OshRedeemCode">
+        select id, code, user_id, resource_no, resource_type, product_type, product_id, product_name,
+               amount, channel_id, channel_name, order_no, payment_no, status, redeem_time,
+               cancel_time, remark, create_time, create_by, update_time, update_by, delete_flag
+        from osh_redeem_code
+        where id = #{id}
+          and delete_flag = 0
+        limit 1
+        for update
+    </select>
+
+    <select id="selectByCodeForUpdate" resultType="com.backstage.system.domain.redeem.OshRedeemCode">
+        select id, code, user_id, resource_no, resource_type, product_type, product_id, product_name,
+               amount, channel_id, channel_name, order_no, payment_no, status, redeem_time,
+               cancel_time, remark, create_time, create_by, update_time, update_by, delete_flag
+        from osh_redeem_code
+        where code = #{code}
+          and delete_flag = 0
+        limit 1
+        for update
+    </select>
+
+    <update id="markRedeemed">
+        update osh_redeem_code
+        set status = 1,
+            user_id = #{operatorId},
+            order_no = #{orderNo},
+            payment_no = #{paymentNo},
+            redeem_time = #{redeemTime},
+            update_by = #{operatorId},
+            update_time = now()
+        where id = #{id}
+          and status = 0
+          and delete_flag = 0
+    </update>
+
+    <update id="cancelPending">
+        update osh_redeem_code
+        set status = 2,
+            cancel_time = #{cancelTime},
+            update_by = #{operatorId},
+            update_time = now()
+        where id = #{id}
+          and status = 0
+          and delete_flag = 0
+    </update>
+</mapper>

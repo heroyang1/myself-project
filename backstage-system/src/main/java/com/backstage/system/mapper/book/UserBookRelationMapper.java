@@ -4,6 +4,7 @@ import com.backstage.system.domain.book.BookDO;
 import com.backstage.system.domain.UserBookRelation;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import java.math.BigDecimal;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 
@@ -28,4 +29,12 @@ public interface UserBookRelationMapper extends BaseMapper<UserBookRelation>
      * 分页查询用户购买的电子书列表
      */
     Page<BookDO> selectUserBookListPage(@Param("userId") Long userId, Page<BookDO> page);
+
+    int upsertPurchased(@Param("userId") Long userId,
+                        @Param("bookId") Long bookId,
+                        @Param("purchasePrice") BigDecimal purchasePrice,
+                        @Param("orderNo") String orderNo,
+                        @Param("operator") String operator);
+
+    Integer countFavoritedByBookId(@Param("bookId") Long bookId);
 }

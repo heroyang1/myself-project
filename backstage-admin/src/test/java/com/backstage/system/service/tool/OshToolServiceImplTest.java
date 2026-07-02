@@ -12,6 +12,7 @@ import com.backstage.system.mapper.tool.OshToolVoteMapper;
 import com.backstage.system.domain.tool.ToolUsagePermission;
 import com.backstage.system.service.OutboxEventService;
 import com.backstage.system.request.tool.ToolSaveRequest;
+import com.backstage.system.service.common.OssService;
 import com.backstage.system.service.impl.tool.OshToolServiceImpl;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -25,6 +26,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -60,6 +62,9 @@ public class OshToolServiceImplTest {
 
     @Mock
     private ResourceNoGenerator resourceNoGenerator;
+
+    @Mock
+    private OssService ossService;
 
     @Test
     public void shouldCreateMissingTagsWhenCreatingToolWithNewTagNames() {
@@ -127,6 +132,31 @@ public class OshToolServiceImplTest {
     }
 
     @Test
+    public void shouldPersistBackgroundImageWhenCreatingTool() {
+        ToolSaveRequest request = new ToolSaveRequest();
+        request.setToolName("测试工具");
+        request.setRoutePath("/test/test");
+        request.setBackgroundImage("common/image/toolCover/temp/202606/bg.png");
+
+        OshUser operator = new OshUser();
+        operator.setUsername("admin");
+
+        when(oshToolMapper.insertTool(any(OshTool.class))).thenAnswer(invocation -> {
+            OshTool tool = invocation.getArgument(0);
+            tool.setId(10004L);
+            return 1;
+        });
+        when(resourceNoGenerator.generateUniqueNo(eq(ResourceCodePrefixEnum.TOOL), any())).thenReturn("tlBg0001");
+
+        Long toolId = toolService.createTool(request, operator);
+
+        assertEquals(Long.valueOf(10004L), toolId);
+        verify(oshToolMapper).insertTool(argThat(tool ->
+                "common/image/toolCover/temp/202606/bg.png".equals(tool.getBackgroundImage())
+        ));
+    }
+
+    @Test
     public void shouldPersistConsumeCountForQuotaTool() {
         ToolSaveRequest request = new ToolSaveRequest();
         request.setToolName("测试工具");
@@ -176,21 +206,46 @@ public class OshToolServiceImplTest {
     }
 
     @Test
+    public void shouldRejectCreateToolWhenToolNameExists() {
+        ToolSaveRequest request = new ToolSaveRequest();
+        request.setToolName("测试工具");
+        request.setRoutePath("/test/test");
+
+        OshUser operator = new OshUser();
+        operator.setUsername("admin");
+
+        when(oshToolMapper.countActiveByToolName("测试工具", null)).thenReturn(1);
+
+        try {
+            toolService.createTool(request, operator);
+            fail("Expected duplicate tool name to be rejected");
+        } catch (IllegalArgumentException ex) {
+            assertEquals("工具名称已存在，请换一个名称", ex.getMessage());
+        }
+
+        verify(oshToolMapper, never()).insertTool(any(OshTool.class));
+    }
+
+    @Test
     public void shouldReturnToolDetailWithUserStateAndTags() {
         OshTool tool = new OshTool();
         tool.setId(10001L);
+        tool.setBackgroundImage("common/image/toolCover/10001/202606/bg.png");
 
         when(oshToolMapper.selectToolById(10001L)).thenReturn(tool);
         when(oshToolTagMapper.selectTagNamesByToolId(10001L)).thenReturn(Collections.singletonList("PDF工具"));
         when(oshToolCollectionMapper.selectActiveToolIdsByUserIdAndToolIds(9L, Collections.singletonList(10001L)))
                 .thenReturn(Collections.singletonList(10001L));
         when(oshToolMapper.selectUserRemainingCount(9L)).thenReturn(8);
+        when(ossService.getLimitedUrl("common/image/toolCover/10001/202606/bg.png", 1440))
+                .thenReturn("https://cdn.example.com/bg.png?sign=1");
         OshTool result = toolService.getToolDetail(10001L, 9L);
 
         assertEquals(Integer.valueOf(1), result.getCollectionFlag());
         assertEquals(Integer.valueOf(8), result.getRemainingCount());
         assertEquals(Integer.valueOf(1), result.getPurchasedFlag());
         assertEquals(Collections.singletonList("PDF工具"), result.getTags());
+        assertEquals("https://cdn.example.com/bg.png?sign=1", result.getBackgroundImageUrl());
     }
 
     @Test

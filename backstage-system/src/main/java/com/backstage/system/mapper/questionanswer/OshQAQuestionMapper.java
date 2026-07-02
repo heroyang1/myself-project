@@ -15,10 +15,6 @@ import java.util.List;
  */
 public interface OshQAQuestionMapper extends BaseMapper <Question> {
 
-    int addQuestionTags(@Param("questionId") Long questionId,@Param("tagId") Long tagId,@Param("createBy") Long createBy);
-
-    int deleteQuestionTags(@Param("questionId") Long questionId);
-
     Integer getFollowInfoByUserIdAndQuestionId(@Param("userId")Long userId,@Param("questionId") Long questionId);
 
     int followQuestion(@Param("userId")Long userId,@Param("questionId") Long questionId,@Param("createBy") Long createBy);

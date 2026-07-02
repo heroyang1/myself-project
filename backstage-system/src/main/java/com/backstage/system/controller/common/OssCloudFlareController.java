@@ -1,9 +1,8 @@
 package com.backstage.system.controller.common;
 
 import com.backstage.common.annotation.Anonymous;
-import com.backstage.common.annotation.RateLimiter;
+import com.backstage.common.annotation.OshUserLevel;
 import com.backstage.common.core.domain.R;
-import com.backstage.common.enums.LimitType;
 import com.backstage.common.enums.UploadPathEnum;
 import com.backstage.system.utils.OssUtil;
 import com.backstage.system.domain.order.OshUploadImage;
@@ -16,7 +15,6 @@ import io.swagger.annotations.ApiParam;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -47,17 +45,14 @@ public class OssCloudFlareController {
     private UserContextUtil userContextUtil;
 
     /**
-     * 限制IP 每60秒 10次 如果加key可以相同的配额限制
-     *
      * @param file        文件
      * @param type        上传场景模块类型
      * @param previewFlag 是否需要预览, 默认false
      * @param limitMinute 生成文件预览链接的超时时间, 分钟数, 默认30分钟
      */
-    @RateLimiter(limitType = LimitType.IP, time = 60, count = 10)
     @ApiParam(value = "上传文件", required = true)
     @ApiOperation("上传接口")
-    @PreAuthorize("hasAnyAuthority('upload:file','book:create','book:update')")
+    @OshUserLevel(value = 4)
     @PostMapping("/upload")
     public R<Object> upload(
             @RequestParam("file") MultipartFile file,
@@ -117,17 +112,8 @@ public class OssCloudFlareController {
         }
     }
 
-    @Anonymous
-    @GetMapping("/upload/avatar")
-    public R getUrl() {
-        String signedUrl = ossService.getLimitedUrl("common/video/course/946/202604/81c67441-f771-4eb9-be25-86576cd13794_test11.mp4", 1);
-
-        return R.ok(signedUrl);
-
-    }
-
     @ApiOperation("批量获取文件预览URL")
-    @PreAuthorize("hasAnyAuthority('upload:file','book:create','book:update')")
+    @OshUserLevel(value = 4)
     @PostMapping("/upload/preview-urls")
     public R<Map<String, String>> previewUrls(@RequestBody PreviewUrlsReq req) {
         if (req == null || req.getPaths() == null || req.getPaths().isEmpty()) {

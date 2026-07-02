@@ -1,6 +1,7 @@
 package com.backstage.system.domain.vo.book;
 
 import java.io.Serializable;
+import java.util.List;
 
 public class BookChapterSaveUpdateVO implements Serializable {
 
@@ -19,6 +20,8 @@ public class BookChapterSaveUpdateVO implements Serializable {
     private Integer sortOrder;
 
     private Integer isFree;
+
+    private List<BookChapterPageVO> pages;
 
     public Long getId() {
         return id;
@@ -74,5 +77,13 @@ public class BookChapterSaveUpdateVO implements Serializable {
 
     public void setIsFree(Integer isFree) {
         this.isFree = isFree;
+    }
+
+    public List<BookChapterPageVO> getPages() {
+        return pages;
+    }
+
+    public void setPages(List<BookChapterPageVO> pages) {
+        this.pages = pages;
     }
 }

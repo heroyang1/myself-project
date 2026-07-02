@@ -10,20 +10,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * 订单支付成功处理器注册表。
- */
 @Component
 public class OrderPaidHandlerRegistry {
 
     private static final Logger log = LoggerFactory.getLogger(OrderPaidHandlerRegistry.class);
+
     private final Map<String, OrderPaidHandler> handlerMap;
 
-    /**
-     * 构造处理器注册表。
-     *
-     * @param handlers 系统内所有支付成功处理器
-     */
     public OrderPaidHandlerRegistry(List<OrderPaidHandler> handlers) {
         this.handlerMap = new HashMap<>();
         for (OrderPaidHandler handler : handlers) {
@@ -34,16 +27,15 @@ public class OrderPaidHandlerRegistry {
                 throw new ServiceException("支付后置处理器业务类型非法, bizType=" + bizType);
             }
             handlerMap.put(bizType, handler);
-            log.info("注册支付后置处理器成功, bizType={}, handler={}", bizType, handler.getClass().getSimpleName());
+            log.info("register paid handler success, bizType={}, handler={}",
+                    bizType, handler.getClass().getSimpleName());
         }
     }
 
-    /**
-     * 根据业务类型获取处理器。
-     *
-     * @param bizType 业务类型编码
-     * @return 对应处理器
-     */
+    public boolean hasHandler(String bizType) {
+        return handlerMap.containsKey(bizType);
+    }
+
     public OrderPaidHandler getHandler(String bizType) {
         OrderPaidHandler handler = handlerMap.get(bizType);
         if (handler == null) {
@@ -52,14 +44,8 @@ public class OrderPaidHandlerRegistry {
         return handler;
     }
 
-    /**
-     * 执行支付成功后的后置处理。
-     *
-     * @param bizType 业务类型编码
-     * @param orderNo 业务订单号
-     */
     public void handle(String bizType, String orderNo) {
-        log.info("准备执行支付后置处理器, bizType={}, orderNo={}", bizType, orderNo);
+        log.info("handle paid business start, bizType={}, orderNo={}", bizType, orderNo);
         getHandler(bizType).handle(orderNo);
     }
 }

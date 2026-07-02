@@ -9,9 +9,10 @@ import com.backstage.common.annotation.OshUserEvent;
 import com.backstage.common.constant.ResourceType;
 import com.backstage.common.core.domain.R;
 import com.backstage.common.exception.ServiceException;
-import com.backstage.system.domain.vo.order.PayResponse;
+import com.backstage.system.domain.vo.pay.OrderCheckoutRespVO;
 import com.backstage.system.mapper.course.CourseBuyMapper;
 import com.backstage.system.service.course.ICoursePayService;
+import com.backstage.system.utils.IpUtils;
 import com.backstage.system.utils.UserContextUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,35 +22,16 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * Course payment HTTP entry.
- *
- * Endpoints are intentionally namespaced under /pc/course/pay so they live next to other course
- * endpoints (e.g. OshCourseController @ /pc/course/*) without colliding with any existing
- * method-level path. The shared payment controllers (PayController / WxPayController /
- * IsWxPayController) are left untouched and continue to serve any other module that relies on them.
- */
 @RestController
 @RequestMapping("/pc/course/pay")
 public class CoursePayController {
 
     @Autowired
     private ICoursePayService coursePayService;
+
     @Autowired
     private CourseBuyMapper courseBuyMapper;
 
-    /**
-     * Create a course payment order and return a QR code string (wxpay or alipay).
-     *
-     * Request body example:
-     *   { "course_id": 1000, "pay_type": "wxpay" }
-     *
-     * Response data example:
-     *   { "qrcode": "weixin://wxpay/bizpayurl?pr=xxx",
-     *     "payurl": "",
-     *     "out_trade_no": "abc123",
-     *     "pay_type": "wxpay" }
-     */
     @Anonymous
     @PostMapping("/create")
     @OshUserEvent(module = "支付模块", actionType = "支付", resourceType = ResourceType.COURSE_TYPE,
@@ -65,21 +47,8 @@ public class CoursePayController {
         String clientIp = resolveClientIp(request);
 
         try {
-            PayResponse gatewayResp = coursePayService.createCoursePay(courseId, payType, clientIp, userId);
-
-            // Gateway uses code=1 for success; surface the failure to the client verbatim.
-            if (gatewayResp.getCode() != 1) {
-                String msg = gatewayResp.getMsg() == null ? "支付网关返回失败" : gatewayResp.getMsg();
-                return R.fail(msg);
-            }
-
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("qrcode", gatewayResp.getQrcode());
-            data.put("payurl", gatewayResp.getPayUrl());
-            data.put("out_trade_no", gatewayResp.getOutTradeNo());
-            data.put("pay_type", payType);
-            data.put("course_id", courseId);
-            return R.ok(data);
+            OrderCheckoutRespVO checkoutResp = coursePayService.createCoursePay(courseId, payType, clientIp, userId);
+            return R.ok(toCreateResponse(checkoutResp, payType, courseId));
         } catch (ServiceException e) {
             return R.fail(e.getMessage());
         } catch (Exception e) {
@@ -87,12 +56,6 @@ public class CoursePayController {
         }
     }
 
-    /**
-     * Poll the gateway for the latest status of a previously created order.
-     *
-     * Query example: /pc/course/pay/status?out_trade_no=abc123
-     * Response data: { "paid": true }
-     */
     @Anonymous
     @GetMapping("/status")
     @OshUserEvent(module = "支付模块", actionType = "消费", resourceType = ResourceType.COURSE_TYPE,
@@ -110,6 +73,7 @@ public class CoursePayController {
         boolean paid = coursePayService.isCoursePaid(outTradeNo, userId);
         Map<String, Object> latest = courseBuyMapper.selectByOrderNoAndUserId(outTradeNo, userId);
         boolean changedToPaid = paid && !wasPaid && isPaid(latest);
+
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("paid", paid);
         data.put("consume_recorded", changedToPaid);
@@ -117,6 +81,26 @@ public class CoursePayController {
         putIfNotNull(data, "course_id", latest == null ? null : latest.get("courseId"));
         putIfNotNull(data, "pay_price", latest == null ? null : latest.get("payPrice"));
         return R.ok(data);
+    }
+
+    private Map<String, Object> toCreateResponse(OrderCheckoutRespVO checkoutResp, String payType, Long courseId) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("needPay", checkoutResp.isNeedPay());
+        data.put("qrcode", checkoutResp.getPayment() == null ? null : checkoutResp.getPayment().getQrcode());
+        data.put("payurl", checkoutResp.getPayment() == null ? null : checkoutResp.getPayment().getPayUrl());
+        data.put("payUrl", checkoutResp.getPayment() == null ? null : checkoutResp.getPayment().getPayUrl());
+        data.put("out_trade_no", checkoutResp.getOrderNo());
+        data.put("orderNo", checkoutResp.getOrderNo());
+        data.put("paymentNo", checkoutResp.getPaymentNo());
+        data.put("pay_type", payType);
+        data.put("course_id", courseId);
+        data.put("price", checkoutResp.getPrice());
+        data.put("pointsUsed", checkoutResp.getPointsUsed());
+        data.put("pointsDeductAmount", checkoutResp.getPointsDeductAmount());
+        data.put("remainingPoints", checkoutResp.getRemainingPoints());
+        data.put("expireTime", checkoutResp.getExpireTime());
+        data.put("closeExpireMinutes", checkoutResp.getCloseExpireMinutes());
+        return data;
     }
 
     private boolean isPaid(Map<String, Object> courseBuy) {
@@ -141,10 +125,10 @@ public class CoursePayController {
     }
 
     private String resolveClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty()) {
-            ip = request.getRemoteAddr();
+        String cfIp = request.getHeader("CF-Connecting-IP");
+        if (cfIp != null && !cfIp.isEmpty() && !"unknown".equalsIgnoreCase(cfIp.trim())) {
+            return cfIp.trim();
         }
-        return ip;
+        return IpUtils.getClientIp(request);
     }
 }

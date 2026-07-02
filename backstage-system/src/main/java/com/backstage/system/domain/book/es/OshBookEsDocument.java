@@ -18,6 +18,7 @@ public class OshBookEsDocument {
     private Integer subCount;
     private Integer chapterCount;
     private Integer level;
+    private Integer mediaType;
     private String status;
     private Integer deleteFlag;
     private String remark;
@@ -103,6 +104,14 @@ public class OshBookEsDocument {
 
     public void setLevel(Integer level) {
         this.level = level;
+    }
+
+    public Integer getMediaType() {
+        return mediaType;
+    }
+
+    public void setMediaType(Integer mediaType) {
+        this.mediaType = mediaType;
     }
 
     public String getStatus() {

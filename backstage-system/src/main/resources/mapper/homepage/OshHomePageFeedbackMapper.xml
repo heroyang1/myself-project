@@ -29,15 +29,12 @@
             s.status,
             s.username,
             s.likeCount,
-            s.commentCount,
             s.viewCount,
             s.collectCount,
-            s.hotScore,
-            s.createTime,
             (
                 SELECT t.name
-                FROM assistant_feedback_tag ft
-                JOIN assistant_feedback_category t ON t.id = ft.tag_id
+                FROM assistant_feedback_tag_rel ft
+                         JOIN assistant_feedback_tag t ON t.id = ft.tag_id
                 WHERE ft.feedback_id = s.id
                 LIMIT 1
             ) AS tagName
@@ -51,7 +48,6 @@
                 f.status,
                 u.username,
                 IFNULL(f.like_count, 0)    AS likeCount,
-                IFNULL(f.comment_count, 0) AS commentCount,
                 IFNULL(f.view_count, 0)    AS viewCount,
                 IFNULL(f.favorite_count, 0) AS collectCount,
                 f.create_time              AS createTime,

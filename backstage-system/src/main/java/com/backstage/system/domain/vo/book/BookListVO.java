@@ -41,6 +41,15 @@ public class BookListVO implements Serializable {
     /** 权限等级 */
     private Integer level;
 
+    /** Book media type: 1 ebook, 2 comic. */
+    private Integer mediaType;
+
+    /** 状态：0正常，1下架 */
+    private String status;
+
+    /** 逻辑删除：0正常，1删除 */
+    private Integer deleteFlag;
+
     /** 章节数 */
     private Integer chapterCount;
 
@@ -136,6 +145,30 @@ public class BookListVO implements Serializable {
 
     public void setLevel(Integer level) {
         this.level = level;
+    }
+
+    public Integer getMediaType() {
+        return mediaType;
+    }
+
+    public void setMediaType(Integer mediaType) {
+        this.mediaType = mediaType;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public Integer getDeleteFlag() {
+        return deleteFlag;
+    }
+
+    public void setDeleteFlag(Integer deleteFlag) {
+        this.deleteFlag = deleteFlag;
     }
 
     public Integer getChapterCount() {
