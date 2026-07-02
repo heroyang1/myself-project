@@ -31,8 +31,7 @@
                  THEN i.sold_count / i.total_stock
                  ELSE 0
             END DESC,
-            i.seckill_price ASC,
-            i.sort ASC
+            i.create_time DESC
         LIMIT #{limit}
     </select>
 

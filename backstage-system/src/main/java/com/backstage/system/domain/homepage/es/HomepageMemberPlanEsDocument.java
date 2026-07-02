@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import com.backstage.system.domain.member.vo.MemberPlanPriceTierVO;
+
 public class HomepageMemberPlanEsDocument {
 
     private Long id;
@@ -26,6 +28,8 @@ public class HomepageMemberPlanEsDocument {
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
     private List<BenefitDocument> benefits;
+    private List<MemberPlanPriceTierVO> priceTiers;
+    private Integer effectiveMaxPurchaseQuantity;
 
     public Long getId() {
         return id;
@@ -185,6 +189,22 @@ public class HomepageMemberPlanEsDocument {
 
     public void setBenefits(List<BenefitDocument> benefits) {
         this.benefits = benefits;
+    }
+
+    public List<MemberPlanPriceTierVO> getPriceTiers() {
+        return priceTiers;
+    }
+
+    public void setPriceTiers(List<MemberPlanPriceTierVO> priceTiers) {
+        this.priceTiers = priceTiers;
+    }
+
+    public Integer getEffectiveMaxPurchaseQuantity() {
+        return effectiveMaxPurchaseQuantity;
+    }
+
+    public void setEffectiveMaxPurchaseQuantity(Integer effectiveMaxPurchaseQuantity) {
+        this.effectiveMaxPurchaseQuantity = effectiveMaxPurchaseQuantity;
     }
 
     public static class BenefitDocument {

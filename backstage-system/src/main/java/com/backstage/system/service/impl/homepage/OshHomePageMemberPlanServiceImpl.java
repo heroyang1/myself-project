@@ -4,6 +4,7 @@ import com.backstage.common.exception.ServiceException;
 import com.backstage.system.domain.homepage.es.HomepageMemberPlanEsDocument;
 import com.backstage.system.domain.member.OshMemberBenefit;
 import com.backstage.system.domain.member.OshMemberPlan;
+import com.backstage.system.domain.member.vo.MemberPlanPriceTierVO;
 import com.backstage.system.mapper.homepage.HomepageMemberPlanEsMapper;
 import com.backstage.system.mapper.member.OshMemberBenefitMapper;
 import com.backstage.system.mapper.member.OshMemberPlanMapper;
@@ -16,6 +17,8 @@ import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -28,6 +31,11 @@ public class OshHomePageMemberPlanServiceImpl implements IOshHomePageMemberPlanS
     private static final Logger log = LoggerFactory.getLogger(OshHomePageMemberPlanServiceImpl.class);
     private static final int PLAN_STATUS_ENABLED = 1;
     private static final int MAX_BENEFIT_SIZE = 3;
+    private static final BigDecimal DEFAULT_GROWTH_COEFFICIENT = new BigDecimal("0.90");
+    private static final BigDecimal DEFAULT_CAP_RATIO = new BigDecimal("0.95");
+    private static final BigDecimal MONTH_GROWTH_COEFFICIENT = new BigDecimal("0.78");
+    private static final BigDecimal SMALL_CLASS_GROWTH_COEFFICIENT = new BigDecimal("0.95");
+    private static final String MEMBER_TYPE_SMALL_CLASS = "small_class";
 
     @Resource
     private HomepageMemberPlanEsMapper homepageMemberPlanEsMapper;
@@ -46,6 +54,7 @@ public class OshHomePageMemberPlanServiceImpl implements IOshHomePageMemberPlanS
             for (HomepageMemberPlanEsDocument document : documents) {
                 plans.add(toPlan(document));
             }
+            attachHomepagePriceTiers(plans);
             return plans;
         } catch (IOException | IllegalStateException exception) {
             throw buildServiceException("查询首页会员套餐失败", exception);
@@ -64,6 +73,7 @@ public class OshHomePageMemberPlanServiceImpl implements IOshHomePageMemberPlanS
         }
 
         attachEnabledBenefits(plans);
+        attachHomepagePriceTiers(plans);
         List<HomepageMemberPlanEsDocument> documents = new ArrayList<>(plans.size());
         for (OshMemberPlan plan : plans) {
             documents.add(toDocument(plan));
@@ -194,6 +204,8 @@ public class OshHomePageMemberPlanServiceImpl implements IOshHomePageMemberPlanS
         document.setCreateTime(plan.getCreateTime());
         document.setUpdateTime(plan.getUpdateTime());
         document.setBenefits(toBenefitDocuments(plan.getBenefits()));
+        document.setPriceTiers(plan.getPriceTiers());
+        document.setEffectiveMaxPurchaseQuantity(plan.getEffectiveMaxPurchaseQuantity());
         return document;
     }
 
@@ -243,6 +255,8 @@ public class OshHomePageMemberPlanServiceImpl implements IOshHomePageMemberPlanS
         plan.setCreateTime(document.getCreateTime());
         plan.setUpdateTime(document.getUpdateTime());
         plan.setBenefits(toBenefits(document.getBenefits()));
+        plan.setPriceTiers(document.getPriceTiers());
+        plan.setEffectiveMaxPurchaseQuantity(document.getEffectiveMaxPurchaseQuantity());
         return plan;
     }
 
@@ -267,6 +281,151 @@ public class OshHomePageMemberPlanServiceImpl implements IOshHomePageMemberPlanS
             benefits.add(benefit);
         }
         return benefits;
+    }
+
+    private void attachHomepagePriceTiers(List<OshMemberPlan> plans) {
+        if (plans == null || plans.isEmpty()) {
+            return;
+        }
+        Map<String, OshMemberPlan> planMap = plans.stream()
+                .filter(plan -> plan.getPlanCode() != null)
+                .collect(Collectors.toMap(OshMemberPlan::getPlanCode, plan -> plan, (first, second) -> first));
+        for (OshMemberPlan plan : plans) {
+            if (plan.getMinPurchaseQuantity() == null || plan.getMinPurchaseQuantity() < 1) {
+                plan.setMinPurchaseQuantity(1);
+            }
+            if (plan.getMaxPurchaseQuantity() == null || plan.getMaxPurchaseQuantity() < plan.getMinPurchaseQuantity()) {
+                plan.setMaxPurchaseQuantity(defaultMaxQuantity(null, plan.getPeriodType()));
+            }
+            OshMemberPlan capPlan = planMap.get(plan.getCapPlanCode());
+            int min = defaultQuantity(plan.getMinPurchaseQuantity());
+            int max = effectiveMaxPurchaseQuantity(plan, capPlan);
+            plan.setEffectiveMaxPurchaseQuantity(max);
+            List<MemberPlanPriceTierVO> tiers = new ArrayList<>();
+            for (int quantity = min; quantity <= max; quantity++) {
+                MemberPlanPriceTierVO tier = new MemberPlanPriceTierVO();
+                tier.setQuantity(quantity);
+                tier.setDurationMonths(plan.getDurationMonths() * quantity);
+                tier.setPrice(calculatePrice(plan, quantity, capPlan));
+                tier.setOriginalPrice(defaultMoney(plan.getOriginalPrice(), plan.getPrice()).multiply(BigDecimal.valueOf(quantity)));
+                tiers.add(tier);
+            }
+            plan.setPriceTiers(tiers);
+        }
+    }
+
+    private BigDecimal calculatePrice(OshMemberPlan plan, int quantity, OshMemberPlan capPlan) {
+        BigDecimal price = normalizePrice(geometricPrice(plan.getPrice(), defaultGrowthCoefficient(plan.getGrowthCoefficient(), plan), quantity));
+        BigDecimal capAmount = capAmount(plan, capPlan);
+        if (capAmount != null && price.compareTo(capAmount) >= 0) {
+            price = endingEightBelow(capAmount);
+        }
+        if (price.compareTo(plan.getPrice()) < 0) {
+            price = plan.getPrice();
+        }
+        return price;
+    }
+
+    private BigDecimal geometricPrice(BigDecimal basePrice, BigDecimal coefficient, int quantity) {
+        BigDecimal total = BigDecimal.ZERO;
+        BigDecimal factor = BigDecimal.ONE;
+        for (int i = 0; i < quantity; i++) {
+            total = total.add(basePrice.multiply(factor));
+            factor = factor.multiply(coefficient);
+        }
+        return total;
+    }
+
+    private BigDecimal normalizePrice(BigDecimal value) {
+        BigDecimal rounded = value.setScale(0, RoundingMode.HALF_UP);
+        BigDecimal lower = endingEightFloor(rounded);
+        BigDecimal upper = lower.add(BigDecimal.TEN);
+        BigDecimal lowerDistance = rounded.subtract(lower).abs();
+        BigDecimal upperDistance = upper.subtract(rounded).abs();
+        BigDecimal result = lowerDistance.compareTo(upperDistance) <= 0 ? lower : upper;
+        return result.setScale(2, RoundingMode.UNNECESSARY);
+    }
+
+    private BigDecimal endingEightBelow(BigDecimal capAmount) {
+        BigDecimal candidate = normalizePrice(capAmount.subtract(BigDecimal.ONE));
+        while (candidate.compareTo(capAmount) >= 0) {
+            candidate = candidate.subtract(BigDecimal.TEN);
+        }
+        return candidate.setScale(2, RoundingMode.UNNECESSARY);
+    }
+
+    private BigDecimal endingEightFloor(BigDecimal value) {
+        BigDecimal shifted = value.subtract(new BigDecimal("8"));
+        BigDecimal tens = shifted.divide(BigDecimal.TEN, 0, RoundingMode.FLOOR);
+        return tens.multiply(BigDecimal.TEN).add(new BigDecimal("8"));
+    }
+
+    private BigDecimal capAmount(OshMemberPlan plan, OshMemberPlan capPlan) {
+        if (capPlan == null || capPlan.getPrice() == null) {
+            return null;
+        }
+        BigDecimal ratio = defaultCapRatio(plan.getCapRatio(), plan.getCapPlanCode());
+        return capPlan.getPrice().multiply(ratio);
+    }
+
+    private int effectiveMaxPurchaseQuantity(OshMemberPlan plan, OshMemberPlan capPlan) {
+        int min = defaultQuantity(plan.getMinPurchaseQuantity());
+        int configuredMax = defaultMaxQuantity(plan.getMaxPurchaseQuantity(), plan.getPeriodType());
+        BigDecimal capAmount = capAmount(plan, capPlan);
+        if (capAmount == null) {
+            return configuredMax;
+        }
+        int max = min;
+        for (int quantity = min; quantity <= configuredMax; quantity++) {
+            BigDecimal price = geometricPrice(plan.getPrice(), defaultGrowthCoefficient(plan.getGrowthCoefficient(), plan), quantity);
+            if (price.compareTo(capAmount) >= 0) {
+                break;
+            }
+            max = quantity;
+        }
+        return Math.max(min, max);
+    }
+
+    private int defaultQuantity(Integer quantity) {
+        return quantity == null || quantity < 1 ? 1 : quantity;
+    }
+
+    private int defaultMaxQuantity(Integer quantity, String periodType) {
+        if (quantity != null && quantity >= 1) {
+            return quantity;
+        }
+        return "year".equals(periodType) ? 5 : 36;
+    }
+
+    private BigDecimal defaultGrowthCoefficient(BigDecimal value, OshMemberPlan plan) {
+        if (value != null && value.compareTo(BigDecimal.ZERO) > 0) {
+            return value;
+        }
+        if (plan != null && "month".equals(plan.getPeriodType())) {
+            return MONTH_GROWTH_COEFFICIENT;
+        }
+        if (plan != null && MEMBER_TYPE_SMALL_CLASS.equals(plan.getMemberType())) {
+            return SMALL_CLASS_GROWTH_COEFFICIENT;
+        }
+        return DEFAULT_GROWTH_COEFFICIENT;
+    }
+
+    private BigDecimal defaultCapRatio(BigDecimal value, String capPlanCode) {
+        if (value != null && value.compareTo(BigDecimal.ZERO) > 0) {
+            return value;
+        }
+        return normalizeText(capPlanCode) == null ? BigDecimal.ONE : DEFAULT_CAP_RATIO;
+    }
+
+    private String normalizeText(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private BigDecimal defaultMoney(BigDecimal value, BigDecimal fallback) {
+        return value != null ? value : fallback;
     }
 
     private boolean shouldDeleteFromEs(OshMemberPlan plan) {

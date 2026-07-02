@@ -1,0 +1,72 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0
+  },
+  "mappings": {
+    "properties": {
+      "id": {
+        "type": "long"
+      },
+      "title": {
+        "type": "text",
+        "fields": {
+          "keyword": {
+            "type": "keyword",
+            "ignore_above": 256
+          }
+        }
+      },
+      "summary": {
+        "type": "text"
+      },
+      "category": {
+        "type": "keyword"
+      },
+      "categoryIcon": {
+        "type": "keyword"
+      },
+      "status": {
+        "type": "keyword"
+      },
+      "username": {
+        "type": "keyword"
+      },
+      "tagName": {
+        "type": "keyword"
+      },
+      "likeCount": {
+        "type": "integer"
+      },
+      "commentCount": {
+        "type": "integer"
+      },
+      "viewCount": {
+        "type": "integer"
+      },
+      "collectCount": {
+        "type": "integer"
+      },
+      "hotScore": {
+        "type": "integer"
+      },
+      "createTime": {
+        "type": "date",
+        "format": "yyyy/M/d||yyyy-MM-dd HH:mm:ss||strict_date_optional_time||epoch_millis"
+      },
+      "detailUrl": {
+        "type": "keyword"
+      },
+      "sortNo": {
+        "type": "integer"
+      },
+      "sourceLimit": {
+        "type": "integer"
+      },
+      "syncTime": {
+        "type": "date",
+        "format": "yyyy-MM-dd HH:mm:ss||strict_date_optional_time||epoch_millis"
+      }
+    }
+  }
+}
