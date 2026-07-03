@@ -42,12 +42,22 @@ public enum AnnouncementModuleEnum {
      * 实用网站模块
      */
     WEBSITE("website", "实用网站公告"),
+
+    /**
+     * 电子书模块
+     */
+    BOOK("book", "电子书公告"),
 //    void SERIAL("serial", "开源项目公告"),
 
     /**
      * 统一审核模块
      */
     AUDIT("audit", "审核公告"),
+
+    /**
+     * 答疑模块
+     */
+    QNA("qa", "答疑公告"),
 
     /**
      * 首页模块公告栏

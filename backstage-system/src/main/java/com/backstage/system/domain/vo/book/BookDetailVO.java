@@ -41,6 +41,9 @@ public class BookDetailVO implements Serializable
     @JsonProperty("sub_count")
     private Integer subCount;
 
+    /** 收藏数 */
+    private Integer favoriteCount;
+
     /** 权限等级 */
     private Integer level;
 
@@ -167,6 +170,16 @@ public class BookDetailVO implements Serializable
     public void setSubCount(Integer subCount)
     {
         this.subCount = subCount;
+    }
+
+    public Integer getFavoriteCount()
+    {
+        return favoriteCount;
+    }
+
+    public void setFavoriteCount(Integer favoriteCount)
+    {
+        this.favoriteCount = favoriteCount;
     }
 
     public Integer getLevel()

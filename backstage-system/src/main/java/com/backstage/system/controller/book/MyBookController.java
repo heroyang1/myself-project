@@ -3,7 +3,7 @@ package com.backstage.system.controller.book;
 import com.backstage.common.annotation.OshUserLevel;
 import com.backstage.common.annotation.OshUserEvent;
 import com.backstage.common.core.domain.R;
-import com.backstage.common.utils.SecurityUtils;
+import com.backstage.common.threadlocal.ThreadLocalUtil;
 import com.backstage.common.utils.StringUtils;
 import com.backstage.system.domain.book.BookDO;
 import com.backstage.system.service.book.IBookService;
@@ -35,7 +35,7 @@ public class MyBookController {
     @GetMapping("/mybook")
     public R<Map<String, Object>> myBook(@RequestParam(defaultValue = "1") Integer page)
     {
-        Long userId = SecurityUtils.getUserId();
+        Long userId = ThreadLocalUtil.getCurrentUserId();
         if (StringUtils.isNull(userId))
         {
             return R.fail("请先登录");

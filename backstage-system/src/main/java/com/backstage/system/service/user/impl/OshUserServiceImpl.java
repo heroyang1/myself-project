@@ -22,13 +22,11 @@ import com.backstage.system.mapper.tool.OshToolQuotaMapper;
 import com.backstage.system.mapper.user.*;
 import com.backstage.system.mapper.user.OshUserInvitationMapper;
 import com.backstage.system.mapper.redeem.OshRedeemInviteLinkMapper;
-import com.backstage.system.request.UserListRequest;
 import com.backstage.system.service.common.OssService;
 import com.backstage.system.service.user.IOshUserService;
 import com.backstage.system.utils.OssUtil;
 import com.backstage.system.utils.UserContextUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -102,7 +100,7 @@ public class OshUserServiceImpl implements IOshUserService {
         }
         if (password.length() == 50) {
             String uniqueIdByUserId = oshUserMapper.getUniqueIdByUserId(oshUser.getId());
-            if (!uniqueIdByUserId.equals(password)) {
+            if (uniqueIdByUserId == null || !uniqueIdByUserId.equals(password)) {
                 return R.fail(ResultCode.FAILED_USER_UNIQUEID_ERROR.getMsg());
             }
         }else {
@@ -345,7 +343,7 @@ public class OshUserServiceImpl implements IOshUserService {
             return R.fail(ResultCode.FAILED_USER_NOT_EXISTS.getMsg());
         }
         String uniqueIdByUserId = oshUserMapper.getUniqueIdByUserId(userId);
-        if (!uniqueIdByUserId.equals(uniqueId)) {
+        if (uniqueIdByUserId == null || !uniqueIdByUserId.equals(uniqueId)) {
             return R.fail(ResultCode.FAILED_USER_UNIQUEID_ERROR.getMsg());
         }
         wrapper = new LambdaQueryWrapper<>();
@@ -400,7 +398,7 @@ public class OshUserServiceImpl implements IOshUserService {
             return R.fail(ResultCode.FAILED_USER_PASSWORD_NOT_MATCH.getMsg());
         }
         String uniqueIdByUserId = oshUserMapper.getUniqueIdByUserId(userId);
-        if (!uniqueIdByUserId.equals(uniqueId)) {
+        if (uniqueIdByUserId == null || !uniqueIdByUserId.equals(uniqueId)) {
             return R.fail(ResultCode.FAILED_USER_UNIQUEID_ERROR.getMsg());
         }
         oshUser.setPassword(SecurityUtils.encryptPassword(password));
@@ -824,16 +822,5 @@ public class OshUserServiceImpl implements IOshUserService {
         roleMap.put("roleCode", DEFAULT_ROLE_CODE);
         roleMap.put("level", DEFAULT_ROLE_LEVEL);
         return roleMap;
-    }
-
-    /**
-     * 查询用户列表
-     *
-     * @param req 用户
-     * @return 用户
-     */
-    @Override
-    public List<OshUser> selectUserList(UserListRequest req) {
-        return oshUserMapper.selectList(Wrappers.lambdaQuery());
     }
 }

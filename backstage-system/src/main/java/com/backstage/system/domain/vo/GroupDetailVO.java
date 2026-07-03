@@ -68,6 +68,12 @@ public class GroupDetailVO {
     /** 拼团开始时间 */
     private LocalDateTime startTime;
     
+    /** 招募截止时间（未成团时有效） */
+    private LocalDateTime expireTime;
+    
+    /** 支付截止时间（待支付订单有效，创建后30分钟） */
+    private LocalDateTime payExpireTime;
+    
     /** 服务器开始使用时间（成团后有值） */
     private LocalDateTime serverStartTime;
     
@@ -236,6 +242,22 @@ public class GroupDetailVO {
     
     public void setStartTime(LocalDateTime startTime) {
         this.startTime = startTime;
+    }
+    
+    public LocalDateTime getExpireTime() {
+        return expireTime;
+    }
+    
+    public void setExpireTime(LocalDateTime expireTime) {
+        this.expireTime = expireTime;
+    }
+    
+    public LocalDateTime getPayExpireTime() {
+        return payExpireTime;
+    }
+    
+    public void setPayExpireTime(LocalDateTime payExpireTime) {
+        this.payExpireTime = payExpireTime;
     }
     
     public LocalDateTime getServerStartTime() {

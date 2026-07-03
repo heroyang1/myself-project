@@ -4,21 +4,23 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.backstage.common.exception.ServiceException;
-import com.backstage.common.utils.SecurityUtils;
 import com.backstage.common.utils.aijudge.AiUtil;
 import com.backstage.system.domain.dto.exam.UserExamSaveDto;
 import com.backstage.system.domain.exam.OshUserExamRecord;
 import com.backstage.system.domain.vo.exam.QuestionVo;
 import com.backstage.system.domain.vo.exam.UserExamRecordVo;
+import com.backstage.system.domain.vo.exam.UserExamResultVo;
 import com.backstage.system.mapper.exam.OshUserExamRecordMapper;
 import com.backstage.system.service.exam.IOshUserExamRecordService;
 import com.backstage.system.utils.UserContextUtil;
 import com.github.pagehelper.PageHelper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -46,8 +48,7 @@ public class OshUserExamRecordServiceImpl implements IOshUserExamRecordService {
         if (record == null) {
             // 如果不存在（即你说的 ID 为 7 但表里没数据的情况），手动创建一个存进去
             record = new OshUserExamRecord();
-            record.setUser_id(saveDto.getUser_test_id());                    // 实际应从 SecurityUtils 获取
-            record.setId(saveDto.getUser_test_id());                  // 此处写死为你确定的试卷 ID 12，或者从别处获取
+            record.setUser_id(saveDto.getUser_test_id());
             record.setAnswer_status(0);              // 初始为进行中
             record.setRead_status(0);                // 初始为未批阅
             record.setScore(0);
@@ -82,13 +83,8 @@ public class OshUserExamRecordServiceImpl implements IOshUserExamRecordService {
                 continue;
             }
 
-            // 客观题比对逻辑（保持你原来的不变）
-            if (uAns != null) {
-                String userAnsStr = JSON.toJSONString(uAns).replace(" ", "");
-                String correctAnsStr = correct.trim().replace(" ", "");
-                if (userAnsStr.equals(correctAnsStr)) {
-                    finalScore += q.getScore();
-                }
+            if (isAnswerCorrect(q, uAns)) {
+                finalScore += safeScore(q);
             }
         }
 
@@ -118,8 +114,120 @@ public class OshUserExamRecordServiceImpl implements IOshUserExamRecordService {
         return userTestMapper.updateOshUserExam(record) > 0;
     }
 
+
+    @Override
+    public UserExamResultVo getUserExamResult(Long recordId) {
+        Long userId = UserContextUtil.getCurrentUserId();
+        if (userId == null || recordId == null) {
+            return null;
+        }
+        OshUserExamRecord record = userTestMapper.selectRecordByIdAndUserId(recordId, userId);
+        if (record == null) {
+            return null;
+        }
+        UserExamRecordVo recordVo = userTestMapper.selectUserTestDetail(recordId, userId);
+        List<QuestionVo> questions = userTestMapper.selectQuestionsByExamId(record.getExam_id());
+        List<Object> userAnswers = parseAnswerJson(record.getAnswer_json());
+
+        int correctCount = 0;
+        int wrongCount = 0;
+        for (int i = 0; i < questions.size(); i++) {
+            QuestionVo question = questions.get(i);
+            Object userAnswer = i < userAnswers.size() ? userAnswers.get(i) : null;
+            question.setUser_value(userAnswer);
+            if (isSubjectiveQuestion(question)) {
+                question.setIs_correct(null);
+                question.setGained_score(null);
+                continue;
+            }
+            boolean correct = isAnswerCorrect(question, userAnswer);
+            question.setIs_correct(correct);
+            question.setGained_score(correct ? safeScore(question) : 0);
+            if (correct) {
+                correctCount++;
+            } else {
+                wrongCount++;
+            }
+        }
+
+        UserExamResultVo result = new UserExamResultVo();
+        result.setId(record.getId());
+        result.setAnswer_status(record.getAnswer_status());
+        result.setRead_status(record.getRead_status());
+        result.setScore(record.getScore());
+        result.setCorrect_count(correctCount);
+        result.setWrong_count(wrongCount);
+        result.setQuestions(questions);
+        if (recordVo != null) {
+            result.setTestpaper(recordVo.getTestpaper());
+            if (recordVo.getTestpaper() != null && recordVo.getTestpaper().getPass_score() != null) {
+                result.setPassed(record.getScore() != null && record.getScore() >= recordVo.getTestpaper().getPass_score());
+            }
+        }
+        return result;
+    }
+
+    private List<Object> parseAnswerJson(String answerJson) {
+        if (answerJson == null || answerJson.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        try {
+            return JSON.parseArray(answerJson, Object.class);
+        } catch (Exception ignored) {
+            return Collections.emptyList();
+        }
+    }
+
+    private boolean isAnswerCorrect(QuestionVo question, Object userAnswer) {
+        if (userAnswer == null || question.getCorrect_answer() == null || isSubjectiveQuestion(question)) {
+            return false;
+        }
+        String userValue = normalizeAnswer(JSON.toJSONString(userAnswer));
+        String correctValue = normalizeAnswer(String.valueOf(question.getCorrect_answer()));
+        return userValue.equals(correctValue);
+    }
+
+    private boolean isSubjectiveQuestion(QuestionVo question) {
+        return question != null && "answer".equals(question.getType());
+    }
+
+    private String normalizeAnswer(String value) {
+        if (value == null) {
+            return "";
+        }
+        String text = value.trim().replace(" ", "");
+        if (text.startsWith("[") && text.endsWith("]")) {
+            try {
+                JSONArray array = JSON.parseArray(text);
+                List<String> values = new ArrayList<>();
+                for (Object item : array) {
+                    values.add(String.valueOf(item).replace("\"", "").trim());
+                }
+                Collections.sort(values);
+                return String.join(",", values);
+            } catch (Exception ignored) {
+                return text;
+            }
+        }
+        return text.replace("\"", "");
+    }
+
+    private int safeScore(QuestionVo question) {
+        return question.getScore() == null ? 0 : question.getScore();
+    }
+
+
     @Autowired
     private AiUtil aiUtil = new AiUtil();
+
+    @Value("${deepseek.api.url:https://api.deepseek.com/chat/completions}")
+    private String deepseekApiUrl;
+
+    @Value("${deepseek.api.key:}")
+    private String deepseekApiKey;
+
+    @Value("${deepseek.api.model:deepseek-chat}")
+    private String deepseekModel;
     /**
      * 封装业务 Prompt 并调用通用 AiUtil
      */
@@ -132,12 +240,9 @@ public class OshUserExamRecordServiceImpl implements IOshUserExamRecordService {
                 "3. 格式如下：{\"scores\": [分数1, 分数2], \"evaluation\": \"整体评价\"}\n\n" +
                 "简答题内容如下：\n" + essayContent;
 
-        // 2. 调用 common 模块中的 AiUtil (这里建议把 URL 和 KEY 放在配置文件里)
-        String apiUrl = "https://api.deepseek.com/chat/completions";
-        String apiKey = "sk-3ad11ee76b0e4e3f99f618b3344ccc6a";
-        String model = "deepseek-chat";
-
-        // 调用你刚才封装在 common 里的工具类
-        return aiUtil.sendRequest(apiUrl, apiKey, model, fullPrompt);
+        if (deepseekApiKey == null || deepseekApiKey.trim().isEmpty()) {
+            return null;
+        }
+        return aiUtil.sendRequest(deepseekApiUrl, deepseekApiKey, deepseekModel, fullPrompt);
     }
 }
