@@ -4,11 +4,9 @@ import com.backstage.common.core.domain.R;
 import com.backstage.system.domain.user.OshUser;
 import com.backstage.system.domain.user.vo.OshUserCardVO;
 import com.backstage.system.domain.user.vo.OshUserLoginVO;
-import com.backstage.system.request.UserListRequest;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.mail.MessagingException;
-import java.util.List;
 
 /**
  * Created with IntelliJ IDEA.
@@ -51,6 +49,4 @@ public interface IOshUserService {
     R<String> deleteUser();
 
     R<String> updateAsset(Integer changeType, Integer changeSource, Long changeAmount, String remark);
-
-    List<OshUser> selectUserList(UserListRequest req);
 }

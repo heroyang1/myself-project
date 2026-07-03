@@ -84,6 +84,40 @@
 - THEN 响应包含 `pages`
 - AND `pages` 按 `page_no` 升序排列
 
+### Requirement: 阅读量统计入口
+
+系统 SHALL 仅在用户成功进入章节阅读页时统计电子书阅读量，详情页浏览不统计阅读量。
+
+#### Scenario: 查看详情页不增加阅读量
+
+- GIVEN 用户请求电子书详情接口
+- WHEN 系统返回详情数据
+- THEN `osh_book.sub_count` 不因该请求递增
+
+#### Scenario: 进入阅读页增加阅读量
+
+- GIVEN 用户具备章节阅读权限
+- WHEN 用户请求章节详情接口并成功返回章节内容
+- THEN 系统将对应书籍 `osh_book.sub_count` 原子递增 1
+
+#### Scenario: 高等级用户阅读低等级资源
+
+- GIVEN 当前用户等级高于或等于书籍资源等级
+- WHEN 用户请求该书籍章节详情
+- THEN 系统允许直接阅读章节内容
+- AND VIP 付费资源不得绕过该等级覆盖规则再次要求购买
+
+### Requirement: 详情页收藏量
+
+系统 SHALL 在电子书详情接口返回本书收藏总数。
+
+#### Scenario: 返回本书收藏量
+
+- GIVEN 用户请求电子书详情接口
+- WHEN 系统组装详情响应
+- THEN 响应包含 `favoriteCount`
+- AND `favoriteCount` 等于未删除且 `favorited=1` 的用户书籍关系数量
+
 ### Requirement: 电子书导入占位接口
 
 系统 SHALL 暂时暴露电子书导入占位接口，但不在本次实现完整解析落库。

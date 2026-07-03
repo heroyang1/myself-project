@@ -59,9 +59,9 @@ public class OshToolServiceImpl implements IOshToolService {
     private static final int DEFAULT_INIT_TOOL_QUOTA = 10;
     private static final int LEVEL_FREE = 1;
     private static final int LEVEL_CASH_POINT = 3;
-    private static final int LEVEL_VIP = 4;
-    private static final int LEVEL_SMALL_CLASS = 5;
-    private static final int LEVEL_INTERNAL = 6;
+    private static final int LEVEL_VIP = 2;
+    private static final int LEVEL_SMALL_CLASS = 3;
+    private static final int LEVEL_INTERNAL = 4;
 
     @Autowired
     private OshToolMapper oshToolMapper;
