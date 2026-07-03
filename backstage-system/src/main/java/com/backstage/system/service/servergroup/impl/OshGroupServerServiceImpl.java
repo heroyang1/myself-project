@@ -44,8 +44,10 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -1286,16 +1288,23 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
         
         // 6. 判断数据源：优先查询用户发起拼团记录
         OshGroupUserInitiated initiated = userInitiatedMapper.selectById(groupWorkId);
+        boolean handlerResult;
         if (initiated != null) {
             // 数据源1：用户发起的拼团
-            handleUserInitiatedPayment(initiated, order, now);
+            handlerResult = handleUserInitiatedPayment(initiated, order, now);
         } else {
             // 数据源2：系统活动模板
-            handleSystemActivityPayment(groupWorkId, order, now);
+            handlerResult = handleSystemActivityPayment(groupWorkId, order, now);
         }
         
         // 清除活动缓存（支付成功后状态/人数变更）
         evictActivityCache(order.getGroupActivityId());
+        
+        if (!handlerResult) {
+            logger.warn("【拼团支付回调】处理参团记录异常（CAS失败），订单已标记为已支付待人工处理，orderNo={}", 
+                    DesensitizedUtil.maskOrderNo(orderNo));
+            return false;
+        }
         
         logger.info("【拼团支付回调】处理完成，orderNo={}", orderNo);
         return true;
@@ -1310,7 +1319,7 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
      * 
      * groupStatus 状态流：0(待支付) → 1(已支付) → 2(已成团) / 3(已结束)
      */
-    private void handleUserInitiatedPayment(OshGroupUserInitiated initiated, OshGroupOrder order, LocalDateTime now) {
+    private boolean handleUserInitiatedPayment(OshGroupUserInitiated initiated, OshGroupOrder order, LocalDateTime now) {
         Long initiatedId = initiated.getId();
         Integer minNum = initiated.getMinNum();
         Integer maxNum = initiated.getMaxNum();
@@ -1319,9 +1328,9 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
         // 1. CAS 原子递增 currentNum（防并发超卖）
         int incrementResult = userInitiatedMapper.incrementCurrentNumAtomic(initiatedId);
         if (incrementResult <= 0) {
-            logger.warn("【拼团支付回调】CAS递增currentNum失败（已满员），initiatedId={}, orderNo={}",
-                    initiatedId, order.getOrderNo());
-            throw new ServiceException("拼团已满员，支付将自动退回");
+            logger.warn("【拼团支付回调】CAS递增currentNum失败（已满员或已被删除），initiatedId={}, orderNo={}，订单已标记为已支付待人工处理",
+                    initiatedId, DesensitizedUtil.maskOrderNo(order.getOrderNo()));
+            return false;
         }
         logger.info("【拼团支付回调】currentNum递增成功，initiatedId={}", initiatedId);
         
@@ -1363,6 +1372,8 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
             logger.info("【拼团支付回调】用户发起拼团已满员结束，initiatedId={}, currentNum={}, maxNum={}",
                     initiatedId, currentNum, maxNum);
         }
+        
+        return true;
     }
 
     /**
@@ -1373,16 +1384,16 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
      * 
      * groupStatus 状态流：0(待支付) → 1(已支付) → 2(已成团) / 3(已结束)
      */
-    private void handleSystemActivityPayment(Long groupWorkId, OshGroupOrder order, LocalDateTime now) {
+    private boolean handleSystemActivityPayment(Long groupWorkId, OshGroupOrder order, LocalDateTime now) {
         logger.info("【拼团支付回调】处理系统活动模板支付，groupWorkId={}", groupWorkId);
         Long activityId = order.getGroupActivityId();
 
         // 1. CAS 原子递增 currentNum（防并发超卖）
         int incrementResult = groupServerMapper.atomicIncrementCurrentNum(activityId);
         if (incrementResult <= 0) {
-            logger.warn("【拼团支付回调】CAS递增currentNum失败（已满员），activityId={}, orderNo={}",
-                    activityId, order.getOrderNo());
-            throw new ServiceException("拼团活动已满员，支付将自动退回");
+            logger.warn("【拼团支付回调】CAS递增currentNum失败（已满员或已被删除），activityId={}, orderNo={}，订单已标记为已支付待人工处理",
+                    activityId, DesensitizedUtil.maskOrderNo(order.getOrderNo()));
+            return false;
         }
         logger.info("【拼团支付回调】系统活动currentNum递增成功，activityId={}", activityId);
 
@@ -1391,7 +1402,7 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
         if (work == null) {
             logger.warn("【拼团支付回调】系统活动参团记录不存在，activityId={}, userId={}",
                     activityId, order.getUserId());
-            return;
+            return false;
         }
 
         // 3. 更新当前支付用户的 work 状态为已支付（groupStatus: 0→1）
@@ -1404,7 +1415,7 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
         OshGroupActivity activity = groupServerMapper.selectGroupActivityById(activityId);
         if (activity == null) {
             logger.warn("【拼团支付回调】系统活动不存在，activityId={}", activityId);
-            return;
+            return false;
         }
 
         int currentNum = activity.getCurrentNum();
@@ -1442,6 +1453,7 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
 
         // 7. 清除活动缓存
         evictActivityCache(activityId);
+        return true;
     }
     
     /**
@@ -1617,27 +1629,31 @@ public class OshGroupServerServiceImpl implements IOshGroupServerService {
         int cancelledCount = groupServerMapper.batchUpdateOrderStatus(orderIds, "cancelled", LocalDateTime.now());
         logger.info("【拼团定时任务】取消超时订单 {} 条（共扫描 {} 条）", cancelledCount, timeoutOrders.size());
 
-        // 释放对应拼团名额：遍历被取消的订单，回退 current_num 并更新 work 状态
+        // 释放对应拼团名额：通过 groupWorkId 直接定位 work 记录，区分用户发起和系统活动
+        Set<Long> affectedActivityIds = new HashSet<>();
         for (OshGroupOrder order : timeoutOrders) {
             try {
-                // 更新对应 osh_group_work 状态为已取消
+                // 通过 groupWorkId 直接更新对应 work 记录状态为已取消，
+                // 无需区分数据源（用户发起 vs 系统活动均可正确定位）
                 if (order.getGroupWorkId() != null) {
-                    OshGroupWork work = groupServerMapper.selectGroupWorkByActivityAndUser(
-                            order.getGroupActivityId(), order.getUserId());
-                    if (work != null && work.getGroupStatus() != null && work.getGroupStatus() <= 1) {
-                        groupServerMapper.updateGroupWorkStatus(work.getId(), 3); // 3=已取消
-                    }
+                    groupServerMapper.updateGroupWorkStatus(order.getGroupWorkId(), 3); // 3=已取消
+                    logger.info("【拼团定时任务】更新work状态为已取消，workId={}, orderNo={}", 
+                            order.getGroupWorkId(), DesensitizedUtil.maskOrderNo(order.getOrderNo()));
                 }
 
                 // 注意：不再回退 current_num，因为 join 时未递增 currentNum，
                 // currentNum 仅在支付成功回调中递增，取消未支付订单无需回退。
-                // 只需清除缓存即可。
                 if (order.getGroupActivityId() != null) {
-                    evictActivityCache(order.getGroupActivityId());
+                    affectedActivityIds.add(order.getGroupActivityId());
                 }
             } catch (Exception e) {
-                logger.warn("【拼团定时任务】释放名额异常，orderId={}", order.getId(), e);
+                logger.warn("【拼团定时任务】取消work记录异常，orderId={}", order.getId(), e);
             }
+        }
+
+        // 批量清除受影响活动的缓存（去重，避免重复清除同一活动）
+        for (Long activityId : affectedActivityIds) {
+            evictActivityCache(activityId);
         }
 
         return cancelledCount;
