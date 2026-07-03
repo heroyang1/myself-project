@@ -1,18 +1,11 @@
 -- ============================================================
--- 拼团模块上线 - 基础数据配置脚本
--- 创建时间: 2026-06-24
+-- 拼团模块 基础数据配置脚本
 -- 说明:
---   1. 拼团活动模板初始数据(系统活动模板,供C端列表展示)
---   2. 服务器配置基础信息(3套典型规格)
+--   1. 拼团相关字典数据(状态、类型等枚举)
+--   2. 服务器配置基础规格信息
 --   3. 默认拼团规则参数(sys_config全局配置)
---   4. 系统管理员联系方式
---   5. 数据字典(状态、类型等枚举)
---
--- 依赖前置脚本:
---   - osh_server_group.sql         (创建核心表)
---   - osh_group_module.sql         (创建兼容表+通知表)
---   - sql/2026/05/fix_group_table_structure.sql  (添加activity_id字段)
---
+
+
 -- 执行顺序:
 --   1. 字典数据 (sys_dict_type / sys_dict_data)
 --   2. 系统参数 (sys_config)
@@ -96,7 +89,7 @@ VALUES
 -- 说明: 三套典型服务器规格,覆盖入门/标准/高性能三种场景
 -- 注意: 务必修改 admin_contact 为真实管理员微信; cover URL 替换为实际 OSS 路径
 
--- 3.1 高性能AI服务器 (12个月)
+-- 3.1 服务器 规格
 INSERT INTO `osh_group_activity`(
     `title`, `type`, `cpu`, `memory`, `storage`,
     `base_price`, `total_duration`, `group_min_num`, `group_max_num`,
@@ -104,15 +97,14 @@ INSERT INTO `osh_group_activity`(
     `server_tutorial_url`, `admin_contact`, `sort_order`,
     `cover`, `create_time`, `update_time`
 ) VALUES (
-    '高性能AI服务器12月套餐', 'server',
+    '8核服务器', 'server',
     '8核', '32GB', '500GB NVMe SSD',
-    1999.00, 12, 3, 8,
+    199.00, 12, 3, 8,
     0, 1, NOW(),
     '/tutorial/ai-server-setup.html', 'group_admin', 100,
     '/cover/group-ai-server.jpg', NOW(), NOW()
 );
 
--- 3.2 标准服务器 (6个月)
 INSERT INTO `osh_group_activity`(
     `title`, `type`, `cpu`, `memory`, `storage`,
     `base_price`, `total_duration`, `group_min_num`, `group_max_num`,
@@ -120,15 +112,14 @@ INSERT INTO `osh_group_activity`(
     `server_tutorial_url`, `admin_contact`, `sort_order`,
     `cover`, `create_time`, `update_time`
 ) VALUES (
-    '标准型服务器6月套餐', 'server',
+    '4核服务器', 'server',
     '4核', '16GB', '200GB SSD',
-    999.00, 6, 2, 5,
+    99.00, 6, 2, 5,
     0, 1, NOW(),
     '/tutorial/standard-server-setup.html', 'group_admin', 90,
     '/cover/group-standard-server.jpg', NOW(), NOW()
 );
 
--- 3.3 入门服务器 (3个月)
 INSERT INTO `osh_group_activity`(
     `title`, `type`, `cpu`, `memory`, `storage`,
     `base_price`, `total_duration`, `group_min_num`, `group_max_num`,
@@ -136,25 +127,18 @@ INSERT INTO `osh_group_activity`(
     `server_tutorial_url`, `admin_contact`, `sort_order`,
     `cover`, `create_time`, `update_time`
 ) VALUES (
-    '入门型服务器3月体验套餐', 'server',
+    '2核服务器', 'server',
     '2核', '4GB', '80GB SSD',
-    299.00, 3, 2, 3,
+    29.00, 3, 2, 3,
     0, 1, NOW(),
     '/tutorial/basic-server-setup.html', 'group_admin', 80,
     '/cover/group-basic-server.jpg', NOW(), NOW()
 );
 
 
--- ==================== 第四步:补充缺失的关联配置 ====================
-
--- 4.1 为 osh_group_user_initiated 表补齐 activity_id 默认值(对历史数据)
-UPDATE `osh_group_user_initiated` gui
-INNER JOIN `osh_group_order` go ON gui.order_id = go.id
-SET gui.activity_id = go.group_activity_id
-WHERE gui.activity_id = 0 OR gui.activity_id IS NULL;
 
 
--- ==================== 第五步:验证数据 ====================
+-- ==================== 验证数据 ====================
 
 -- 5.1 检查活动模板数据
 SELECT id, title, cpu, memory, storage, base_price, total_duration,
@@ -175,14 +159,6 @@ FROM sys_config
 WHERE config_key LIKE 'osh.group.%'
 ORDER BY config_key;
 
--- 5.4 数据回填验证
-SELECT
-    '历史数据回填验证' AS check_name,
-    SUM(CASE WHEN activity_id > 0 THEN 1 ELSE 0 END) AS with_activity,
-    SUM(CASE WHEN activity_id = 0 OR activity_id IS NULL THEN 1 ELSE 0 END) AS without_activity,
-    COUNT(*) AS total
-FROM `osh_group_user_initiated`
-WHERE delete_flag = 0;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
