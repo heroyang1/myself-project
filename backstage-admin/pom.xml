@@ -100,7 +100,11 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-bootstrap</artifactId>
         </dependency>
-
+        <dependency>
+            <groupId>net.peihuan</groupId>
+            <artifactId>baidu-pan-starter</artifactId>
+            <version>1.3.0</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -111,6 +115,11 @@
                 <version>${spring-boot.version}</version>
                 <configuration>
                     <fork>true</fork> <!-- 如果没有该配置，devtools 不会生效 -->
+                    <jvmArguments>
+                        --add-opens java.base/java.lang=ALL-UNNAMED
+                        --add-opens java.base/java.lang.reflect=ALL-UNNAMED
+                        --add-opens java.base/java.util=ALL-UNNAMED
+                    </jvmArguments>
                 </configuration>
                 <executions>
                     <execution>

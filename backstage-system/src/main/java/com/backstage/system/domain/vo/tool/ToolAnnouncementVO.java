@@ -17,6 +17,15 @@ public class ToolAnnouncementVO {
     @ApiModelProperty(value = "公告跳转链接", example = "https://example.com/tool/notice/1")
     private String link;
 
+    @ApiModelProperty(value = "图标编码", example = "payment")
+    private String iconCode;
+
+    @ApiModelProperty(value = "公告栏目：1-系统公告，2-业务动态", example = "1")
+    private Integer channel;
+
+    @ApiModelProperty(value = "资源类型", example = "tool")
+    private String resourceType;
+
     @ApiModelProperty(value = "创建时间", example = "2026-05-21 10:00:00")
     private LocalDateTime createTime;
 
@@ -42,6 +51,30 @@ public class ToolAnnouncementVO {
 
     public void setLink(String link) {
         this.link = link;
+    }
+
+    public String getIconCode() {
+        return iconCode;
+    }
+
+    public void setIconCode(String iconCode) {
+        this.iconCode = iconCode;
+    }
+
+    public Integer getChannel() {
+        return channel;
+    }
+
+    public void setChannel(Integer channel) {
+        this.channel = channel;
+    }
+
+    public String getResourceType() {
+        return resourceType;
+    }
+
+    public void setResourceType(String resourceType) {
+        this.resourceType = resourceType;
     }
 
     public LocalDateTime getCreateTime() {

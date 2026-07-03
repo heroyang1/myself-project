@@ -43,6 +43,8 @@ public interface OshCourseMapper
      */
     OshCourse selectCourseById(Long id);
 
+    OshCourse selectCourseByNo(@Param("no") String no);
+
 
 
     /**

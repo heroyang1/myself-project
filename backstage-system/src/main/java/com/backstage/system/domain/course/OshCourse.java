@@ -24,6 +24,9 @@ public class OshCourse {
     @ApiModelProperty("课程 ID")
     private Long id;
 
+    @ApiModelProperty("资源编号")
+    private String no;
+
     @Excel(name = "课程标题")
     @ApiModelProperty("课程标题")
     private String title;
@@ -220,6 +223,14 @@ public class OshCourse {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getNo() {
+        return no;
+    }
+
+    public void setNo(String no) {
+        this.no = no;
     }
 
     public String getTitle() {
@@ -468,6 +479,7 @@ public class OshCourse {
     public String toString() {
         return "OshCourse{" +
                 "id=" + id +
+                ", no='" + no + '\'' +
                 ", title='" + title + '\'' +
                 ", cover='" + cover + '\'' +
                 ", intro='" + intro + '\'' +

@@ -5,6 +5,7 @@ import com.backstage.common.core.domain.R;
 import com.backstage.common.core.redis.RedisCache;
 import com.backstage.common.enums.ResultCode;
 import com.backstage.common.enums.UploadPathEnum;
+import com.backstage.common.exception.ServiceException;
 import com.backstage.common.threadlocal.ThreadLocalUtil;
 import com.backstage.common.utils.email.EmailUtil;
 import com.backstage.common.utils.generate.GenerateUtil;
@@ -12,16 +13,20 @@ import com.backstage.common.utils.jwt.JwtUtil;
 import com.backstage.common.utils.SecurityUtils;
 import com.backstage.common.utils.StringUtils;
 import com.backstage.system.domain.user.*;
+import com.backstage.system.domain.redeem.OshRedeemInviteLink;
+import com.backstage.system.domain.redeem.vo.RedeemInviteLinkVO;
+import com.backstage.system.domain.user.vo.OshUserCardVO;
 import com.backstage.system.domain.user.vo.OshUserLoginVO;
+import com.backstage.system.domain.vo.tool.ToolQuotaCurrentVO;
+import com.backstage.system.mapper.tool.OshToolQuotaMapper;
 import com.backstage.system.mapper.user.*;
 import com.backstage.system.mapper.user.OshUserInvitationMapper;
-import com.backstage.system.request.UserListRequest;
+import com.backstage.system.mapper.redeem.OshRedeemInviteLinkMapper;
 import com.backstage.system.service.common.OssService;
 import com.backstage.system.service.user.IOshUserService;
 import com.backstage.system.utils.OssUtil;
 import com.backstage.system.utils.UserContextUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -44,9 +49,15 @@ import java.util.stream.Collectors;
 public class OshUserServiceImpl implements IOshUserService {
     private static final int ASSET_INCOME = 0;
     private static final int ASSET_EXPENSE = 1;
+    private static final int DEFAULT_INIT_TOOL_QUOTA = 10;
     private static final String DEFAULT_ROLE_NAME = "普通用户";
     private static final String DEFAULT_ROLE_CODE = "user";
     private static final String DEFAULT_ROLE_LEVEL = "1";
+    private static final String REDEEM_INVITE_TOKEN = "redeemInviteToken";
+    private static final String REDEEM_INVITE_REDEEM_CODE = "redeemInviteRedeemCode";
+    private static final String REDEEM_INVITE_PRODUCT_NAME = "redeemInviteProductName";
+    private static final int REDEEM_PENDING = 0;
+    private static final int LINK_ENABLED = 1;
 
     @Autowired
     private OshUserMapper oshUserMapper;
@@ -66,6 +77,10 @@ public class OshUserServiceImpl implements IOshUserService {
     private OshUserInvitationMapper oshUserInvitationMapper;
     @Autowired
     private UserManageMapper userManageMapper;
+    @Autowired
+    private OshToolQuotaMapper oshToolQuotaMapper;
+    @Autowired
+    private OshRedeemInviteLinkMapper redeemInviteLinkMapper;
 
     @Override
     public R<OshUserLoginVO> login(String username, String password) {
@@ -85,7 +100,7 @@ public class OshUserServiceImpl implements IOshUserService {
         }
         if (password.length() == 50) {
             String uniqueIdByUserId = oshUserMapper.getUniqueIdByUserId(oshUser.getId());
-            if (!uniqueIdByUserId.equals(password)) {
+            if (uniqueIdByUserId == null || !uniqueIdByUserId.equals(password)) {
                 return R.fail(ResultCode.FAILED_USER_UNIQUEID_ERROR.getMsg());
             }
         }else {
@@ -95,6 +110,8 @@ public class OshUserServiceImpl implements IOshUserService {
         }
         String token = createToken(oshUser);
         OshUserLoginVO userLoginVo = new OshUserLoginVO();
+        userLoginVo.setUserId(oshUser.getId());
+        userLoginVo.setUsername(oshUser.getUsername());
         userLoginVo.setToken(token);
         List<Integer> roleIds = oshRoleMapper.getRoleIdsByUserId(oshUser.getId());
         Map<String, String> asset = getAsset(oshUser.getId());
@@ -104,6 +121,8 @@ public class OshUserServiceImpl implements IOshUserService {
         userLoginVo.setRole(role);
         userLoginVo.setPermissionList(permissionList);
         Map<String, Object> map = new HashMap<>();
+        map.put(OshUserConstants.USER_ID, oshUser.getId());
+        map.put(OshUserConstants.USERNAME, oshUser.getUsername());
         map.put(OshUserConstants.ASSET, asset);
         map.put(OshUserConstants.ROLE, role);
         map.put(OshUserConstants.PERMISSION, permissionList);
@@ -124,6 +143,11 @@ public class OshUserServiceImpl implements IOshUserService {
 
     @Override
     public R<String> registerSubmit(String username, String password, String repassword, String email, String inviteCode) throws MessagingException {
+        return registerSubmit(username, password, repassword, email, inviteCode, null);
+    }
+
+    @Override
+    public R<String> registerSubmit(String username, String password, String repassword, String email, String inviteCode, String redeemInviteToken) throws MessagingException {
         if (StringUtils.isEmpty(username) || StringUtils.isEmpty(password)) {
             return R.fail(ResultCode.FAILED_USER_NAME_OR_PASSWORD_EMPTY.getMsg());
         }
@@ -148,6 +172,15 @@ public class OshUserServiceImpl implements IOshUserService {
         if (oshUser != null && oshUser.getEmail().equals(email)) {
             return R.fail(ResultCode.FAILED_USER_EMAIL_BOUND.getMsg());
         }
+        RedeemInviteLinkVO redeemInviteLink;
+        try {
+            redeemInviteLink = resolveRedeemInviteLink(redeemInviteToken);
+        } catch (ServiceException ex) {
+            return R.fail(ex.getMessage());
+        }
+        if (redeemInviteLink != null && StringUtils.isNotEmpty(redeemInviteLink.getInviteCode())) {
+            inviteCode = redeemInviteLink.getInviteCode();
+        }
         // 校验邀请码（选填，填了就必须有效）
         if (StringUtils.isNotEmpty(inviteCode)) {
             LambdaQueryWrapper<OshUser> inviteWrapper = new LambdaQueryWrapper<>();
@@ -157,7 +190,9 @@ public class OshUserServiceImpl implements IOshUserService {
                 return R.fail("邀请码无效");
             }
         }
-        String uniqueId = emailUtil.sendEmailGetUniqueId(username, email);
+        String uniqueId = redeemInviteLink == null
+                ? emailUtil.sendEmailGetUniqueId(username, email)
+                : emailUtil.sendEmailGetUniqueId(username, email, redeemInviteLink.getCode(), redeemInviteLink.getProductName());
         Map<String,String> userMap = new HashMap<>();
         userMap.put(OshUserConstants.USERNAME, username);
         userMap.put(OshUserConstants.PASSWORD, password);
@@ -165,11 +200,18 @@ public class OshUserServiceImpl implements IOshUserService {
         if (StringUtils.isNotEmpty(inviteCode)) {
             userMap.put(OshUserConstants.INVITE_CODE, inviteCode);
         }
+        if (redeemInviteLink != null) {
+            userMap.put(REDEEM_INVITE_TOKEN, redeemInviteLink.getLinkToken());
+            userMap.put(REDEEM_INVITE_REDEEM_CODE, redeemInviteLink.getCode());
+            userMap.put(REDEEM_INVITE_PRODUCT_NAME, redeemInviteLink.getProductName());
+            markRedeemInviteRegisterSubmit(redeemInviteLink.getLinkToken(), email);
+        }
         redisCache.setCacheObject(OshUserConstants.UNIQUE_ID + uniqueId, userMap, 500, TimeUnit.MINUTES);
         return R.ok(ResultCode.SUCCESS.getMsg());
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public R<String> registerVerity(String uniqueId) {
         Map<String,String> userMap = redisCache.getCacheObject(OshUserConstants.UNIQUE_ID + uniqueId);
         if(userMap == null) return R.fail("唯一标识错误或已过期");
@@ -190,6 +232,7 @@ public class OshUserServiceImpl implements IOshUserService {
         oshUserAsset.setPoints(188L);
         oshUserAsset.setUserId(oshUser.getId());
         oshUserAssetMapper.insert(oshUserAsset);
+        initUserToolQuotaIfAbsent(oshUser.getId(), oshUser.getUsername());
         // 记录邀请关系
         String inviteCode = userMap.get(OshUserConstants.INVITE_CODE);
         if (StringUtils.isNotEmpty(inviteCode)) {
@@ -205,8 +248,62 @@ public class OshUserServiceImpl implements IOshUserService {
                 oshUserInvitationMapper.insertInvitation(invitation);
             }
         }
+        String redeemInviteToken = userMap.get(REDEEM_INVITE_TOKEN);
+        if (StringUtils.isNotEmpty(redeemInviteToken)) {
+            markRedeemInviteRegistered(redeemInviteToken, userId, oshUser.getEmail());
+        }
         redisCache.deleteObject(OshUserConstants.UNIQUE_ID + uniqueId);
         return R.ok(ResultCode.SUCCESS.getMsg());
+    }
+
+    private RedeemInviteLinkVO resolveRedeemInviteLink(String token) {
+        if (StringUtils.isEmpty(token)) {
+            return null;
+        }
+        RedeemInviteLinkVO link = redeemInviteLinkMapper.selectByToken(token.trim());
+        if (link == null) {
+            throw new ServiceException("核销邀请链接不存在");
+        }
+        if (!Integer.valueOf(LINK_ENABLED).equals(link.getLinkStatus())) {
+            throw new ServiceException("核销邀请链接已停用");
+        }
+        if (link.getExpireTime() != null && link.getExpireTime().isBefore(LocalDateTime.now())) {
+            throw new ServiceException("核销邀请链接已过期");
+        }
+        if (!Integer.valueOf(REDEEM_PENDING).equals(link.getRedeemStatus())) {
+            throw new ServiceException("核销码已使用或已作废");
+        }
+        return link;
+    }
+
+    private void markRedeemInviteRegisterSubmit(String token, String email) {
+        OshRedeemInviteLink update = new OshRedeemInviteLink();
+        update.setRegisterEmail(email);
+        update.setUpdateBy(0L);
+        update.setUpdateTime(LocalDateTime.now());
+        redeemInviteLinkMapper.update(update, new LambdaQueryWrapper<OshRedeemInviteLink>()
+                .eq(OshRedeemInviteLink::getLinkToken, token)
+                .eq(OshRedeemInviteLink::getDeleteFlag, (byte) 0));
+    }
+
+    private void markRedeemInviteRegistered(String token, Long userId, String email) {
+        OshRedeemInviteLink update = new OshRedeemInviteLink();
+        update.setRegisterEmail(email);
+        update.setRegisterUserId(userId);
+        update.setRegisterTime(LocalDateTime.now());
+        update.setUpdateBy(userId);
+        update.setUpdateTime(LocalDateTime.now());
+        redeemInviteLinkMapper.update(update, new LambdaQueryWrapper<OshRedeemInviteLink>()
+                .eq(OshRedeemInviteLink::getLinkToken, token)
+                .eq(OshRedeemInviteLink::getDeleteFlag, (byte) 0));
+    }
+
+    private void initUserToolQuotaIfAbsent(Long userId, String operator) {
+        ToolQuotaCurrentVO quota = oshToolQuotaMapper.selectUserQuotaByUserId(userId);
+        if (quota != null) {
+            return;
+        }
+        oshToolQuotaMapper.insertUserQuota(userId, DEFAULT_INIT_TOOL_QUOTA, operator);
     }
 
     /**
@@ -246,7 +343,7 @@ public class OshUserServiceImpl implements IOshUserService {
             return R.fail(ResultCode.FAILED_USER_NOT_EXISTS.getMsg());
         }
         String uniqueIdByUserId = oshUserMapper.getUniqueIdByUserId(userId);
-        if (!uniqueIdByUserId.equals(uniqueId)) {
+        if (uniqueIdByUserId == null || !uniqueIdByUserId.equals(uniqueId)) {
             return R.fail(ResultCode.FAILED_USER_UNIQUEID_ERROR.getMsg());
         }
         wrapper = new LambdaQueryWrapper<>();
@@ -301,7 +398,7 @@ public class OshUserServiceImpl implements IOshUserService {
             return R.fail(ResultCode.FAILED_USER_PASSWORD_NOT_MATCH.getMsg());
         }
         String uniqueIdByUserId = oshUserMapper.getUniqueIdByUserId(userId);
-        if (!uniqueIdByUserId.equals(uniqueId)) {
+        if (uniqueIdByUserId == null || !uniqueIdByUserId.equals(uniqueId)) {
             return R.fail(ResultCode.FAILED_USER_UNIQUEID_ERROR.getMsg());
         }
         oshUser.setPassword(SecurityUtils.encryptPassword(password));
@@ -310,7 +407,7 @@ public class OshUserServiceImpl implements IOshUserService {
     }
 
     @Override
-    public R<String> updateInfo(String username, String sex, String introduction) {
+    public R<String> updateInfo(String username, String sex, String introduction, String githubAccount, String wechatName) {
         Long userId = ThreadLocalUtil.get(OshUserConstants.USER_ID,Long.class);
         if (StringUtils.isEmpty(username)) {
             return R.fail(ResultCode.FAILED_USER_USERNAME_NOT_IN_RANGE.getMsg());
@@ -337,9 +434,108 @@ public class OshUserServiceImpl implements IOshUserService {
         }
         oshUser.setUsername(trimmedUsername);
         oshUser.setSex(sex);
-        oshUser.setIntroduction(introduction);
+        oshUser.setIntroduction(trimToMax(introduction, 500));
+        oshUser.setGithubAccount(normalizeGithubAccount(githubAccount));
+        oshUser.setWechatName(trimToMax(wechatName, 100));
         oshUserMapper.update(oshUser, wrapper);
         return R.ok(ResultCode.SUCCESS.getMsg());
+    }
+
+    private String normalizeGithubAccount(String githubAccount) {
+        String normalized = trimToMax(githubAccount, 100);
+        if (StringUtils.isEmpty(normalized)) {
+            return null;
+        }
+        normalized = normalized.trim();
+        if (normalized.startsWith("github.com/")) {
+            normalized = "https://" + normalized;
+        } else if (!normalized.startsWith("https://github.com/") && !normalized.startsWith("http://github.com/")) {
+            normalized = "https://github.com/" + normalized;
+        }
+        return trimToMax(normalized, 100);
+    }
+
+    @Override
+    public R<OshUserCardVO> getUserCard(Long userId, String githubAccount) {
+        OshUser user = null;
+        if (userId != null) {
+            user = oshUserMapper.selectById(userId);
+        }
+        if (user == null && StringUtils.isNotEmpty(githubAccount)) {
+            String githubLink = normalizeGithubAccount(githubAccount);
+            String githubOwner = extractGithubOwner(githubAccount);
+            LambdaQueryWrapper<OshUser> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(OshUser::getDeleteFlag, 0)
+                    .and(w -> {
+                        w.eq(OshUser::getGithubAccount, githubLink);
+                        if (StringUtils.isNotEmpty(githubOwner)) {
+                            w.or().eq(OshUser::getGithubAccount, githubOwner)
+                                    .or().eq(OshUser::getGithubAccount, "https://github.com/" + githubOwner)
+                                    .or().eq(OshUser::getGithubAccount, "http://github.com/" + githubOwner);
+                        }
+                    });
+            user = oshUserMapper.selectOne(wrapper);
+        }
+        if (user == null) {
+            return R.fail("用户不存在");
+        }
+
+        OshUserCardVO vo = new OshUserCardVO();
+        vo.setId(user.getId());
+        vo.setUsername(user.getUsername());
+        vo.setAvatar(buildAvatarUrl(user.getAvatar()));
+        vo.setGithubAccount(normalizeGithubAccount(user.getGithubAccount()));
+        vo.setWechatName(user.getWechatName());
+        vo.setSex(user.getSex());
+        vo.setIntroduction(user.getIntroduction());
+        vo.setRoles(userManageMapper.selectUserRolesByUserIds(Collections.singletonList(user.getId())));
+        return R.ok(vo);
+    }
+
+    private String extractGithubOwner(String githubAccount) {
+        String value = trimToMax(githubAccount, 100);
+        if (StringUtils.isEmpty(value)) {
+            return null;
+        }
+        value = value.replace("https://github.com/", "")
+                .replace("http://github.com/", "")
+                .replace("github.com/", "");
+        int queryIndex = value.indexOf('?');
+        if (queryIndex >= 0) {
+            value = value.substring(0, queryIndex);
+        }
+        int slashIndex = value.indexOf('/');
+        if (slashIndex >= 0) {
+            value = value.substring(0, slashIndex);
+        }
+        return trimToMax(value, 100);
+    }
+
+    private String buildAvatarUrl(String avatar) {
+        if (StringUtils.isEmpty(avatar)) {
+            return null;
+        }
+        String avatarKey = avatar;
+        if (avatarKey.startsWith("http")) {
+            String publicDomain = ossUtil.getOssProperties().getPublicDomain();
+            if (StringUtils.isNotEmpty(publicDomain) && avatarKey.startsWith(publicDomain)) {
+                avatarKey = avatarKey.substring(publicDomain.length());
+                if (avatarKey.startsWith("/")) {
+                    avatarKey = avatarKey.substring(1);
+                }
+            } else {
+                return avatarKey;
+            }
+        }
+        return ossService.getLimitedUrl(avatarKey, 30);
+    }
+
+    private String trimToMax(String value, int maxLength) {
+        if (StringUtils.isEmpty(value)) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.length() > maxLength ? trimmed.substring(0, maxLength) : trimmed;
     }
 
     @Autowired
@@ -437,22 +633,10 @@ public class OshUserServiceImpl implements IOshUserService {
     public R<OshUser> getUserInfo() {
         OshUser oshUser = UserContextUtil.getCurrentUser();
         oshUser.setPassword(null);
+        oshUser.setGithubAccount(normalizeGithubAccount(oshUser.getGithubAccount()));
         // 将头像相对路径转为临时签名URL（有效期30分钟）
         if (StringUtils.isNotEmpty(oshUser.getAvatar())) {
-            String avatar = oshUser.getAvatar();
-            // 兼容旧数据：如果存的是完整URL（http开头），提取相对路径
-            if (avatar.startsWith("http")) {
-                // 旧数据存的是完整公开URL，尝试提取相对路径部分
-                String basePath = ossUtil.getOssProperties().getBasePath();
-                String publicDomain = ossUtil.getOssProperties().getPublicDomain();
-                if (avatar.startsWith(publicDomain)) {
-                    avatar = avatar.substring(publicDomain.length());
-                    if (avatar.startsWith("/")) {
-                        avatar = avatar.substring(1);
-                    }
-                }
-            }
-            oshUser.setAvatar(ossService.getLimitedUrl(avatar, 30));
+            oshUser.setAvatar(buildAvatarUrl(oshUser.getAvatar()));
         }
         return R.ok(oshUser);
     }
@@ -638,16 +822,5 @@ public class OshUserServiceImpl implements IOshUserService {
         roleMap.put("roleCode", DEFAULT_ROLE_CODE);
         roleMap.put("level", DEFAULT_ROLE_LEVEL);
         return roleMap;
-    }
-
-    /**
-     * 查询用户列表
-     *
-     * @param req 用户
-     * @return 用户
-     */
-    @Override
-    public List<OshUser> selectUserList(UserListRequest req) {
-        return oshUserMapper.selectList(Wrappers.lambdaQuery());
     }
 }

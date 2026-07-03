@@ -9,29 +9,17 @@ import javax.validation.constraints.NotNull;
 @ApiModel(description = "工具购买下单请求")
 public class ToolPurchaseCreateRequest {
 
-    @NotNull(message = "工具ID不能为空")
-    @ApiModelProperty(value = "工具ID", required = true, example = "1001")
-    private Long toolId;
-
     @NotNull(message = "套餐ID不能为空")
-    @ApiModelProperty(value = "套餐ID", required = true, example = "2001")
+    @ApiModelProperty(value = "全局次数套餐ID", required = true, example = "2001")
     private Long packageId;
 
     @NotNull(message = "支付方式不能为空")
-    @ApiModelProperty(value = "支付方式：1-纯现金，3-现金+积分", required = true, example = "1")
+    @ApiModelProperty(value = "套餐支付类型：1-仅现金，2-仅积分，3-现金或积分", required = true, example = "3")
     private Integer payType;
 
-    @NotBlank(message = "支付渠道不能为空")
-    @ApiModelProperty(value = "支付渠道，如 wxpay/alipay", required = true, example = "wxpay")
-    private String channel;
-
-    public Long getToolId() {
-        return toolId;
-    }
-
-    public void setToolId(Long toolId) {
-        this.toolId = toolId;
-    }
+    @NotBlank(message = "支付方式标识不能为空")
+    @ApiModelProperty(value = "支付方式标识：points/wxpay/alipay", required = true, example = "points")
+    private String paymentMethod;
 
     public Long getPackageId() {
         return packageId;
@@ -49,11 +37,11 @@ public class ToolPurchaseCreateRequest {
         this.payType = payType;
     }
 
-    public String getChannel() {
-        return channel;
+    public String getPaymentMethod() {
+        return paymentMethod;
     }
 
-    public void setChannel(String channel) {
-        this.channel = channel;
+    public void setPaymentMethod(String paymentMethod) {
+        this.paymentMethod = paymentMethod;
     }
 }

@@ -1,5 +1,6 @@
 package com.backstage.system.service.impl;
 
+import com.backstage.common.enums.ResourceCodePrefixEnum;
 import com.backstage.system.config.properties.SearchEsProperties;
 import com.backstage.system.constants.CourseConstants;
 import com.backstage.system.constants.CourseSectionConstants;
@@ -113,6 +114,10 @@ public class OshCourseServiceImpl implements IOshCourseService {
 
     /** 创始人 role.level >= 6，课程操作跳过审核直接发布 */
     private static final int FOUNDER_ROLE_LEVEL = 6;
+    private static final int LEVEL_FREE = 1;
+    private static final int LEVEL_VIP = 2;
+    private static final int LEVEL_SMALL_CLASS = 3;
+    private static final int LEVEL_INTERNAL = 4;
 
     private static final String DOC_MODE_BIND_EXISTING = "BIND_EXISTING";
     private static final String DOC_REF_TYPE_COURSE_SECTION = "course_section";
@@ -247,18 +252,46 @@ public class OshCourseServiceImpl implements IOshCourseService {
 
     @Override
     public String getCourseSectionContent(Long sectionId, Long userId) {
+        return resolveSectionDocContent(sectionId);
+    }
+
+    @Override
+    public String getCourseSectionEditContent(Long sectionId) {
+        return resolveSectionDocContent(sectionId, false);
+    }
+
+    /**
+     * 优先返回小节绑定的主文档内容；无文档时 text 回退 text_content，video 在 allowVideoMediaFallback=true 时回退 media_url。
+     */
+    private String resolveSectionDocContent(Long sectionId) {
+        return resolveSectionDocContent(sectionId, true);
+    }
+
+    private String resolveSectionDocContent(Long sectionId, boolean allowVideoMediaFallback) {
         OshCourseSection section = oshCourseMapper.selectCourseSectionById(sectionId);
         if (section == null || section.getDeleteFlag() == null || section.getDeleteFlag() != CourseSectionConstants.DELETE_FLAG_NORMAL) {
             return "";
         }
-        if (CourseSectionConstants.TYPE_TEXT.equalsIgnoreCase(section.getType())) {
-            String content = oshDocMapper.selectPrimaryDocContentBySectionId(sectionId);
-            return StringUtils.defaultString(content, "");
+        String docContent = oshDocMapper.selectPrimaryDocContentBySectionId(sectionId);
+        if (StringUtils.isNotBlank(docContent)) {
+            return docContent;
         }
-        if (CourseSectionConstants.TYPE_VIDEO.equalsIgnoreCase(section.getType())) {
+        // 与 save 写入 osh_course_section.text_content 同源回退
+        if (StringUtils.isNotBlank(section.getTextContent())) {
+            return section.getTextContent();
+        }
+        if (allowVideoMediaFallback && CourseSectionConstants.TYPE_VIDEO.equalsIgnoreCase(section.getType())) {
             return StringUtils.defaultString(section.getMediaUrl(), "");
         }
         return "";
+    }
+
+    @Override
+    public List<OshCourseSectionVo> getCourseSectionOutlineForEdit(Long courseId) {
+        if (courseId == null) {
+            return new ArrayList<>();
+        }
+        return buildSectionTree(oshCourseMapper.selectCourseSectionList(courseId));
     }
 
     @Override
@@ -426,6 +459,7 @@ public class OshCourseServiceImpl implements IOshCourseService {
      */
     @Override
     public int insertCourse(OshCourse course) {
+        ensureCourseNo(course);
         return oshCourseMapper.insertCourse(course);
     }
 
@@ -433,6 +467,7 @@ public class OshCourseServiceImpl implements IOshCourseService {
     @Transactional(rollbackFor = Exception.class)
     public Long createCourse(CourseCreateRequest request, OshUser operator) {
         OshCourse course = buildCourseForCreate(request, operator);
+        ensureCourseNo(course);
         course.setStatus(resolveCourseStatusAfterOperatorAction(operator));
         int rows = oshCourseMapper.insertCourse(course);
         if (rows <= 0) {
@@ -446,6 +481,12 @@ public class OshCourseServiceImpl implements IOshCourseService {
         publishCourseIndexOutboxIfNeeded(course.getId(), latestCourse.getStatus(), indexMessage, operator);
         scheduleCourseEsUpsertAfterCommit(course.getId(), latestCourse.getStatus());
         return course.getId();
+    }
+
+    private void ensureCourseNo(OshCourse course) {
+        if (course != null && StringUtils.isBlank(course.getNo())) {
+            course.setNo(GenerateUtil.generateResourceCode(ResourceCodePrefixEnum.COURSE));
+        }
     }
 
     @Override
@@ -647,6 +688,7 @@ public class OshCourseServiceImpl implements IOshCourseService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Long createCourseVideoSection(CourseVideoSectionCreateRequest request, OshUser operator) {
         // 有 id → 更新
         if (request.getId() != null) {
@@ -829,8 +871,8 @@ public class OshCourseServiceImpl implements IOshCourseService {
         course.setAfterServiceDays(defaultInteger(request.getAfterServiceDays()));
         course.setExamId(request.getExamId());
         course.setRemark(StringUtils.trimToNull(request.getRemark()));
-        course.setResourceType(request.getResourceType());
-        course.setLevel(request.getLevel());
+        course.setResourceType(normalizeCourseResourceType(request.getResourceType(), request.getLevel()));
+        course.setLevel(resolveCourseLevelByResourceType(course.getResourceType(), request.getLevel()));
         course.setDifficulty(request.getDifficulty());
         course.setServicePeriod(request.getServicePeriod());
 
@@ -852,6 +894,74 @@ public class OshCourseServiceImpl implements IOshCourseService {
 
     private static Integer defaultInteger(Integer value) {
         return value == null ? CourseConstants.DEFAULT_COUNT : value;
+    }
+
+    private static Integer resolveCourseLevelByResourceType(String resourceType, Integer fallbackLevel) {
+        CourseResourceEnum resourceEnum = CourseResourceEnum.fromCode(resourceType);
+        if (resourceEnum == CourseResourceEnum.CASH_ONLY
+                || resourceEnum == CourseResourceEnum.CASH_POINT
+                || resourceEnum == CourseResourceEnum.VIP) {
+            return LEVEL_VIP;
+        }
+        if (resourceEnum == CourseResourceEnum.SMALL_CLASS) {
+            return LEVEL_SMALL_CLASS;
+        }
+        if (resourceEnum == CourseResourceEnum.INTERNAL) {
+            return LEVEL_INTERNAL;
+        }
+        if (resourceEnum == CourseResourceEnum.FREE) {
+            return LEVEL_FREE;
+        }
+        return normalizeLegacyLevel(fallbackLevel);
+    }
+
+    private static String normalizeCourseResourceType(String resourceType, Integer fallbackLevel) {
+        CourseResourceEnum resourceEnum = CourseResourceEnum.fromCode(resourceType);
+        if (resourceEnum == CourseResourceEnum.CASH_ONLY || resourceEnum == CourseResourceEnum.CASH_POINT) {
+            return CourseResourceEnum.VIP.getCode();
+        }
+        if (resourceEnum != null) {
+            return resourceEnum.getCode();
+        }
+
+        String normalized = StringUtils.trimToEmpty(resourceType);
+        if ("0".equals(normalized) || "1".equals(normalized)) {
+            return CourseResourceEnum.FREE.getCode();
+        }
+        if ("2".equals(normalized) || "3".equals(normalized) || "4".equals(normalized)) {
+            return CourseResourceEnum.VIP.getCode();
+        }
+        if ("5".equals(normalized)) {
+            return CourseResourceEnum.SMALL_CLASS.getCode();
+        }
+        if ("6".equals(normalized)) {
+            return CourseResourceEnum.INTERNAL.getCode();
+        }
+
+        Integer level = normalizeLegacyLevel(fallbackLevel);
+        if (Objects.equals(level, LEVEL_VIP)) {
+            return CourseResourceEnum.VIP.getCode();
+        }
+        if (Objects.equals(level, LEVEL_SMALL_CLASS)) {
+            return CourseResourceEnum.SMALL_CLASS.getCode();
+        }
+        if (Objects.equals(level, LEVEL_INTERNAL)) {
+            return CourseResourceEnum.INTERNAL.getCode();
+        }
+        return CourseResourceEnum.FREE.getCode();
+    }
+
+    private static Integer normalizeLegacyLevel(Integer level) {
+        if (Objects.equals(level, LEVEL_VIP)) {
+            return LEVEL_VIP;
+        }
+        if (Objects.equals(level, LEVEL_SMALL_CLASS)) {
+            return LEVEL_SMALL_CLASS;
+        }
+        if (level != null && level >= LEVEL_INTERNAL) {
+            return LEVEL_INTERNAL;
+        }
+        return LEVEL_FREE;
     }
 
     /**
@@ -907,8 +1017,8 @@ public class OshCourseServiceImpl implements IOshCourseService {
         course.setAfterServiceDays(defaultInteger(request.getAfterServiceDays()));
         course.setExamId(request.getExamId());
         course.setRemark(StringUtils.trimToNull(request.getRemark()));
-        course.setResourceType(request.getResourceType());
-        course.setLevel(request.getLevel());
+        course.setResourceType(normalizeCourseResourceType(request.getResourceType(), request.getLevel()));
+        course.setLevel(resolveCourseLevelByResourceType(course.getResourceType(), request.getLevel()));
         course.setDifficulty(request.getDifficulty());
         if (request.getServicePeriod() != null) course.setServicePeriod(request.getServicePeriod());
         String operatorName = operator == null ? null : StringUtils.trimToNull(operator.getUsername());
@@ -1207,9 +1317,6 @@ public class OshCourseServiceImpl implements IOshCourseService {
     }
 
     private boolean isBindExistingDocMode(CourseTextSectionCreateRequest request) {
-        if (request.getDocId() != null) {
-            return true;
-        }
         return StringUtils.equalsIgnoreCase(DOC_MODE_BIND_EXISTING, request.getDocMode());
     }
 
@@ -1254,7 +1361,8 @@ public class OshCourseServiceImpl implements IOshCourseService {
         Date now = new Date();
         Long currentDocId = oshDocMapper.selectPrimaryDocIdBySectionId(sectionId);
         boolean bindExisting = isBindExistingDocMode(request);
-        boolean hasTextUpdate = StringUtils.isNotBlank(request.getTextContent()) || StringUtils.isNotBlank(request.getDocTitle());
+        boolean hasContentUpdate = StringUtils.isNotBlank(request.getTextContent());
+        boolean hasTitleUpdate = StringUtils.isNotBlank(request.getDocTitle()) || StringUtils.isNotBlank(request.getTitle());
         String docTitle = StringUtils.defaultIfBlank(request.getDocTitle(), request.getTitle());
         Long docId;
 
@@ -1273,17 +1381,19 @@ public class OshCourseServiceImpl implements IOshCourseService {
 
         if (currentDocId != null) {
             docId = currentDocId;
-            if (hasTextUpdate) {
+            if (hasContentUpdate || hasTitleUpdate) {
                 OshDoc updateDoc = new OshDoc();
                 updateDoc.setId(currentDocId);
                 updateDoc.setTitle(docTitle);
-                updateDoc.setContent(StringUtils.defaultString(request.getTextContent(), ""));
+                if (hasContentUpdate) {
+                    updateDoc.setContent(StringUtils.defaultString(request.getTextContent(), ""));
+                }
                 updateDoc.setContentFormat("html");
                 updateDoc.setUpdateBy(operatorName);
                 updateDoc.setUpdateTime(now);
                 oshDocMapper.updateDocContent(updateDoc);
             }
-        } else {
+        } else if (hasContentUpdate) {
             OshDoc newDoc = new OshDoc();
             newDoc.setId(GenerateUtil.generateSnowflakeId());
             newDoc.setTitle(StringUtils.defaultIfBlank(docTitle, "Section#" + sectionId));
@@ -1299,6 +1409,8 @@ public class OshCourseServiceImpl implements IOshCourseService {
             newDoc.setUpdateTime(now);
             oshDocMapper.insertDoc(newDoc);
             docId = newDoc.getId();
+        } else {
+            return;
         }
 
         ensureSectionDocRef(sectionId, docId, request, operatorName, now);

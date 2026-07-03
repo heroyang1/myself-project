@@ -8,13 +8,12 @@ import com.backstage.common.enums.ResultCode;
 import com.backstage.common.utils.StringUtils;
 import com.backstage.system.domain.questionanswer.Answer;
 import com.backstage.system.domain.questionanswer.Question;
-import com.backstage.system.domain.questionanswer.Tag;
 import com.backstage.system.domain.questionanswer.vo.QueryQuestionDetailVO;
 import com.backstage.system.domain.questionanswer.vo.QueryQuestionListVO;
 import com.backstage.system.mapper.questionanswer.OshQAAnswerMapper;
 import com.backstage.system.mapper.questionanswer.OshQAQuestionMapper;
-import com.backstage.system.mapper.questionanswer.OshQATagMapper;
 import com.backstage.system.service.questionanswer.IOshQAQuestionService;
+import com.backstage.system.service.questionanswer.IOshQATagService;
 import com.backstage.system.utils.ResourcePermissionUtil;
 import com.backstage.system.utils.UserContextUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -56,7 +55,7 @@ public class OshQAQuestionServiceImpl implements IOshQAQuestionService {
     private OshQAAnswerMapper oshQaAnswerMapper;
 
     @Autowired
-    private OshQATagMapper oshQaTagMapper;
+    private IOshQATagService oshQaTagService;
 
 
 
@@ -90,14 +89,26 @@ public class OshQAQuestionServiceImpl implements IOshQAQuestionService {
 
         oshQaQuestionMapper.insert(question);
 
-        if (tags != null && !tags.isEmpty()) {
-            for (String tagName : tags) {
-                Long tagId = resolveQATagId(tagName, userId);
-                if (tagId != null) {
-                    oshQaQuestionMapper.addQuestionTags(question.getId(), tagId, userId);
-                }
-            }
+        oshQaTagService.bindQuestionTags(question.getId(), tags, userId);
+        return R.ok(ResultCode.SUCCESS.getMsg());
+    }
+
+    @Override
+    public R<String> addToolQuestion(Long userId, Long toolId, String content, List<String> tags) {
+        if (userId == null) return R.fail(ResultCode.FAILED_NOT_LOGIN.getMsg());
+        if (toolId == null || !StringUtils.isNotEmpty(content)) {
+            return R.fail(ResultCode.FAILED_PARAMS_VALIDATE.getMsg());
         }
+        Question question = new Question();
+        question.setUserId(userId);
+        question.setResourceNo(toolId);
+        question.setResourceType("tool");
+        question.setContent(content);
+        question.setIsPaidOnly((byte) 0);
+        question.setCreateBy(userId);
+        question.setUpdateBy(userId);
+        oshQaQuestionMapper.insert(question);
+        oshQaTagService.bindQuestionTags(question.getId(), tags, userId);
         return R.ok(ResultCode.SUCCESS.getMsg());
     }
 
@@ -157,13 +168,7 @@ public class OshQAQuestionServiceImpl implements IOshQAQuestionService {
         question.setIsPaidOnly(isPaidOnly);
         oshQaQuestionMapper.update(question, new LambdaQueryWrapper<Question>().eq(Question::getId, questionId));
         if (tags != null) {
-            oshQaQuestionMapper.deleteQuestionTags(questionId);
-            for (String tagName : tags) {
-                Long tagId = resolveQATagId(tagName, userId);
-                if (tagId != null) {
-                    oshQaQuestionMapper.addQuestionTags(questionId, tagId, userId);
-                }
-            }
+            oshQaTagService.replaceQuestionTags(questionId, tags, userId);
         }
         return R.ok(ResultCode.SUCCESS.getMsg());
     }
@@ -390,20 +395,7 @@ public class OshQAQuestionServiceImpl implements IOshQAQuestionService {
             return R.fail(ResultCode.FAILED_NOT_EXISTS.getMsg());
         }
         BeanUtils.copyProperties(question, queryQuestionDetailVO);
-        List<Long> tagIds = oshQaTagMapper.selectTagIdsByQuestionId(questionId);
-        List<Tag> tags = null;
-        if (!CollectionUtils.isEmpty(tagIds)) {
-            tags = oshQaTagMapper.selectList(new LambdaQueryWrapper<Tag>().in(Tag::getId, tagIds));
-        }
-        if (tags != null) {
-            ArrayList<String> tagNames = new ArrayList<>();
-            for (Tag tag : tags) {
-                tagNames.add(tag.getName());
-            }
-            queryQuestionDetailVO.setTags(tagNames);
-        } else {
-            queryQuestionDetailVO.setTags(null);
-        }
+        queryQuestionDetailVO.setTags(oshQaTagService.listQuestionTagNames(questionId));
         List<Answer> answers = oshQaAnswerMapper.selectList(new LambdaQueryWrapper<Answer>()
                 .eq(Answer::getQuestionId, questionId)
                 .eq(Answer::getDeleteFlag, 0)
@@ -415,75 +407,4 @@ public class OshQAQuestionServiceImpl implements IOshQAQuestionService {
         return R.ok(queryQuestionDetailVO);
     }
 
-    @Override
-    public R<String> vote(Long userId, Long answerId) {
-        if (userId == null) return R.fail(ResultCode.FAILED_NOT_LOGIN.getMsg());
-        if (answerId == null) return R.fail(ResultCode.FAILED_PARAMS_VALIDATE.getMsg());
-        Integer deleteFlag = oshQaAnswerMapper.getVoteInfoByUserIdAndAnswerId(userId, answerId);
-        if (deleteFlag != null && deleteFlag == 0) {
-            return R.fail(ResultCode.FAILED.getMsg());
-        }
-        LambdaQueryWrapper<Answer> answerWrapper = new LambdaQueryWrapper<Answer>()
-                .select(Answer::getId)
-                .eq(Answer::getId, answerId)
-                .eq(Answer::getDeleteFlag, 0)
-                .eq(Answer::getStatus, ANSWER_STATUS_NORMAL);
-        Answer answer = oshQaAnswerMapper.selectOne(answerWrapper);
-        if (answer == null) {
-            return R.fail(ResultCode.FAILED_NOT_EXISTS.getMsg());
-        }
-        oshQaAnswerMapper.voteAnswer(userId, answerId, userId);
-        oshQaAnswerMapper.incrementVoteCount(answerId);
-        return R.ok(ResultCode.SUCCESS.getMsg());
-    }
-
-    @Override
-    public R<String> cancelVote(Long userId, Long answerId) {
-        if (userId == null) return R.fail(ResultCode.FAILED_NOT_LOGIN.getMsg());
-        if (answerId == null) return R.fail(ResultCode.FAILED_PARAMS_VALIDATE.getMsg());
-        Integer deleteFlag = oshQaAnswerMapper.getVoteInfoByUserIdAndAnswerId(userId, answerId);
-        if (deleteFlag != null && deleteFlag == 0) {
-            LambdaQueryWrapper<Answer> answerWrapper = new LambdaQueryWrapper<Answer>()
-                    .select(Answer::getId)
-                    .eq(Answer::getId, answerId)
-                    .eq(Answer::getDeleteFlag, 0)
-                    .eq(Answer::getStatus, ANSWER_STATUS_NORMAL);
-            Answer answer = oshQaAnswerMapper.selectOne(answerWrapper);
-            if (answer == null) {
-                return R.fail(ResultCode.FAILED_NOT_EXISTS.getMsg());
-            }
-            oshQaAnswerMapper.cancelVoteAnswer(userId, answerId, userId);
-            oshQaAnswerMapper.decrementVoteCount(answerId);
-            return R.ok(ResultCode.SUCCESS.getMsg());
-        }
-        return R.fail(ResultCode.FAILED.getMsg());
-    }
-
-    /**
-     * 根据标签名解析标签ID：存在则复用，不存在则自动创建。
-     * 与课程模块的 resolveCourseTag 逻辑保持一致。
-     */
-    private Long resolveQATagId(String tagName, Long userId) {
-        if (tagName == null || tagName.trim().isEmpty()) {
-            return null;
-        }
-        String name = tagName.trim();
-        Tag existing = oshQaTagMapper.selectTagByName(name);
-        if (existing != null) {
-            return existing.getId();
-        }
-        // 不存在则新建，createBy/updateBy 由 MyBatis-Plus 自动填充
-        Tag tag = new Tag();
-        tag.setName(name);
-        tag.setType("custom");
-        tag.setUseCount(0);
-        try {
-            oshQaTagMapper.insert(tag);
-            return tag.getId();
-        } catch (org.springframework.dao.DuplicateKeyException ex) {
-            // 并发场景下可能已被其他请求插入，重新查一次
-            Tag retry = oshQaTagMapper.selectTagByName(name);
-            return retry != null ? retry.getId() : null;
-        }
-    }
 }

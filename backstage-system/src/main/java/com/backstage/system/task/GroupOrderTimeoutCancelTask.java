@@ -95,6 +95,24 @@ public class GroupOrderTimeoutCancelTask {
     }
 
     /**
+     * 按订单号取消待支付拼团订单，并复用原有名额释放逻辑。
+     *
+     * @param orderNo 拼团订单号
+     */
+    public void cancelPendingOrderByOrderNo(String orderNo) {
+        OshGroupOrder order = groupServerMapper.selectGroupOrderByOrderNo(orderNo);
+        if (order == null) {
+            log.warn("拼团订单不存在，跳过取消，订单号: {}", orderNo);
+            return;
+        }
+        if (!"pending".equals(order.getStatus())) {
+            log.info("拼团订单不是待支付状态，跳过取消，订单号: {}, status={}", orderNo, order.getStatus());
+            return;
+        }
+        cancelOrder(order);
+    }
+
+    /**
      * 取消单个订单并释放名额
      */
     private void cancelOrder(OshGroupOrder order) {
@@ -111,20 +129,13 @@ public class GroupOrderTimeoutCancelTask {
             throw new RuntimeException("更新订单状态失败");
         }
         
-        // 2. 更新参团记录状态为已取消
+        // 2. 更新参团记录状态为已取消（3=已取消）
         if (order.getGroupWorkId() != null) {
-            groupServerMapper.updateGroupWorkStatus(order.getGroupWorkId(), 2); // 2-已取消
+            groupServerMapper.updateGroupWorkStatus(order.getGroupWorkId(), 3);
         }
         
-        // 3. 释放拼团活动人数
-        if (order.getGroupActivityId() != null) {
-            releaseActivityQuota(order.getGroupActivityId());
-        }
-        
-        // 4. 释放用户发起拼团人数
-        if (order.getGroupWorkId() != null) {
-            releaseUserInitiatedQuota(order.getGroupWorkId());
-        }
+        // 注意：不再释放拼团活动人数（currentNum），因为 join 时未递增 currentNum，
+        // currentNum 仅在支付成功回调中递增，取消未支付订单无需回退。
         
         log.info("订单取消成功: {}", order.getOrderNo());
     }
