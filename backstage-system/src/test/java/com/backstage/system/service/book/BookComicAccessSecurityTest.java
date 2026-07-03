@@ -1,5 +1,6 @@
 package com.backstage.system.service.book;
 
+import com.backstage.common.config.OssProperties;
 import com.backstage.common.constant.OshUserConstants;
 import com.backstage.common.threadlocal.ThreadLocalUtil;
 import com.backstage.system.domain.UserBookRelation;
@@ -13,6 +14,7 @@ import com.backstage.system.mapper.book.BookChapterPageMapper;
 import com.backstage.system.mapper.book.BookMapper;
 import com.backstage.system.mapper.book.BookTagDOMapper;
 import com.backstage.system.mapper.book.UserBookRelationMapper;
+import com.backstage.system.service.common.OssService;
 import com.backstage.system.service.impl.BookServiceImpl;
 import com.backstage.common.async.AsyncTaskSupport;
 import org.junit.After;
@@ -28,6 +30,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -79,6 +82,21 @@ public class BookComicAccessSecurityTest {
     }
 
     @Test
+    public void shouldSignManagedAbsoluteObjectStorageUrl() {
+        Fixture fixture = createFixture();
+        when(fixture.bookChapterPageMapper.selectList(any())).thenReturn(Collections.singletonList(
+                page(FREE_CHAPTER_ID, "https://account-id.r2.cloudflarestorage.com/osh/common/book/free-page.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256")
+        ));
+        when(fixture.ossService.getLimitedUrl(eq("common/book/free-page.jpg"), eq(120)))
+                .thenReturn("https://signed.example/common/book/free-page.jpg?X-Amz-Signature=ok");
+
+        BookDetailVO detail = fixture.service.selectBookDetail(BOOK_ID, false);
+
+        assertEquals("https://signed.example/common/book/free-page.jpg?X-Amz-Signature=ok",
+                detail.getBookDetails().get(0).getPages().get(0).getImageUrl());
+    }
+
+    @Test
     public void shouldUseCapturedLevelWhenAggregationThreadLosesThreadLocal() {
         Fixture fixture = createFixture(clearingThreadExecutor());
         ThreadLocalUtil.set(OshUserConstants.USER_ID, 8L);
@@ -103,6 +121,11 @@ public class BookComicAccessSecurityTest {
         BookChapterPageMapper bookChapterPageMapper = mock(BookChapterPageMapper.class);
         BookTagDOMapper bookTagDOMapper = mock(BookTagDOMapper.class);
         UserBookRelationMapper userBookRelationMapper = mock(UserBookRelationMapper.class);
+        OssService ossService = mock(OssService.class);
+        OssProperties ossProperties = new OssProperties();
+        ossProperties.setBucketName("osh");
+        ossProperties.setEndpoint("https://account-id.r2.cloudflarestorage.com");
+        ossProperties.setPublicDomain("https://assets.osh.example");
 
         BookServiceImpl service = new BookServiceImpl();
         ReflectionTestUtils.setField(service, "bookMapper", bookMapper);
@@ -110,6 +133,8 @@ public class BookComicAccessSecurityTest {
         ReflectionTestUtils.setField(service, "bookChapterPageMapper", bookChapterPageMapper);
         ReflectionTestUtils.setField(service, "bookTagDOMapper", bookTagDOMapper);
         ReflectionTestUtils.setField(service, "userBookRelationMapper", userBookRelationMapper);
+        ReflectionTestUtils.setField(service, "ossService", ossService);
+        ReflectionTestUtils.setField(service, "ossProperties", ossProperties);
         ReflectionTestUtils.setField(service, "asyncTaskSupport", new AsyncTaskSupport());
         ReflectionTestUtils.setField(service, "aggregationTaskExecutor", aggregationTaskExecutor);
 
@@ -120,7 +145,7 @@ public class BookComicAccessSecurityTest {
         ));
         when(bookTagDOMapper.selectBookTagListByBookId(BOOK_ID)).thenReturn(Collections.emptyList());
 
-        return new Fixture(service, bookMapper, bookChapterPageMapper, userBookRelationMapper);
+        return new Fixture(service, bookMapper, bookChapterPageMapper, userBookRelationMapper, ossService);
     }
 
     private static Executor clearingThreadExecutor() {
@@ -185,13 +210,15 @@ public class BookComicAccessSecurityTest {
         private final BookMapper bookMapper;
         private final BookChapterPageMapper bookChapterPageMapper;
         private final UserBookRelationMapper userBookRelationMapper;
+        private final OssService ossService;
 
         private Fixture(BookServiceImpl service, BookMapper bookMapper, BookChapterPageMapper bookChapterPageMapper,
-                        UserBookRelationMapper userBookRelationMapper) {
+                        UserBookRelationMapper userBookRelationMapper, OssService ossService) {
             this.service = service;
             this.bookMapper = bookMapper;
             this.bookChapterPageMapper = bookChapterPageMapper;
             this.userBookRelationMapper = userBookRelationMapper;
+            this.ossService = ossService;
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.backstage.system.service.impl;
 
 import cn.hutool.core.util.StrUtil;
+import com.backstage.common.config.OssProperties;
 import com.backstage.common.enums.AnnouncementModuleEnum;
 import com.backstage.common.enums.ResourceCodePrefixEnum;
 import com.backstage.common.exception.ServiceException;
@@ -48,6 +49,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.math.BigDecimal;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -98,6 +100,9 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
 
     @Autowired
     private com.backstage.system.service.common.OssService ossService;
+
+    @Autowired
+    private OssProperties ossProperties;
 
     @Autowired
     private com.backstage.system.service.book.IBookEsService bookEsService;
@@ -305,10 +310,85 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
     }
 
     private String resolveBookAssetUrl(String url, Boolean forEdit) {
-        if (StringUtils.isEmpty(url) || Boolean.TRUE.equals(forEdit) || url.startsWith("http") || url.startsWith("data:")) {
+        String trimmed = StringUtils.isEmpty(url) ? url : url.trim();
+        String lowerUrl = StringUtils.isEmpty(trimmed) ? trimmed : trimmed.toLowerCase();
+        if (StringUtils.isEmpty(trimmed) || Boolean.TRUE.equals(forEdit) || lowerUrl.startsWith("data:")) {
             return url;
         }
-        return ossService.getLimitedUrl(url, 120);
+        String objectKey = resolveManagedObjectKey(trimmed);
+        if (StringUtils.isNotEmpty(objectKey)) {
+            return ossService.getLimitedUrl(objectKey, 120);
+        }
+        return lowerUrl.startsWith("http") ? url : ossService.getLimitedUrl(trimmed, 120);
+    }
+
+    // 只把当前 OSS/R2 管理的绝对地址转为签名 URL，避免外部图片链接被误改。
+    private String resolveManagedObjectKey(String url) {
+        if (StringUtils.isEmpty(url)) {
+            return url;
+        }
+        String trimmed = url.trim();
+        if (!trimmed.toLowerCase().startsWith("http")) {
+            return trimLeadingSlash(trimmed);
+        }
+        try {
+            URI uri = URI.create(trimmed);
+            String host = Optional.ofNullable(uri.getHost()).orElse("").toLowerCase();
+            String path = trimLeadingSlash(Optional.ofNullable(uri.getRawPath()).orElse(""));
+            if (StringUtils.isEmpty(host) || StringUtils.isEmpty(path)) {
+                return null;
+            }
+            if (matchesConfiguredHost(host, ossProperties.getPublicDomain())) {
+                return stripBucketPrefix(path);
+            }
+            if (matchesConfiguredHost(host, ossProperties.getEndpoint())) {
+                return stripBucketPrefix(path);
+            }
+            if (host.endsWith(".r2.cloudflarestorage.com") && pathStartsWithBucket(path)) {
+                return stripBucketPrefix(path);
+            }
+        } catch (Exception ignored) {
+            return null;
+        }
+        return null;
+    }
+
+    private boolean matchesConfiguredHost(String host, String configuredUrl) {
+        if (StringUtils.isEmpty(host) || StringUtils.isEmpty(configuredUrl)) {
+            return false;
+        }
+        try {
+            String normalized = configuredUrl.contains("://") ? configuredUrl : "https://" + configuredUrl;
+            String configuredHost = Optional.ofNullable(URI.create(normalized).getHost()).orElse("").toLowerCase();
+            return host.equals(configuredHost);
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private boolean pathStartsWithBucket(String path) {
+        String bucketName = ossProperties.getBucketName();
+        return StringUtils.isNotEmpty(bucketName) && (path.equals(bucketName) || path.startsWith(bucketName + "/"));
+    }
+
+    private String stripBucketPrefix(String path) {
+        String normalized = trimLeadingSlash(path);
+        String bucketName = ossProperties.getBucketName();
+        if (StringUtils.isNotEmpty(bucketName) && normalized.startsWith(bucketName + "/")) {
+            return normalized.substring(bucketName.length() + 1);
+        }
+        return normalized;
+    }
+
+    private String trimLeadingSlash(String path) {
+        if (path == null) {
+            return null;
+        }
+        String normalized = path;
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        return normalized;
     }
 
     private void attachComicPages(List<BookChapterVO> chapters, Long bookId, Boolean forEdit) {
