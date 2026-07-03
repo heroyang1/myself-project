@@ -114,7 +114,7 @@ public class BookComicAccessSecurityTest {
         ReflectionTestUtils.setField(service, "aggregationTaskExecutor", aggregationTaskExecutor);
 
         when(bookMapper.selectReadableById(BOOK_ID)).thenReturn(comicBook());
-        when(bookChapterMapper.selectBookChapterListByBookId(BOOK_ID)).thenReturn(Arrays.asList(
+        when(bookChapterMapper.selectBookChapterListByBookId(BOOK_ID)).thenAnswer(invocation -> Arrays.asList(
                 chapter(FREE_CHAPTER_ID, "免费试读", 1),
                 chapter(PAID_CHAPTER_ID, "付费章节", 0)
         ));

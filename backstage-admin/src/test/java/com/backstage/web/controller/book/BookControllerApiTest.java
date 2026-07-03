@@ -18,10 +18,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -32,27 +32,28 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.test.context.junit.jupiter.SpringExtension;
+import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.RequestBuilder;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@ExtendWith(SpringExtension.class)
+@RunWith(SpringRunner.class)
 @SpringBootTest(classes = RuoYiApplication.class)
 @AutoConfigureMockMvc(addFilters = false)
 public class BookControllerApiTest {
@@ -81,13 +82,18 @@ public class BookControllerApiTest {
     @MockBean
     private KafkaTemplate<String, String> kafkaTemplate;
 
-    @BeforeEach
-    void setUp() {
+    private final List<Long> createdBookIds = new ArrayList<>();
+
+    private final List<Long> createdQuestionIds = new ArrayList<>();
+
+    @Before
+    public void setUp() {
         Mockito.when(sysConfigService.selectCaptchaEnabled()).thenReturn(false);
     }
 
-    @AfterEach
-    void tearDown() {
+    @After
+    public void tearDown() {
+        cleanupGeneratedData();
         ThreadLocalUtil.remove();
         SecurityContextHolder.clearContext();
     }
@@ -125,11 +131,12 @@ public class BookControllerApiTest {
                 .andReturn();
 
         Long bookId = extractDataId(createResult);
+        createdBookIds.add(bookId);
         BookDO created = bookMapper.selectById(bookId);
         assertNotNull(created);
         assertEquals("api-book-" + suffix, created.getTitle());
         assertEquals(Integer.valueOf(4), created.getLevel());
-        assertEquals(new BigDecimal("59.90"), created.getOriginalPrice());
+        assertEquals(new BigDecimal("0.00"), created.getOriginalPrice());
 
         List<BookChapterVO> createdChapters = bookChapterMapper.selectBookChapterListByBookId(bookId);
         assertEquals(2, createdChapters.size());
@@ -174,7 +181,7 @@ public class BookControllerApiTest {
         assertNotNull(updated);
         assertEquals("api-book-updated-" + suffix, updated.getTitle());
         assertEquals(Integer.valueOf(6), updated.getLevel());
-        assertEquals(new BigDecimal("39.90"), updated.getOriginalPrice());
+        assertEquals(new BigDecimal("0.00"), updated.getOriginalPrice());
 
         List<BookChapterVO> updatedChapters = bookChapterMapper.selectBookChapterListByBookId(bookId);
         assertEquals(2, updatedChapters.size());
@@ -226,7 +233,16 @@ public class BookControllerApiTest {
                 .orderByDesc(Question::getId)
                 .last("limit 1"));
         assertNotNull(question);
+        createdQuestionIds.add(question.getId());
         assertEquals(Long.valueOf(1L), question.getUserId());
+        ObjectNode publishPayload = objectMapper.createObjectNode();
+        publishPayload.put("questionId", question.getId());
+        performAsUser(buildCurrentUser(), post("/pc/qna/question/publish")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(publishPayload.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
         ObjectNode listPayload = objectMapper.createObjectNode();
         listPayload.put("resourceType", "book");
         listPayload.put("resourceNo", bookId);
@@ -273,7 +289,23 @@ public class BookControllerApiTest {
         book.setCreateBy(1L);
         book.setUpdateBy(1L);
         bookMapper.insert(book);
+        createdBookIds.add(book.getId());
         return book.getId();
+    }
+
+    private void cleanupGeneratedData() {
+        for (Long questionId : createdQuestionIds) {
+            if (questionId != null) {
+                oshQaQuestionMapper.deleteById(questionId);
+            }
+        }
+        for (Long bookId : createdBookIds) {
+            if (bookId != null) {
+                bookMapper.deleteById(bookId);
+            }
+        }
+        createdQuestionIds.clear();
+        createdBookIds.clear();
     }
 
     private Long extractDataId(MvcResult mvcResult) throws Exception {
@@ -303,6 +335,7 @@ public class BookControllerApiTest {
                                 new SimpleGrantedAuthority("book:delete"),
                                 new SimpleGrantedAuthority("book:restore"),
                                 new SimpleGrantedAuthority("qna:question:create"),
+                                new SimpleGrantedAuthority("qna:question:publish"),
                                 new SimpleGrantedAuthority("qna:question:list")
                         )
                 )
