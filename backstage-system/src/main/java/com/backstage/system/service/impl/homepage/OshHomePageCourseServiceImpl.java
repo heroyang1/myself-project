@@ -2,7 +2,9 @@ package com.backstage.system.service.impl.homepage;
 
 import com.backstage.common.utils.StringUtils;
 import com.backstage.system.domain.homepage.es.OshHomePageHotCourseEsDocument;
+import com.backstage.system.domain.homepage.vo.HotCourseLatestSectionVO;
 import com.backstage.system.domain.homepage.vo.HotCourseVO;
+import com.backstage.system.mapper.course.OshCourseSectionMapper;
 import com.backstage.system.mapper.homepage.AbstractOshHomePageAliasEsMapper;
 import com.backstage.system.mapper.homepage.OshHomePageCourseMapper;
 import com.backstage.system.mapper.homepage.OshHomePageHotCourseEsMapper;
@@ -32,6 +34,7 @@ public class OshHomePageCourseServiceImpl
     @Autowired private OssService ossService;
     @Autowired private IOshHomePageModulePathService modulePathService;
     @Autowired private OshHomePageHotCourseEsMapper hotCourseEsMapper;
+    @Autowired private OshCourseSectionMapper courseSectionMapper;
 
     @Override
     public String cardType() {
@@ -46,6 +49,15 @@ public class OshHomePageCourseServiceImpl
     @Override
     public List<HotCourseVO> getHotCoursesFromMysql(int effectiveLimit) {
         return signCoverUrls(getHotCoursesRawFromMysql(effectiveLimit));
+    }
+
+    @Override
+    public List<HotCourseLatestSectionVO> getLatestCourseUpdates(Long courseId, Integer limit) {
+        if (courseId == null) {
+            return Collections.emptyList();
+        }
+        int safeLimit = limit == null ? 2 : Math.max(1, Math.min(limit, 10));
+        return courseSectionMapper.selectLatestUpdatedSectionsByCourseId(courseId, safeLimit);
     }
 
     @Override
@@ -90,7 +102,7 @@ public class OshHomePageCourseServiceImpl
             vo.setListUrl(doc.getListUrl());
             result.add(vo);
         }
-        return signCoverUrls(result);
+        return signCoverUrls(fillLiveVideoCounts(result));
     }
 
     @Override
@@ -142,7 +154,7 @@ public class OshHomePageCourseServiceImpl
             vo.setDetailUrl(modulePathService.getDetailPath("course", vo.getId()));
             vo.setListUrl(modulePathService.getListPath("course"));
         }
-        return courses;
+        return fillLiveVideoCounts(courses);
     }
 
     private List<HotCourseVO> signCoverUrls(List<HotCourseVO> courses) {
@@ -153,6 +165,29 @@ public class OshHomePageCourseServiceImpl
             if (StringUtils.isNotEmpty(vo.getCover())) {
                 vo.setCover(ossService.getLimitedUrl(vo.getCover(), COVER_SIGN_MINUTES));
             }
+        }
+        return courses;
+    }
+
+    private List<HotCourseVO> fillLiveVideoCounts(List<HotCourseVO> courses) {
+        if (courses == null || courses.isEmpty()) {
+            return courses;
+        }
+        List<Long> courseIds = courses.stream()
+                .map(HotCourseVO::getId)
+                .filter(id -> id != null)
+                .collect(Collectors.toList());
+        if (courseIds.isEmpty()) {
+            return courses;
+        }
+        Map<Long, Integer> videoCountMap = homePageCourseMapper.selectVideoCountsByCourseIds(courseIds).stream()
+                .collect(Collectors.toMap(
+                        HotCourseVO::getCourseId,
+                        vo -> vo.getVideoCount() == null ? 0 : vo.getVideoCount(),
+                        (left, right) -> right
+                ));
+        for (HotCourseVO course : courses) {
+            course.setVideoCount(videoCountMap.getOrDefault(course.getId(), 0));
         }
         return courses;
     }

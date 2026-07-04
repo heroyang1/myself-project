@@ -1,6 +1,7 @@
 package com.backstage.system.service.impl.homepage;
 
 import com.backstage.common.exception.ServiceException;
+import com.backstage.system.config.properties.SearchEsProperties;
 import com.backstage.system.domain.homepage.es.HomepageMemberPlanEsDocument;
 import com.backstage.system.domain.member.OshMemberBenefit;
 import com.backstage.system.domain.member.OshMemberPlan;
@@ -46,10 +47,22 @@ public class OshHomePageMemberPlanServiceImpl implements IOshHomePageMemberPlanS
     @Resource
     private OshMemberBenefitMapper memberBenefitMapper;
 
+    @Resource
+    private SearchEsProperties searchEsProperties;
+
     @Override
     public List<OshMemberPlan> getPlans() {
+        if (!searchEsProperties.isEnabled()) {
+            return getPlansFromMysql();
+        }
+
         try {
             List<HomepageMemberPlanEsDocument> documents = homepageMemberPlanEsMapper.searchHomepagePlans();
+            if (documents == null || documents.isEmpty()) {
+                log.info("homepage member plans fallback to mysql because es returned empty result");
+                return getPlansFromMysql();
+            }
+
             List<OshMemberPlan> plans = new ArrayList<>(documents.size());
             for (HomepageMemberPlanEsDocument document : documents) {
                 plans.add(toPlan(document));
@@ -57,6 +70,18 @@ public class OshHomePageMemberPlanServiceImpl implements IOshHomePageMemberPlanS
             attachHomepagePriceTiers(plans);
             return plans;
         } catch (IOException | IllegalStateException exception) {
+            log.warn("homepage member plans fallback to mysql because es query failed", exception);
+            return getPlansFromMysql();
+        }
+    }
+
+    private List<OshMemberPlan> getPlansFromMysql() {
+        try {
+            List<OshMemberPlan> plans = queryAllEnabledPlans();
+            attachEnabledBenefits(plans);
+            attachHomepagePriceTiers(plans);
+            return plans;
+        } catch (Exception exception) {
             throw buildServiceException("查询首页会员套餐失败", exception);
         }
     }
@@ -446,6 +471,6 @@ public class OshHomePageMemberPlanServiceImpl implements IOshHomePageMemberPlanS
         if (detail == null || detail.trim().isEmpty()) {
             return new ServiceException(message);
         }
-        return new ServiceException(message + "：" + detail);
+        return new ServiceException(message + ": " + detail);
     }
 }

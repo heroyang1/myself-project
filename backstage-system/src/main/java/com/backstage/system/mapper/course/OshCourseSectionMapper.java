@@ -1,5 +1,6 @@
 package com.backstage.system.mapper.course;
 
+import com.backstage.system.domain.homepage.vo.HotCourseLatestSectionVO;
 import com.backstage.system.domain.course.OshCourseSection;
 import org.apache.ibatis.annotations.MapKey;
 import org.apache.ibatis.annotations.Mapper;
@@ -37,11 +38,22 @@ public interface OshCourseSectionMapper {
      */
     @MapKey("id")
     Map<String, Object> selectSectionVideoById(@Param("sectionId") Long sectionId);
+
+    /**
+     * 查询课程最近更新的两个视频小节
+     */
+    List<HotCourseLatestSectionVO> selectLatestUpdatedSectionsByCourseId(@Param("courseId") Long courseId,
+                                                                         @Param("limit") Integer limit);
     
     /**
      * 统计章节数量
      */
     int countSectionsByCourseId(@Param("courseId") Long courseId);
+
+    /**
+     * 统计课程下视频小节数量，兼容早期 type 为空但 media_url 已写入的历史数据。
+     */
+    int countVideoSectionsByCourseId(@Param("courseId") Long courseId);
     
     /**
      * 新增章节

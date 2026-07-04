@@ -2,6 +2,7 @@ package com.backstage.system.service.homepage;
 
 
 import com.backstage.system.domain.homepage.vo.HotCourseVO;
+import com.backstage.system.domain.homepage.vo.HotCourseLatestSectionVO;
 
 import java.util.List;
 
@@ -28,6 +29,15 @@ public interface IOshHomePageCourseService {
      * @return 热门课程列表
      */
     List<HotCourseVO> getHotCoursesFromMysql(int effectiveLimit);
+
+    /**
+     * 查询课程最近更新的小节
+     *
+     * @param courseId 课程ID
+     * @param limit 返回数量
+     * @return 最新更新小节
+     */
+    List<HotCourseLatestSectionVO> getLatestCourseUpdates(Long courseId, Integer limit);
 
     /**
      * 全量同步首页热门课程 Top 5 到 ES。
