@@ -15,7 +15,6 @@ import io.swagger.annotations.ApiParam;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -113,17 +112,8 @@ public class OssCloudFlareController {
         }
     }
 
-    @Anonymous
-    @GetMapping("/upload/avatar")
-    public R getUrl() {
-        String signedUrl = ossService.getLimitedUrl("common/video/course/946/202604/81c67441-f771-4eb9-be25-86576cd13794_test11.mp4", 1);
-
-        return R.ok(signedUrl);
-
-    }
-
     @ApiOperation("批量获取文件预览URL")
-    @PreAuthorize("hasAnyAuthority('upload:file','book:create','book:update')")
+    @OshUserLevel(value = 4)
     @PostMapping("/upload/preview-urls")
     public R<Map<String, String>> previewUrls(@RequestBody PreviewUrlsReq req) {
         if (req == null || req.getPaths() == null || req.getPaths().isEmpty()) {

@@ -88,6 +88,48 @@ public class OshQAAnswerServiceImpl implements IOshQAAnswerService {
         return R.ok(ResultCode.SUCCESS.getMsg());
     }
 
+    @Override
+    public R<String> vote(Long userId, Long answerId) {
+        if (userId == null) return R.fail(ResultCode.FAILED_NOT_LOGIN.getMsg());
+        if (answerId == null) return R.fail(ResultCode.FAILED_PARAMS_VALIDATE.getMsg());
+        Integer deleteFlag = oshQAAnswerMapper.getVoteInfoByUserIdAndAnswerId(userId, answerId);
+        if (deleteFlag != null && deleteFlag == 0) {
+            return R.fail(ResultCode.FAILED.getMsg());
+        }
+        Answer answer = oshQAAnswerMapper.selectOne(new LambdaQueryWrapper<Answer>()
+                .select(Answer::getId)
+                .eq(Answer::getId, answerId)
+                .eq(Answer::getDeleteFlag, 0)
+                .eq(Answer::getStatus, ANSWER_STATUS_NORMAL));
+        if (answer == null) {
+            return R.fail(ResultCode.FAILED_NOT_EXISTS.getMsg());
+        }
+        oshQAAnswerMapper.voteAnswer(userId, answerId, userId);
+        oshQAAnswerMapper.incrementVoteCount(answerId);
+        return R.ok(ResultCode.SUCCESS.getMsg());
+    }
+
+    @Override
+    public R<String> cancelVote(Long userId, Long answerId) {
+        if (userId == null) return R.fail(ResultCode.FAILED_NOT_LOGIN.getMsg());
+        if (answerId == null) return R.fail(ResultCode.FAILED_PARAMS_VALIDATE.getMsg());
+        Integer deleteFlag = oshQAAnswerMapper.getVoteInfoByUserIdAndAnswerId(userId, answerId);
+        if (deleteFlag != null && deleteFlag == 0) {
+            Answer answer = oshQAAnswerMapper.selectOne(new LambdaQueryWrapper<Answer>()
+                    .select(Answer::getId)
+                    .eq(Answer::getId, answerId)
+                    .eq(Answer::getDeleteFlag, 0)
+                    .eq(Answer::getStatus, ANSWER_STATUS_NORMAL));
+            if (answer == null) {
+                return R.fail(ResultCode.FAILED_NOT_EXISTS.getMsg());
+            }
+            oshQAAnswerMapper.cancelVoteAnswer(userId, answerId, userId);
+            oshQAAnswerMapper.decrementVoteCount(answerId);
+            return R.ok(ResultCode.SUCCESS.getMsg());
+        }
+        return R.fail(ResultCode.FAILED.getMsg());
+    }
+
     /**
      * 构建并推送新回复通知
      * 判断规则：

@@ -13,6 +13,8 @@ public class QuestionVo implements Serializable {
     private Object options; // 选项，可以是数组
     private Object user_value; // 用户填写的答案
     private Object correct_answer;
+    private Boolean is_correct;
+    private Integer gained_score;
 
     // Getters and Setters (此处简写，实际请生成完整版)
 
@@ -34,4 +36,8 @@ public class QuestionVo implements Serializable {
     public void setUser_value(Object user_value) { this.user_value = user_value; }
     public Object getCorrect_answer() { return correct_answer; }
     public void setCorrect_answer(Object correct_answer) { this.correct_answer = correct_answer; }
+    public Boolean getIs_correct() { return is_correct; }
+    public void setIs_correct(Boolean is_correct) { this.is_correct = is_correct; }
+    public Integer getGained_score() { return gained_score; }
+    public void setGained_score(Integer gained_score) { this.gained_score = gained_score; }
 }

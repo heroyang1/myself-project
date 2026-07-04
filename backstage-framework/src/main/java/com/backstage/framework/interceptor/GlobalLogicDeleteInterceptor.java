@@ -8,6 +8,8 @@ import org.apache.ibatis.reflection.SystemMetaObject;
 import org.springframework.stereotype.Component;
 
 import java.sql.Connection;
+import java.util.Collections;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -23,6 +25,10 @@ public class GlobalLogicDeleteInterceptor implements Interceptor {
             "(?:FROM|JOIN)\\s+(osh_\\w+)(?:\\s+(?:AS\\s+)?(\\w+))?",
             Pattern.CASE_INSENSITIVE
     );
+
+    // 不含 delete_flag 字段的表名集合（拦截器跳过这些表，避免 Unknown column 错误）
+    // 拼团 5 张表已统一补加 delete_flag 字段，排除列表为空
+    private static final Set<String> TABLES_WITHOUT_DELETE_FLAG = Collections.emptySet();
 
     @Override
     public Object intercept(Invocation invocation) throws Throwable {
@@ -53,6 +59,10 @@ public class GlobalLogicDeleteInterceptor implements Interceptor {
         Matcher matcher = TABLE_PATTERN.matcher(sqlForMatch);
         while (matcher.find()) {
             String tableName = matcher.group(1);
+            // 跳过没有 delete_flag 字段的表
+            if (TABLES_WITHOUT_DELETE_FLAG.contains(tableName.toLowerCase())) {
+                continue;
+            }
             String alias = matcher.group(2);
             // alias 不能是 SQL 关键字（ON/SET/WHERE 等）
             if (alias != null && isSqlKeyword(alias)) {
