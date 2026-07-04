@@ -27,6 +27,7 @@ import com.backstage.system.domain.vo.order.PayResponse;
 import com.backstage.system.service.servergroup.IOshGroupServerService;
 import com.backstage.system.service.order.PayService;
 import com.backstage.system.utils.UserContextUtil;
+import com.backstage.system.utils.IpUtils;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
@@ -384,7 +385,7 @@ public class OshGroupServerController extends BaseController {
             }
             
             // 4. 获取客户端IP
-            String clientIp = getClientIp(request);
+            String clientIp = IpUtils.getClientIp(request);
             
             // 5. 获取实际支付金额
             String money = order.getPrice() != null ? order.getPrice().toString() : "0";
@@ -459,27 +460,6 @@ public class OshGroupServerController extends BaseController {
             logger.error("查询订单状态失败", e);
             return R.fail("查询失败，请稍后重试");
         }
-    }
-    
-    /**
-     * 获取客户端真实IP
-     */
-    private String getClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("Proxy-Client-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("WL-Proxy-Client-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        // 多级代理时取第一个IP
-        if (ip != null && ip.contains(",")) {
-            ip = ip.split(",")[0].trim();
-        }
-        return ip;
     }
     
     /**

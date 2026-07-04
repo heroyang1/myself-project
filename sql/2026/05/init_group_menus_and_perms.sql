@@ -1,210 +1,254 @@
 -- ============================================================
--- 拼团模块上线 - 菜单与权限配置SQL脚本
--- 创建时间: 2026-06-24
+-- 拼团模块上线 - 菜单与权限配置
 -- 说明:
---   1. 使用 RuoYi 标准 sys_menu + sys_role_menu 权限模型
---   2. 创建拼团管理顶级目录(菜单ID = 2030)
---   3. 创建二级菜单: 拼团活动、组团记录、订单管理 (C菜单)
---   4. 创建按钮权限: 查询/新增/修改/删除/导出/支付/退款 (F按钮)
---   5. 关联到超级管理员(role_id=1)和管理员(role_id=2)
---   6. 同时给所有已存在角色(role_id=1~7)分配只读权限
+--   1. 使用 osh_permission + osh_role_permission 权限模型
+--   2. 创建拼团管理父菜单(type=1, parent_id=0)
+--   3. 创建管理端子菜单: 拼团活动、组团记录、拼团订单、用户发起(type=1)
+--   4. 创建按钮/API权限: 查询/新增/修改/删除/导出等(type=2)
+--   5. 通过 osh_role_permission 关联角色(1~7)
 --
 -- 依赖前置脚本:
+--   - osh_permission.sql         (osh_permission/osh_role/osh_role_permission 表结构)
 --   - init_group_base_data.sql   (字典+配置+活动模板)
---   - ry_20250522.sql            (sys_menu/sys_role_menu表结构)
+--   - group_permission.sql       (C端接口API权限, 需先执行)
 --
 -- 执行顺序:
---   1. sys_menu 插入新菜单记录
---   2. sys_role_menu 关联角色
---   3. 验证数据
+--   1. osh_permission 插入管理端菜单和按钮记录
+--   2. osh_role_permission 关联角色
+--
+-- 注意: 本脚本仅补充管理端菜单树(type=1子菜单+type=2按钮),
+--       C端接口权限(如 group:activity:list, group:work:join 等)
+--       已由 group_permission.sql 覆盖, 此处不重复插入。
 -- ============================================================
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
 
--- ==================== 第一步:创建拼团管理顶级菜单(目录) ====================
--- menu_id = 2030, 与现有模块(系统管理=1, 系统监控=2, 系统工具=3)并列
+-- ==================== 第一步: 创建管理端子菜单(type=1) ====================
+-- 拼团管理父菜单已由 group_permission.sql 创建(permission_code='group:module')
+-- 此处补充管理端的4个二级子菜单, parent_id 指向 group:module
 
-INSERT INTO `sys_menu`(
-    `menu_name`, `parent_id`, `order_num`, `path`, `component`,
-    `is_frame`, `is_cache`, `menu_type`, `visible`, `status`,
-    `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`
-) VALUES (
-    '拼团管理', 0, 7, 'group', NULL,
-    1, 0, 'M', '0', '0',
-    '', 'peoples', 'admin', NOW(), '', NULL, '拼团模块管理目录'
+-- 获取 group:module 的 id 作为父菜单ID
+SET @groupModuleId = (
+    SELECT id FROM `osh_permission`
+    WHERE permission_code = 'group:module' AND delete_flag = 0
+    LIMIT 1
 );
 
--- 保存拼团目录菜单ID,供后续子菜单使用
-SET @groupMenuId = LAST_INSERT_ID();
+-- 如果 group:module 不存在, 则创建
+INSERT INTO `osh_permission`(
+    permission_name, permission_code, description, parent_id, `type`,
+    url, `path`, component, sort_order,
+    create_time, create_by, update_time, update_by, delete_flag
+)
+SELECT '拼团管理', 'group:module', '拼团模块管理目录', 0, 1,
+       NULL, '/group', NULL, 200,
+       NOW(), 0, NOW(), 0, 0
+FROM DUAL
+WHERE @groupModuleId IS NULL;
 
-
--- ==================== 第二步:创建二级菜单(C类型菜单) ====================
-
--- 2.1 拼团活动管理 (menu_id = 2031)
-INSERT INTO `sys_menu`(
-    `menu_name`, `parent_id`, `order_num`, `path`, `component`,
-    `is_frame`, `is_cache`, `menu_type`, `visible`, `status`,
-    `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`
-) VALUES (
-    '拼团活动', @groupMenuId, 1, 'activity', 'servicegroup/activity/index',
-    1, 0, 'C', '0', '0',
-    'group:activity:list', 'list', 'admin', NOW(), '', NULL, '拼团活动模板管理'
+-- 重新获取(确保后续引用正确)
+SET @groupModuleId = (
+    SELECT id FROM `osh_permission`
+    WHERE permission_code = 'group:module' AND delete_flag = 0
+    LIMIT 1
 );
-SET @activityMenuId = LAST_INSERT_ID();
 
--- 2.2 组团记录管理 (menu_id = 2032)
-INSERT INTO `sys_menu`(
-    `menu_name`, `parent_id`, `order_num`, `path`, `component`,
-    `is_frame`, `is_cache`, `menu_type`, `visible`, `status`,
-    `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`
-) VALUES (
-    '组团记录', @groupMenuId, 2, 'work', 'servicegroup/work/index',
-    1, 0, 'C', '0', '0',
-    'group:work:list', 'documentation', 'admin', NOW(), '', NULL, '组团记录管理'
+
+-- 1.1 拼团活动管理子菜单
+INSERT INTO `osh_permission`(
+    permission_name, permission_code, description, parent_id, `type`,
+    url, `path`, component, sort_order,
+    create_time, create_by, update_time, update_by, delete_flag
+)
+SELECT '拼团活动管理', 'group:admin:activity', '拼团活动模板管理页面', @groupModuleId, 1,
+       NULL, '/group/activity', 'servicegroup/activity/index', 1,
+       NOW(), 0, NOW(), 0, 0
+FROM DUAL
+WHERE NOT EXISTS (
+    SELECT 1 FROM `osh_permission` WHERE permission_code = 'group:admin:activity' AND delete_flag = 0
 );
-SET @workMenuId = LAST_INSERT_ID();
 
--- 2.3 拼团订单管理 (menu_id = 2033)
-INSERT INTO `sys_menu`(
-    `menu_name`, `parent_id`, `order_num`, `path`, `component`,
-    `is_frame`, `is_cache`, `menu_type`, `visible`, `status`,
-    `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`
-) VALUES (
-    '拼团订单', @groupMenuId, 3, 'order', 'servicegroup/order/index',
-    1, 0, 'C', '0', '0',
-    'group:order:list', 'money', 'admin', NOW(), '', NULL, '拼团订单管理'
+-- 1.2 组团记录管理子菜单
+INSERT INTO `osh_permission`(
+    permission_name, permission_code, description, parent_id, `type`,
+    url, `path`, component, sort_order,
+    create_time, create_by, update_time, update_by, delete_flag
+)
+SELECT '组团记录管理', 'group:admin:work', '组团记录管理页面', @groupModuleId, 1,
+       NULL, '/group/work', 'servicegroup/work/index', 2,
+       NOW(), 0, NOW(), 0, 0
+FROM DUAL
+WHERE NOT EXISTS (
+    SELECT 1 FROM `osh_permission` WHERE permission_code = 'group:admin:work' AND delete_flag = 0
 );
-SET @orderMenuId = LAST_INSERT_ID();
 
--- 2.4 用户发起拼团管理 (menu_id = 2034)
-INSERT INTO `sys_menu`(
-    `menu_name`, `parent_id`, `order_num`, `path`, `component`,
-    `is_frame`, `is_cache`, `menu_type`, `visible`, `status`,
-    `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`
-) VALUES (
-    '用户发起', @groupMenuId, 4, 'initiated', 'servicegroup/initiated/index',
-    1, 0, 'C', '0', '0',
-    'group:initiated:list', 'user', 'admin', NOW(), '', NULL, '用户发起的拼团管理'
+-- 1.3 拼团订单管理子菜单
+INSERT INTO `osh_permission`(
+    permission_name, permission_code, description, parent_id, `type`,
+    url, `path`, component, sort_order,
+    create_time, create_by, update_time, update_by, delete_flag
+)
+SELECT '拼团订单管理', 'group:admin:order', '拼团订单管理页面', @groupModuleId, 1,
+       NULL, '/group/order', 'servicegroup/order/index', 3,
+       NOW(), 0, NOW(), 0, 0
+FROM DUAL
+WHERE NOT EXISTS (
+    SELECT 1 FROM `osh_permission` WHERE permission_code = 'group:admin:order' AND delete_flag = 0
 );
-SET @initiatedMenuId = LAST_INSERT_ID();
+
+-- 1.4 用户发起拼团管理子菜单
+INSERT INTO `osh_permission`(
+    permission_name, permission_code, description, parent_id, `type`,
+    url, `path`, component, sort_order,
+    create_time, create_by, update_time, update_by, delete_flag
+)
+SELECT '用户发起管理', 'group:admin:initiated', '用户发起的拼团管理页面', @groupModuleId, 1,
+       NULL, '/group/initiated', 'servicegroup/initiated/index', 4,
+       NOW(), 0, NOW(), 0, 0
+FROM DUAL
+WHERE NOT EXISTS (
+    SELECT 1 FROM `osh_permission` WHERE permission_code = 'group:admin:initiated' AND delete_flag = 0
+);
 
 
--- ==================== 第三步:创建按钮权限(F类型) ====================
+-- ==================== 第二步: 创建按钮权限(type=2, API级别) ====================
+-- 注意: C端接口权限(如 group:activity:list, group:work:join)已由 group_permission.sql 创建
+--       此处仅补充管理端专用操作权限
 
--- 3.1 拼团活动按钮 (parent_id = @activityMenuId)
-INSERT INTO `sys_menu`(
-    `menu_name`, `parent_id`, `order_num`, `path`, `component`,
-    `is_frame`, `is_cache`, `menu_type`, `visible`, `status`,
-    `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`
+-- 2.1 拼团活动按钮
+INSERT INTO `osh_permission`(
+    permission_name, permission_code, description, parent_id, `type`,
+    url, `path`, component, sort_order,
+    create_time, create_by, update_time, update_by, delete_flag
 ) VALUES
-('活动查询',     @activityMenuId, 1, '#', '', 1, 0, 'F', '0', '0', 'group:activity:query',  '#', 'admin', NOW(), '', NULL, '拼团活动查询按钮'),
-('活动新增',     @activityMenuId, 2, '#', '', 1, 0, 'F', '0', '0', 'group:activity:add',    '#', 'admin', NOW(), '', NULL, '拼团活动新增按钮'),
-('活动修改',     @activityMenuId, 3, '#', '', 1, 0, 'F', '0', '0', 'group:activity:edit',   '#', 'admin', NOW(), '', NULL, '拼团活动修改按钮'),
-('活动删除',     @activityMenuId, 4, '#', '', 1, 0, 'F', '0', '0', 'group:activity:remove', '#', 'admin', NOW(), '', NULL, '拼团活动删除按钮'),
-('活动导出',     @activityMenuId, 5, '#', '', 1, 0, 'F', '0', '0', 'group:activity:export', '#', 'admin', NOW(), '', NULL, '拼团活动导出按钮'),
-('上下架活动',   @activityMenuId, 6, '#', '', 1, 0, 'F', '0', '0', 'group:activity:status', '#', 'admin', NOW(), '', NULL, '拼团活动上下架按钮');
+('活动查询',   'group:activity:query',  '拼团活动查询',       @groupModuleId, 2, NULL, NULL, NULL, 101, NOW(), 0, NOW(), 0, 0),
+('活动新增',   'group:activity:add',    '拼团活动新增',       @groupModuleId, 2, NULL, NULL, NULL, 102, NOW(), 0, NOW(), 0, 0),
+('活动修改',   'group:activity:edit',   '拼团活动修改',       @groupModuleId, 2, NULL, NULL, NULL, 103, NOW(), 0, NOW(), 0, 0),
+('活动删除',   'group:activity:remove', '拼团活动删除',       @groupModuleId, 2, NULL, NULL, NULL, 104, NOW(), 0, NOW(), 0, 0),
+('活动导出',   'group:activity:export', '拼团活动导出',       @groupModuleId, 2, NULL, NULL, NULL, 105, NOW(), 0, NOW(), 0, 0),
+('上下架活动', 'group:activity:status', '拼团活动上下架',     @groupModuleId, 2, NULL, NULL, NULL, 106, NOW(), 0, NOW(), 0, 0);
 
--- 3.2 组团记录按钮 (parent_id = @workMenuId)
-INSERT INTO `sys_menu`(
-    `menu_name`, `parent_id`, `order_num`, `path`, `component`,
-    `is_frame`, `is_cache`, `menu_type`, `visible`, `status`,
-    `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`
-) VALUES
-('组团查询',     @workMenuId, 1, '#', '', 1, 0, 'F', '0', '0', 'group:work:query',  '#', 'admin', NOW(), '', NULL, '组团记录查询按钮'),
-('发起拼团',     @workMenuId, 2, '#', '', 1, 0, 'F', '0', '0', 'group:work:create', '#', 'admin', NOW(), '', NULL, '管理员发起拼团按钮'),
-('强制成团',     @workMenuId, 3, '#', '', 1, 0, 'F', '0', '0', 'group:work:force',  '#', 'admin', NOW(), '', NULL, '强制成团按钮'),
-('组团导出',     @workMenuId, 4, '#', '', 1, 0, 'F', '0', '0', 'group:work:export', '#', 'admin', NOW(), '', NULL, '组团记录导出按钮'),
-('手动添加用户', @workMenuId, 5, '#', '', 1, 0, 'F', '0', '0', 'group:user:add',    '#', 'admin', NOW(), '', NULL, '手动添加用户到拼团按钮');
+-- 2.2 组团记录按钮
+INSERT INTO `osh_permission`(
+    permission_name, permission_code, description, parent_id, `type`,
+    url, `path`, component, sort_order,
+    create_time, create_by, update_time, update_by, delete_flag
+)
+SELECT v.permission_name, v.permission_code, v.description, @groupModuleId, 2,
+       NULL, NULL, NULL, v.sort_order,
+       NOW(), 0, NOW(), 0, 0
+FROM (
+    SELECT '组团查询' AS permission_name, 'group:work:query' AS permission_code, '组团记录查询' AS description, 111 AS sort_order
+    UNION ALL SELECT '强制成团', 'group:work:force', '强制成团操作', 112
+    UNION ALL SELECT '组团导出', 'group:work:export', '组团记录导出', 113
+) v
+WHERE NOT EXISTS (
+    SELECT 1 FROM `osh_permission` p
+    WHERE p.permission_code = v.permission_code AND p.delete_flag = 0
+);
 
--- 3.3 拼团订单按钮 (parent_id = @orderMenuId)
-INSERT INTO `sys_menu`(
-    `menu_name`, `parent_id`, `order_num`, `path`, `component`,
-    `is_frame`, `is_cache`, `menu_type`, `visible`, `status`,
-    `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`
-) VALUES
-('订单查询',     @orderMenuId, 1, '#', '', 1, 0, 'F', '0', '0', 'group:order:query',    '#', 'admin', NOW(), '', NULL, '订单查询按钮'),
-('订单导出',     @orderMenuId, 2, '#', '', 1, 0, 'F', '0', '0', 'group:order:export',   '#', 'admin', NOW(), '', NULL, '订单导出按钮'),
-('订单退款',     @orderMenuId, 3, '#', '', 1, 0, 'F', '0', '0', 'group:order:refund',   '#', 'admin', NOW(), '', NULL, '订单退款按钮'),
-('关闭订单',     @orderMenuId, 4, '#', '', 1, 0, 'F', '0', '0', 'group:order:close',    '#', 'admin', NOW(), '', NULL, '强制关闭订单按钮'),
-('补发凭证',     @orderMenuId, 5, '#', '', 1, 0, 'F', '0', '0', 'group:order:resend',   '#', 'admin', NOW(), '', NULL, '补发服务器凭证按钮');
+-- 2.3 拼团订单按钮
+INSERT INTO `osh_permission`(
+    permission_name, permission_code, description, parent_id, `type`,
+    url, `path`, component, sort_order,
+    create_time, create_by, update_time, update_by, delete_flag
+)
+SELECT v.permission_name, v.permission_code, v.description, @groupModuleId, 2,
+       NULL, NULL, NULL, v.sort_order,
+       NOW(), 0, NOW(), 0, 0
+FROM (
+    SELECT '订单查询' AS permission_name, 'group:order:query' AS permission_code, '订单查询' AS description, 121 AS sort_order
+    UNION ALL SELECT '订单导出', 'group:order:export', '订单导出', 122
+    UNION ALL SELECT '订单退款', 'group:order:refund', '订单退款操作', 123
+    UNION ALL SELECT '关闭订单', 'group:order:close',  '强制关闭订单', 124
+    UNION ALL SELECT '补发凭证', 'group:order:resend', '补发服务器凭证', 125
+) v
+WHERE NOT EXISTS (
+    SELECT 1 FROM `osh_permission` p
+    WHERE p.permission_code = v.permission_code AND p.delete_flag = 0
+);
 
--- 3.4 用户发起拼团按钮 (parent_id = @initiatedMenuId)
-INSERT INTO `sys_menu`(
-    `menu_name`, `parent_id`, `order_num`, `path`, `component`,
-    `is_frame`, `is_cache`, `menu_type`, `visible`, `status`,
-    `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`
-) VALUES
-('发起记录查询', @initiatedMenuId, 1, '#', '', 1, 0, 'F', '0', '0', 'group:initiated:query',  '#', 'admin', NOW(), '', NULL, '发起记录查询按钮'),
-('发起记录导出', @initiatedMenuId, 2, '#', '', 1, 0, 'F', '0', '0', 'group:initiated:export', '#', 'admin', NOW(), '', NULL, '发起记录导出按钮'),
-('强制关闭发起', @initiatedMenuId, 3, '#', '', 1, 0, 'F', '0', '0', 'group:initiated:close',  '#', 'admin', NOW(), '', NULL, '强制关闭发起拼团按钮');
+-- 2.4 用户发起拼团按钮
+INSERT INTO `osh_permission`(
+    permission_name, permission_code, description, parent_id, `type`,
+    url, `path`, component, sort_order,
+    create_time, create_by, update_time, update_by, delete_flag
+)
+SELECT v.permission_name, v.permission_code, v.description, @groupModuleId, 2,
+       NULL, NULL, NULL, v.sort_order,
+       NOW(), 0, NOW(), 0, 0
+FROM (
+    SELECT '发起记录查询' AS permission_name, 'group:initiated:query' AS permission_code, '发起记录查询' AS description, 131 AS sort_order
+    UNION ALL SELECT '发起记录导出', 'group:initiated:export', '发起记录导出', 132
+    UNION ALL SELECT '强制关闭发起', 'group:initiated:close',  '强制关闭发起拼团', 133
+) v
+WHERE NOT EXISTS (
+    SELECT 1 FROM `osh_permission` p
+    WHERE p.permission_code = v.permission_code AND p.delete_flag = 0
+);
 
 
--- ==================== 第四步:关联角色权限 sys_role_menu ====================
+-- ==================== 第三步: 关联角色权限 osh_role_permission ====================
 -- 关联规则:
---   role_id=1 (超级管理员) → 全部菜单和按钮
---   role_id=2 (管理员) → 除退款外的所有菜单和按钮
---   role_id=3,4,5 (其他角色) → 仅只读权限(查询类)
+--   role_id=1~7: 关联大部分 group:* 权限
+--   role_id=6(核心开发者), 7(创始人): 额外拥有敏感操作权限
+--     - group:work:create (发起拼团)
+--     - group:user:add    (手动添加用户参与)
+--   其他角色(1~5)不分配上述两个敏感操作
+--   使用 NOT EXISTS 防重复插入
 
--- 4.1 为超级管理员(role_id=1)授权所有菜单和按钮
--- 这里使用 IN 子查询 + path LIKE 模式批量授权
-INSERT INTO `sys_role_menu`(`role_id`, `menu_id`)
-SELECT 1, menu_id
-FROM sys_menu
-WHERE path = 'group'
-   OR path IN ('activity', 'work', 'order', 'initiated') AND parent_id = (SELECT menu_id FROM sys_menu WHERE menu_name = '拼团管理' AND menu_type = 'M' LIMIT 1)
-   OR (menu_type = 'F' AND perms LIKE 'group:%');
-
--- 4.2 为管理员(role_id=2)授权(排除退款权限group:order:refund)
-INSERT INTO `sys_role_menu`(`role_id`, `menu_id`)
-SELECT 2, m.menu_id
-FROM sys_menu m
-WHERE (m.path = 'group'
-    OR (m.path IN ('activity', 'work', 'order', 'initiated')
-        AND m.parent_id = (SELECT menu_id FROM sys_menu WHERE menu_name = '拼团管理' AND menu_type = 'M' LIMIT 1))
-    OR (m.menu_type = 'F' AND m.perms LIKE 'group:%'))
-  AND m.perms NOT IN ('group:order:refund', 'group:work:force', 'group:initiated:close');
-
--- 4.3 为其他角色(role_id=3,4,5,6,7)授权只读权限(仅查询按钮)
-INSERT INTO `sys_role_menu`(`role_id`, `menu_id`)
-SELECT r.role_id, m.menu_id
-FROM (SELECT 3 AS role_id UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7) r
-CROSS JOIN sys_menu m
-WHERE (m.path = 'group'
-    OR (m.path IN ('activity', 'work', 'order', 'initiated')
-        AND m.parent_id = (SELECT menu_id FROM sys_menu WHERE menu_name = '拼团管理' AND menu_type = 'M' LIMIT 1))
-    OR m.perms IN ('group:activity:query', 'group:work:query', 'group:order:query', 'group:initiated:query'));
-
--- 4.4 为 C 端用户赋予登录后可访问的接口(便于 H5 调用)
--- 注: C端用户访问 /pc/group/* 走 Token 校验,无需 sys_menu 控制
--- 这里只为匿名接口做特殊配置:允许未登录访问
--- (注: 该配置在 Shiro/JWT 配置中实现,不在此 SQL 范围内)
+INSERT INTO `osh_role_permission`(
+    role_id, permission_id,
+    create_time, create_by, update_time, update_by, delete_flag
+)
+SELECT r.role_id, p.id,
+       NOW(), 0, NOW(), 0, 0
+FROM (
+    SELECT 1 AS role_id UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
+    UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7
+) r
+CROSS JOIN `osh_permission` p
+WHERE p.permission_code LIKE 'group:%'
+  AND p.delete_flag = 0
+  -- 敏感操作仅分配给核心开发者(6)和创始人(7)
+  AND (
+      p.permission_code NOT IN ('group:work:create', 'group:user:add')
+      OR r.role_id IN (6, 7)
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM `osh_role_permission` rp
+    WHERE rp.role_id = r.role_id
+      AND rp.permission_id = p.id
+      AND rp.delete_flag = 0
+  );
 
 
--- ==================== 第五步:验证数据 ====================
+-- ==================== 第四步: 验证数据 ====================
 
--- 5.1 检查菜单树
-SELECT menu_id, parent_id, menu_name, menu_type, perms, order_num
-FROM sys_menu
-WHERE menu_name = '拼团管理'
-   OR (parent_id IN (SELECT menu_id FROM sys_menu WHERE menu_name = '拼团管理' AND menu_type = 'M'))
-   OR perms LIKE 'group:%'
-ORDER BY parent_id, order_num;
+-- 4.1 查看拼团模块权限树
+SELECT id, parent_id, permission_name, permission_code, `type`, `path`, component, sort_order
+FROM `osh_permission`
+WHERE permission_code LIKE 'group:%' AND delete_flag = 0
+ORDER BY sort_order;
 
--- 5.2 检查角色权限关联
-SELECT rm.role_id, COUNT(*) AS menu_count
-FROM sys_role_menu rm
-INNER JOIN sys_menu m ON rm.menu_id = m.menu_id
-WHERE m.perms LIKE 'group:%' OR m.menu_name = '拼团管理'
-GROUP BY rm.role_id
-ORDER BY rm.role_id;
+-- 4.2 查看各角色的拼团权限数量
+SELECT rp.role_id, r.role_name, COUNT(*) AS perm_count
+FROM `osh_role_permission` rp
+JOIN `osh_permission` p ON rp.permission_id = p.id
+LEFT JOIN `osh_role` r ON rp.role_id = r.id
+WHERE p.permission_code LIKE 'group:%' AND rp.delete_flag = 0
+GROUP BY rp.role_id, r.role_name
+ORDER BY rp.role_id;
 
--- 5.3 检查按钮权限数量
+-- 4.3 统计权限类型分布
 SELECT
-    (SELECT COUNT(*) FROM sys_menu WHERE menu_name = '拼团管理' AND menu_type = 'M') AS catalog_count,
-    (SELECT COUNT(*) FROM sys_menu WHERE parent_id IN (SELECT menu_id FROM sys_menu WHERE menu_name = '拼团管理' AND menu_type = 'M') AND menu_type = 'C') AS menu_count,
-    (SELECT COUNT(*) FROM sys_menu WHERE menu_type = 'F' AND perms LIKE 'group:%') AS button_count;
+    CASE `type` WHEN 1 THEN '菜单' WHEN 2 THEN '按钮/API' END AS type_name,
+    COUNT(*) AS count
+FROM `osh_permission`
+WHERE permission_code LIKE 'group:%' AND delete_flag = 0
+GROUP BY `type`;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -212,16 +256,14 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- ============================================================
 -- 执行完成
 -- 后续步骤:
---   1. 执行 init_group_quartz_jobs.sql 配置定时任务
---   2. 执行 optimize_group_indexes.sql 添加索引
---   3. 在管理后台登录 admin 账号,验证菜单是否正常显示
---   4. 在管理后台创建自定义按钮/页面时引用 perms 字段(如 group:activity:list)
---   5. 前端代码中通过 v-hasPermi="['group:activity:edit']" 控制按钮显示
+--   1. 确保 group_permission.sql 已执行(C端接口权限)
+--   2. 执行 init_group_quartz_jobs.sql 配置定时任务
+--   3. 执行 optimize_group_indexes.sql 添加索引
+--   4. 前端代码中通过 permission_code 控制按钮显示
 --
 -- 注意事项:
---   - menu_id 起始 2030,避免与现有菜单冲突
---   - 按钮 perms 与 Controller 的 @PreAuthorize 注解一致
---   - 已废弃的 @PreAuthorize("hasAuthority('group:work:create')") 和
---     @PreAuthorize("hasAuthority('group:user:add')") 在接口 6 和 9 已使用,必须确保 sys_menu 中存在对应 perms
---   - 若使用 vue-element-admin 等前端框架,需要在 src/permission.js 和 src/store/modules/permission.js 中增加对应路由
+--   - 管理端子菜单使用 group:admin:* 命名空间, 避免与 C端接口权限冲突
+--   - 按钮权限 permission_code 与 Controller 的 @PreAuthorize 注解保持一致
+--   - 所有 INSERT 使用 NOT EXISTS 防重复, 可安全重复执行
+--   - osh_role 表需已存在 role_id=1~7 的角色数据
 -- ============================================================
