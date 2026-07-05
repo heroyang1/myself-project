@@ -24,6 +24,10 @@ public class InternalMemberEmploymentProfileVO {
     private String interviewStatus;
     private String interviewResult;
     private String lastInterviewTime;
+    private String progressStageCode;
+    private String progressStageName;
+    private Integer progressStageOrder;
+    private Integer progressStageTotal;
     private Long updateBy;
     private String updateTime;
 
@@ -193,6 +197,38 @@ public class InternalMemberEmploymentProfileVO {
 
     public void setLastInterviewTime(String lastInterviewTime) {
         this.lastInterviewTime = lastInterviewTime;
+    }
+
+    public String getProgressStageCode() {
+        return progressStageCode;
+    }
+
+    public void setProgressStageCode(String progressStageCode) {
+        this.progressStageCode = progressStageCode;
+    }
+
+    public String getProgressStageName() {
+        return progressStageName;
+    }
+
+    public void setProgressStageName(String progressStageName) {
+        this.progressStageName = progressStageName;
+    }
+
+    public Integer getProgressStageOrder() {
+        return progressStageOrder;
+    }
+
+    public void setProgressStageOrder(Integer progressStageOrder) {
+        this.progressStageOrder = progressStageOrder;
+    }
+
+    public Integer getProgressStageTotal() {
+        return progressStageTotal;
+    }
+
+    public void setProgressStageTotal(Integer progressStageTotal) {
+        this.progressStageTotal = progressStageTotal;
     }
 
     public Long getUpdateBy() {

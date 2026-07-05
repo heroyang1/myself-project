@@ -20,6 +20,17 @@ public class InternalMemberOutcomeVO {
     private BigDecimal salaryIncrease;
     private String entryTime;
     private Integer caseEligible;
+    private Integer resumeDeliveryCount;
+    private Integer interviewCompanyCount;
+    private Integer pendingInterviewCount;
+    private Integer completedInterviewCount;
+    private Integer interviewRoundCount;
+    private String interviewStatus;
+    private String interviewResult;
+    private String progressStageCode;
+    private String progressStageName;
+    private Integer progressStageOrder;
+    private Integer progressStageTotal;
     private String lastFollowTime;
     private String nextFollowTime;
 
@@ -157,6 +168,94 @@ public class InternalMemberOutcomeVO {
 
     public void setCaseEligible(Integer caseEligible) {
         this.caseEligible = caseEligible;
+    }
+
+    public Integer getResumeDeliveryCount() {
+        return resumeDeliveryCount;
+    }
+
+    public void setResumeDeliveryCount(Integer resumeDeliveryCount) {
+        this.resumeDeliveryCount = resumeDeliveryCount;
+    }
+
+    public Integer getInterviewCompanyCount() {
+        return interviewCompanyCount;
+    }
+
+    public void setInterviewCompanyCount(Integer interviewCompanyCount) {
+        this.interviewCompanyCount = interviewCompanyCount;
+    }
+
+    public Integer getPendingInterviewCount() {
+        return pendingInterviewCount;
+    }
+
+    public void setPendingInterviewCount(Integer pendingInterviewCount) {
+        this.pendingInterviewCount = pendingInterviewCount;
+    }
+
+    public Integer getCompletedInterviewCount() {
+        return completedInterviewCount;
+    }
+
+    public void setCompletedInterviewCount(Integer completedInterviewCount) {
+        this.completedInterviewCount = completedInterviewCount;
+    }
+
+    public Integer getInterviewRoundCount() {
+        return interviewRoundCount;
+    }
+
+    public void setInterviewRoundCount(Integer interviewRoundCount) {
+        this.interviewRoundCount = interviewRoundCount;
+    }
+
+    public String getInterviewStatus() {
+        return interviewStatus;
+    }
+
+    public void setInterviewStatus(String interviewStatus) {
+        this.interviewStatus = interviewStatus;
+    }
+
+    public String getInterviewResult() {
+        return interviewResult;
+    }
+
+    public void setInterviewResult(String interviewResult) {
+        this.interviewResult = interviewResult;
+    }
+
+    public String getProgressStageCode() {
+        return progressStageCode;
+    }
+
+    public void setProgressStageCode(String progressStageCode) {
+        this.progressStageCode = progressStageCode;
+    }
+
+    public String getProgressStageName() {
+        return progressStageName;
+    }
+
+    public void setProgressStageName(String progressStageName) {
+        this.progressStageName = progressStageName;
+    }
+
+    public Integer getProgressStageOrder() {
+        return progressStageOrder;
+    }
+
+    public void setProgressStageOrder(Integer progressStageOrder) {
+        this.progressStageOrder = progressStageOrder;
+    }
+
+    public Integer getProgressStageTotal() {
+        return progressStageTotal;
+    }
+
+    public void setProgressStageTotal(Integer progressStageTotal) {
+        this.progressStageTotal = progressStageTotal;
     }
 
     public String getLastFollowTime() {

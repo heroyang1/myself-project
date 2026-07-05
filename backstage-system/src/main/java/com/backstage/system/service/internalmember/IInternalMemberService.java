@@ -6,6 +6,7 @@ import com.backstage.system.domain.internalmember.dto.InternalMemberFollowRecord
 import com.backstage.system.domain.internalmember.dto.InternalMemberOutcomeQueryDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberPageQueryDTO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberCourseProgressVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberAdminUserOptionVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberExamSummaryVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentProfileVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberFollowRecordVO;
@@ -19,6 +20,8 @@ import com.backstage.system.domain.internalmember.vo.InternalMemberStudySummaryV
 import java.util.List;
 
 public interface IInternalMemberService {
+    List<InternalMemberAdminUserOptionVO> selectAdminUserOptions(String keyword);
+
     List<InternalMemberStudyOverviewVO> selectPaidMemberStudyOverview(InternalMemberPageQueryDTO query);
 
     InternalMemberStudySummaryVO selectMemberStudySummary(Long userId);

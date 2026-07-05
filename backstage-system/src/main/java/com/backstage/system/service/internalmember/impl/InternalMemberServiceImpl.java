@@ -7,6 +7,7 @@ import com.backstage.system.domain.internalmember.dto.InternalMemberEmploymentPr
 import com.backstage.system.domain.internalmember.dto.InternalMemberFollowRecordSaveDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberOutcomeQueryDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberPageQueryDTO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberAdminUserOptionVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberCourseProgressVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberExamItemVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberExamSummaryVO;
@@ -18,11 +19,13 @@ import com.backstage.system.domain.internalmember.vo.InternalMemberResumeSummary
 import com.backstage.system.domain.internalmember.vo.InternalMemberSalarySummaryVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberStudyOverviewVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberStudySummaryVO;
+import com.backstage.system.enums.internalmember.InternalMemberProgressStageEnum;
 import com.backstage.system.enums.internalmember.InterviewResultEnum;
 import com.backstage.system.enums.internalmember.InterviewStatusEnum;
 import com.backstage.system.enums.internalmember.JobStatusEnum;
 import com.backstage.system.mapper.internalmember.InternalMemberMapper;
 import com.backstage.system.service.internalmember.IInternalMemberService;
+import com.backstage.system.service.internalmember.support.InternalMemberProgressStageResolver;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +38,11 @@ import java.util.List;
 public class InternalMemberServiceImpl implements IInternalMemberService {
     @Resource
     private InternalMemberMapper internalMemberMapper;
+
+    @Override
+    public List<InternalMemberAdminUserOptionVO> selectAdminUserOptions(String keyword) {
+        return internalMemberMapper.selectAdminUserOptions(StringUtils.trim(keyword));
+    }
 
     @Override
     public List<InternalMemberStudyOverviewVO> selectPaidMemberStudyOverview(InternalMemberPageQueryDTO query) {
@@ -61,7 +69,9 @@ public class InternalMemberServiceImpl implements IInternalMemberService {
     @Override
     public InternalMemberEmploymentProfileVO selectEmploymentProfile(Long userId) {
         ensurePaidMember(userId);
-        return internalMemberMapper.selectEmploymentProfileByUserId(userId);
+        InternalMemberEmploymentProfileVO profile = internalMemberMapper.selectEmploymentProfileByUserId(userId);
+        fillProgressStage(profile);
+        return profile;
     }
 
     @Override
@@ -158,7 +168,13 @@ public class InternalMemberServiceImpl implements IInternalMemberService {
 
     @Override
     public List<InternalMemberOutcomeVO> selectOutcomeList(InternalMemberOutcomeQueryDTO query) {
-        return internalMemberMapper.selectOutcomeList(query);
+        List<InternalMemberOutcomeVO> list = internalMemberMapper.selectOutcomeList(query);
+        if (list != null) {
+            for (InternalMemberOutcomeVO item : list) {
+                fillProgressStage(item);
+            }
+        }
+        return list;
     }
 
     @Override
@@ -202,6 +218,48 @@ public class InternalMemberServiceImpl implements IInternalMemberService {
         if (internalMemberMapper.countPaidMemberByUserId(userId) <= 0) {
             throw new ServiceException("The user is not a paid member or has no valid paid record");
         }
+    }
+
+    private void fillProgressStage(InternalMemberEmploymentProfileVO profile) {
+        if (profile == null) {
+            return;
+        }
+        InternalMemberProgressStageEnum stage = InternalMemberProgressStageResolver.resolve(
+                profile.getJobStatus(),
+                profile.getResumeDeliveryCount(),
+                profile.getInterviewCompanyCount(),
+                profile.getPendingInterviewCount(),
+                profile.getCompletedInterviewCount(),
+                profile.getInterviewRoundCount(),
+                profile.getInterviewStatus(),
+                profile.getInterviewResult(),
+                profile.getEntryTime()
+        );
+        profile.setProgressStageCode(stage.getCode());
+        profile.setProgressStageName(stage.getName());
+        profile.setProgressStageOrder(stage.getOrder());
+        profile.setProgressStageTotal(stage.getTotal());
+    }
+
+    private void fillProgressStage(InternalMemberOutcomeVO outcome) {
+        if (outcome == null) {
+            return;
+        }
+        InternalMemberProgressStageEnum stage = InternalMemberProgressStageResolver.resolve(
+                outcome.getJobStatus(),
+                outcome.getResumeDeliveryCount(),
+                outcome.getInterviewCompanyCount(),
+                outcome.getPendingInterviewCount(),
+                outcome.getCompletedInterviewCount(),
+                outcome.getInterviewRoundCount(),
+                outcome.getInterviewStatus(),
+                outcome.getInterviewResult(),
+                outcome.getEntryTime()
+        );
+        outcome.setProgressStageCode(stage.getCode());
+        outcome.setProgressStageName(stage.getName());
+        outcome.setProgressStageOrder(stage.getOrder());
+        outcome.setProgressStageTotal(stage.getTotal());
     }
 
     private void normalizeAndValidateEmploymentProfile(InternalMemberEmploymentProfileSaveDTO dto) {

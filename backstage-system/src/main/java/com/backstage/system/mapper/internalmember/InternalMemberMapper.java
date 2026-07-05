@@ -4,6 +4,7 @@ import com.backstage.system.domain.internalmember.dto.InternalMemberCourseDetail
 import com.backstage.system.domain.internalmember.dto.InternalMemberEmploymentProfileSaveDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberOutcomeQueryDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberPageQueryDTO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberAdminUserOptionVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberCourseProgressVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberExamItemVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentProfileVO;
@@ -20,6 +21,8 @@ import java.util.List;
 
 @Mapper
 public interface InternalMemberMapper {
+    List<InternalMemberAdminUserOptionVO> selectAdminUserOptions(@Param("keyword") String keyword);
+
     List<InternalMemberStudyOverviewVO> selectPaidMemberStudyOverview(@Param("query") InternalMemberPageQueryDTO query);
 
     InternalMemberStudySummaryVO selectMemberStudySummary(@Param("userId") Long userId);

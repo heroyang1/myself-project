@@ -4,6 +4,50 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.backstage.system.mapper.internalmember.InternalMemberMapper">
 
+    <select id="selectAdminUserOptions" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberAdminUserOptionVO">
+        select
+            u.id as userId,
+            u.username as username,
+            u.email as email,
+            u.avatar as avatar,
+            admin_role.role_code as roleCode,
+            admin_role.role_name as roleName,
+            admin_role.level as roleLevel
+        from osh_user u
+        inner join (
+            select ur.user_id, r.role_code, r.role_name, r.level
+            from osh_user_role ur
+            join osh_role r on r.id = ur.role_id
+            where ur.delete_flag = 0
+              and (ur.expire_time is null or ur.expire_time > now())
+              and r.delete_flag = 0
+              and r.status = 1
+              and r.role_code in ('manager', 'core_developer', 'founder')
+              and (ur.user_id, r.level) in (
+                  select ur2.user_id, max(r2.level)
+                  from osh_user_role ur2
+                  join osh_role r2 on r2.id = ur2.role_id
+                  where ur2.delete_flag = 0
+                    and (ur2.expire_time is null or ur2.expire_time > now())
+                    and r2.delete_flag = 0
+                    and r2.status = 1
+                    and r2.role_code in ('manager', 'core_developer', 'founder')
+                  group by ur2.user_id
+              )
+        ) admin_role on admin_role.user_id = u.id
+        where u.delete_flag = 0
+          and u.status = 0
+        <if test="keyword != null and keyword != ''">
+            and (
+                u.username like concat('%', #{keyword}, '%')
+                or u.email like concat('%', #{keyword}, '%')
+                or admin_role.role_name like concat('%', #{keyword}, '%')
+                or admin_role.role_code like concat('%', #{keyword}, '%')
+            )
+        </if>
+        order by admin_role.level desc, u.username asc, u.id asc
+    </select>
+
     <select id="selectPaidMemberStudyOverview" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberStudyOverviewVO">
         select
             u.id as userId,
@@ -412,6 +456,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             end as salaryIncrease,
             date_format(p.entry_time, '%Y-%m-%d %H:%i:%s') as entryTime,
             p.case_eligible as caseEligible,
+            p.resume_delivery_count as resumeDeliveryCount,
+            p.interview_company_count as interviewCompanyCount,
+            p.pending_interview_count as pendingInterviewCount,
+            p.completed_interview_count as completedInterviewCount,
+            p.interview_round_count as interviewRoundCount,
+            p.interview_status as interviewStatus,
+            p.interview_result as interviewResult,
             date_format(follow_summary.last_follow_time, '%Y-%m-%d %H:%i:%s') as lastFollowTime,
             date_format(follow_summary.next_follow_time, '%Y-%m-%d %H:%i:%s') as nextFollowTime
         from osh_user u

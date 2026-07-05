@@ -10,6 +10,7 @@ import com.backstage.system.domain.internalmember.dto.InternalMemberEmploymentPr
 import com.backstage.system.domain.internalmember.dto.InternalMemberFollowRecordSaveDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberOutcomeQueryDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberPageQueryDTO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberAdminUserOptionVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberCourseProgressVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberExamSummaryVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentProfileVO;
@@ -34,6 +35,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.annotation.Resource;
@@ -48,6 +50,14 @@ public class InternalMemberAdminController extends BaseController {
     private IInternalMemberService internalMemberService;
     @Resource
     private IInternalMemberStudyService internalMemberStudyService;
+
+    @ApiOperation("Admin user option list")
+    @GetMapping("/admin-users")
+    public R<List<InternalMemberAdminUserOptionVO>> adminUsers(
+            @ApiParam(value = "Optional keyword for username/email/role search")
+            @RequestParam(value = "keyword", required = false) String keyword) {
+        return R.ok(internalMemberService.selectAdminUserOptions(keyword));
+    }
 
     @ApiOperation("Paid member overview page")
     @GetMapping("/page")
