@@ -102,7 +102,7 @@ public class OshHomePageCourseServiceImpl
             vo.setListUrl(doc.getListUrl());
             result.add(vo);
         }
-        return signCoverUrls(fillLiveVideoCounts(result));
+        return signCoverUrls(result);
     }
 
     @Override
