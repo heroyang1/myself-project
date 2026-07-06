@@ -4,6 +4,7 @@ import com.backstage.common.annotation.Anonymous;
 import com.backstage.common.core.controller.BaseController;
 import com.backstage.common.core.domain.R;
 
+import com.backstage.system.domain.homepage.vo.HotCourseLatestSectionVO;
 import com.backstage.system.domain.homepage.vo.HotCourseVO;
 import com.backstage.system.service.homepage.IOshHomePageCourseService;
 import io.swagger.annotations.Api;
@@ -41,5 +42,16 @@ public class OshHomePageCourseController extends BaseController {
             @ApiParam(value = "返回数量", defaultValue = "5")
             @RequestParam(defaultValue = "5") Integer limit) {
         return R.ok(homePageCourseService.getHotCourses(limit));
+    }
+
+    @ApiOperation("首页热门课程最新更新小节")
+    @GetMapping("/latest-updates")
+    @Anonymous
+    public R<List<HotCourseLatestSectionVO>> latestUpdates(
+            @ApiParam(value = "课程ID", required = true)
+            @RequestParam Long courseId,
+            @ApiParam(value = "返回数量", defaultValue = "2")
+            @RequestParam(defaultValue = "2") Integer limit) {
+        return R.ok(homePageCourseService.getLatestCourseUpdates(courseId, limit));
     }
 }

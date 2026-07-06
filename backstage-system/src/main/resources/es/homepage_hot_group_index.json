@@ -1,0 +1,27 @@
+{
+  "settings": { "number_of_shards": 1, "number_of_replicas": 0 },
+  "mappings": {
+    "properties": {
+      "groupId": { "type": "long" },
+      "goodsId": { "type": "long" },
+      "type": { "type": "keyword" },
+      "title": { "type": "text", "fields": { "keyword": { "type": "keyword", "ignore_above": 256 } } },
+      "cover": { "type": "keyword" },
+      "groupPrice": { "type": "scaled_float", "scaling_factor": 100 },
+      "originPrice": { "type": "scaled_float", "scaling_factor": 100 },
+      "pNum": { "type": "integer" },
+      "maxNum": { "type": "integer" },
+      "groupMinNum": { "type": "integer" },
+      "groupMaxNum": { "type": "integer" },
+      "startTime": { "type": "keyword" },
+      "endTime": { "type": "keyword" },
+      "description": { "type": "text" },
+      "currentNum": { "type": "integer" },
+      "hotScore": { "type": "scaled_float", "scaling_factor": 10000 },
+      "detailUrl": { "type": "keyword" },
+      "sortNo": { "type": "integer" },
+      "sourceLimit": { "type": "integer" },
+      "syncTime": { "type": "date", "format": "yyyy-MM-dd HH:mm:ss||strict_date_optional_time||epoch_millis" }
+    }
+  }
+}

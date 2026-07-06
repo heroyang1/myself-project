@@ -1,0 +1,77 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0
+  },
+  "mappings": {
+    "properties": {
+      "id": {
+        "type": "long"
+      },
+      "title": {
+        "type": "text",
+        "fields": {
+          "keyword": {
+            "type": "keyword",
+            "ignore_above": 256
+          }
+        }
+      },
+      "coverKey": {
+        "type": "keyword"
+      },
+      "price": {
+        "type": "scaled_float",
+        "scaling_factor": 100
+      },
+      "tPrice": {
+        "type": "scaled_float",
+        "scaling_factor": 100
+      },
+      "buyCount": {
+        "type": "integer"
+      },
+      "viewCount": {
+        "type": "long"
+      },
+      "videoCount": {
+        "type": "integer"
+      },
+      "ratingScore": {
+        "type": "scaled_float",
+        "scaling_factor": 10
+      },
+      "serviceContent": {
+        "type": "text"
+      },
+      "resourceType": {
+        "type": "keyword"
+      },
+      "hotScore": {
+        "type": "double"
+      },
+      "tags": {
+        "type": "keyword"
+      },
+      "detailUrl": {
+        "type": "keyword"
+      },
+      "listUrl": {
+        "type": "keyword"
+      },
+      "sortNo": {
+        "type": "integer"
+      },
+      "sourceLimit": {
+        "type": "integer"
+      },
+      "syncBatchId": {
+        "type": "keyword"
+      },
+      "syncTime": {
+        "type": "date",
+        "format": "yyyy-MM-dd HH:mm:ss||strict_date_optional_time||epoch_millis"
+      }
+    }
+  }
+}

@@ -44,10 +44,52 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         LEFT JOIN osh_course c ON s.course_id = c.id
         WHERE s.id = #{sectionId} AND s.delete_flag = 0
     </select>
+
+    <select id="selectLatestUpdatedSectionsByCourseId"
+            resultType="com.backstage.system.domain.homepage.vo.HotCourseLatestSectionVO">
+        SELECT
+            s.id,
+            s.title,
+            p.title AS chapterTitle,
+            IFNULL(s.update_time, s.create_time) AS updateTime
+        FROM osh_course_section s
+        LEFT JOIN osh_course_section p
+            ON p.id = s.parent_id
+            AND p.delete_flag = 0
+        WHERE s.course_id = #{courseId}
+          AND s.delete_flag = 0
+          AND (
+            s.type = 'video'
+            OR (
+                (s.type IS NULL OR s.type = '')
+                AND s.media_url IS NOT NULL
+                AND s.media_url != ''
+            )
+          )
+          AND s.parent_id IS NOT NULL
+          AND s.parent_id != 0
+        ORDER BY IFNULL(s.update_time, s.create_time) DESC, s.id DESC
+        LIMIT #{limit}
+    </select>
     
     <!-- 统计章节数量 -->
     <select id="countSectionsByCourseId" parameterType="Long" resultType="int">
         SELECT COUNT(*) FROM osh_course_section WHERE course_id = #{courseId} AND delete_flag = 0
+    </select>
+
+    <select id="countVideoSectionsByCourseId" parameterType="Long" resultType="int">
+        SELECT COUNT(*)
+        FROM osh_course_section
+        WHERE course_id = #{courseId}
+          AND delete_flag = 0
+          AND (
+            type = 'video'
+            OR (
+                (type IS NULL OR type = '')
+                AND media_url IS NOT NULL
+                AND media_url != ''
+            )
+          )
     </select>
     
     <!-- 新增章节 -->
@@ -57,7 +99,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             media_url, cover, video_codec, video_bitrate, video_resolution, 
             file_size, subtitle_url, status, exam_id, create_time
         ) VALUES (
-            #{courseId}, #{parentId}, #{title}, #{sort}, #{freeFlag}, #{sectionType}, #{duration},
+            #{courseId}, #{parentId}, #{title}, #{sort}, #{freeFlag}, #{type}, #{duration},
             #{mediaUrl}, #{cover}, #{videoCodec}, #{videoBitrate}, #{videoResolution},
             #{fileSize}, #{subtitleUrl}, #{status}, #{examId}, NOW()
         )
@@ -70,14 +112,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             media_url, cover, video_codec, video_bitrate, video_resolution, 
             subtitle_url, status, exam_id, create_by, create_time, update_time
         ) VALUES (
-            #{courseId}, #{parentId}, #{title}, #{sort}, #{freeFlag}, #{sectionType}, #{duration},
+            #{courseId}, #{parentId}, #{title}, #{sort}, #{freeFlag}, #{type}, #{duration},
             #{mediaUrl}, #{cover}, #{videoCodec}, #{videoBitrate}, #{videoResolution},
             #{subtitleUrl}, #{status}, #{examId}, #{createBy}, NOW(), NOW()
         )
     </insert>
     
     <!-- 修改章节 -->
-    <update id="updateSection" parameterType="java.util.Map">
+    <update id="updateSection" parameterType="com.backstage.system.domain.course.OshCourseSection">
         UPDATE osh_course_section
         <set>
             <if test="title != null">title = #{title},</if>
@@ -102,18 +144,18 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         UPDATE osh_course_section SET delete_flag = 1 WHERE course_id = #{courseId}
     </delete>
     
-    <!-- 批量查询章节（仅查询id和media_url字段，用于获取视频临时URL） -->
+    <!-- 批量查询章节（仅查询id和media_url字段，用于获取视频临时URL）-->
     <select id="selectSectionsByIds" resultType="com.backstage.system.domain.course.OshCourseSection">
         SELECT id, media_url
         FROM osh_course_section
         WHERE delete_flag = 0
         AND id IN
-        <foreach collection="ids" item="id" open="(" separator="," close=")">
+        <foreach collection="list" item="id" open="(" separator="," close=")">
             #{id}
         </foreach>
     </select>
 
-    <!-- 软删除单个小节（按id） -->
+    <!-- 软删除单个小节（按id）-->
     <update id="deleteCourseSectionById">
         UPDATE osh_course_section
         SET delete_flag = 1,
@@ -123,7 +165,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         AND delete_flag = 0
     </update>
 
-    <!-- 软删除章节下所有小节（按 parent_id，删章时级联） -->
+    <!-- 软删除章节下所有小节（按 parent_id，删章时级联）-->
     <update id="deleteCourseSectionsByParentId">
         UPDATE osh_course_section
         SET delete_flag = 1,

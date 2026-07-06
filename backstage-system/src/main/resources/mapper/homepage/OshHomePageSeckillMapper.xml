@@ -4,35 +4,209 @@
 <mapper namespace="com.backstage.system.mapper.homepage.OshHomePageSeckillMapper">
 
     <!--
-        热门秒杀查询：取当前进行中活动（status=2）的商品明细
-        排序：已售比例 DESC（热度），再按秒杀价 ASC（低价优先）
+        热门秒杀查询（尽量对齐热门课程的热度排序思路）
+        热度公式：
+          0.40 * 秒杀已售分
+        + 0.15 * 售罄进度分
+        + 0.15 * 资源基础成交分（课程取 buy/sales，书籍取订阅数）
+        + 0.10 * 资源浏览分（当前仅课程）
+        + 0.10 * 资源互动分（课程取评分/评论/收藏/点赞，书籍取等级/订阅/免费章节）
+        + 0.10 * 折扣力度分
+        再乘活动时效系数，避免只按库存比例导致排序过于单薄。
     -->
     <select id="selectHotSeckill" resultType="com.backstage.system.domain.homepage.vo.HotSeckillVO">
         SELECT
-            i.id                AS itemId,
-            i.goods_id          AS goodsId,
-            i.goods_type        AS goodsType,
-            i.title             AS goodsName,
-            i.cover             AS goodsCover,
-            i.origin_price      AS originPrice,
-            i.seckill_price     AS seckillPrice,
-            i.total_stock       AS stock,
-            i.sold_count        AS soldCount,
-            i.limit_per_user    AS limitPerUser,
-            a.id                AS activityId
-        FROM osh_seckill_activity_item i
-        INNER JOIN osh_seckill_activity a ON a.id = i.activity_id
-        WHERE a.status = 2
-          AND (a.delete_flag = 0 OR a.delete_flag IS NULL)
-          AND (i.delete_flag = 0 OR i.delete_flag IS NULL)
-          AND i.available_stock > 0
-        ORDER BY
-            CASE WHEN i.total_stock > 0
-                 THEN i.sold_count / i.total_stock
-                 ELSE 0
-            END DESC,
-            i.seckill_price ASC,
-            i.sort ASC
+            s.itemId,
+            s.goodsId,
+            s.goodsType,
+            s.goodsName,
+            s.goodsCover,
+            s.originPrice,
+            s.seckillPrice,
+            s.stock,
+            s.soldCount,
+            s.limitPerUser,
+            s.activityId
+        FROM (
+            SELECT
+                t.itemId,
+                t.goodsId,
+                t.goodsType,
+                t.goodsName,
+                t.goodsCover,
+                t.originPrice,
+                t.seckillPrice,
+                t.stock,
+                t.soldCount,
+                t.limitPerUser,
+                t.activityId,
+                t.itemSort,
+                t.startTime,
+                t.createTime,
+                ROUND(
+                    (
+                        0.40 * IFNULL(t.soldRaw / NULLIF(m.maxSoldRaw, 0), 0)
+                      + 0.15 * IFNULL(t.sellThroughRaw / NULLIF(m.maxSellThroughRaw, 0), 0)
+                      + 0.15 * IFNULL(t.purchaseRaw / NULLIF(m.maxPurchaseRaw, 0), 0)
+                      + 0.10 * IFNULL(t.viewRaw / NULLIF(m.maxViewRaw, 0), 0)
+                      + 0.10 * t.interactionScore
+                      + 0.10 * t.discountScore
+                    ) * t.timeDecay
+                , 4) AS hotScore
+            FROM (
+                SELECT
+                    i.id             AS itemId,
+                    i.goods_id       AS goodsId,
+                    i.goods_type     AS goodsType,
+                    i.title          AS goodsName,
+                    i.cover          AS goodsCover,
+                    i.origin_price   AS originPrice,
+                    i.seckill_price  AS seckillPrice,
+                    i.total_stock    AS stock,
+                    i.sold_count     AS soldCount,
+                    i.limit_per_user AS limitPerUser,
+                    a.id             AS activityId,
+                    i.sort           AS itemSort,
+                    a.start_time     AS startTime,
+                    i.create_time    AS createTime,
+                    LN(1 + IFNULL(i.sold_count, 0)) AS soldRaw,
+                    CASE
+                        WHEN IFNULL(i.total_stock, 0) > 0
+                            THEN LEAST(IFNULL(i.sold_count, 0) / i.total_stock, 1)
+                        ELSE 0
+                    END AS sellThroughRaw,
+                    LN(1 + CASE
+                        WHEN i.goods_type = 1 THEN GREATEST(IFNULL(c.sales_count, 0), IFNULL(c.buy_count, 0))
+                        WHEN i.goods_type = 2 THEN IFNULL(b.sub_count, 0)
+                        ELSE 0
+                    END) AS purchaseRaw,
+                    LN(1 + CASE
+                        WHEN i.goods_type = 1 THEN IFNULL(c.view_count, 0)
+                        ELSE 0
+                    END) AS viewRaw,
+                    CASE
+                        WHEN i.goods_type = 1 THEN
+                            0.50 * LEAST(IFNULL(c.rating_score, 0), 5) / 5
+                          + 0.20 * IFNULL(LN(1 + IFNULL(c.comment_count, 0)) / NULLIF(cm.maxCourseCommentRaw, 0), 0)
+                          + 0.20 * IFNULL(LN(1 + IFNULL(c.collection_count, 0)) / NULLIF(cm.maxCourseCollectRaw, 0), 0)
+                          + 0.10 * IFNULL(LN(1 + IFNULL(c.like_count, 0)) / NULLIF(cm.maxCourseLikeRaw, 0), 0)
+                        WHEN i.goods_type = 2 THEN
+                            0.55 * CASE
+                                WHEN b.level IS NULL THEN 0
+                                WHEN CAST(b.level AS UNSIGNED) >= 2 THEN 1
+                                ELSE CAST(b.level AS UNSIGNED) / 2
+                            END
+                          + 0.30 * IFNULL(LN(1 + IFNULL(b.sub_count, 0)) / NULLIF(bm.maxBookSubRaw, 0), 0)
+                          + 0.15 * IFNULL(LN(1 + IFNULL(bs.free_chapter_count, 0)) / NULLIF(bm.maxBookFreeChapterRaw, 0), 0)
+                        ELSE 0
+                    END AS interactionScore,
+                    CASE
+                        WHEN IFNULL(i.origin_price, 0) > 0
+                            THEN GREATEST(i.origin_price - i.seckill_price, 0) / i.origin_price
+                        ELSE 0
+                    END AS discountScore,
+                    (
+                        CASE
+                            WHEN TIMESTAMPDIFF(MINUTE, NOW(), a.end_time) &lt;= 60 THEN 1.25
+                            WHEN TIMESTAMPDIFF(MINUTE, NOW(), a.end_time) &lt;= 360 THEN 1.15
+                            WHEN TIMESTAMPDIFF(MINUTE, NOW(), a.end_time) &lt;= 1440 THEN 1.08
+                            WHEN TIMESTAMPDIFF(MINUTE, NOW(), a.end_time) &lt;= 4320 THEN 1.00
+                            ELSE 0.92
+                        END
+                    ) * (
+                        CASE
+                            WHEN TIMESTAMPDIFF(DAY, a.start_time, NOW()) &lt;= 1 THEN 1.10
+                            WHEN TIMESTAMPDIFF(DAY, a.start_time, NOW()) &lt;= 3 THEN 1.05
+                            WHEN TIMESTAMPDIFF(DAY, a.start_time, NOW()) &lt;= 7 THEN 1.00
+                            ELSE 0.90
+                        END
+                    ) AS timeDecay
+                FROM osh_seckill_activity_item i
+                INNER JOIN osh_seckill_activity a ON a.id = i.activity_id
+                LEFT JOIN osh_course c
+                    ON i.goods_type = 1
+                   AND c.id = i.goods_id
+                   AND c.status = 4
+                   AND c.delete_flag = 0
+                LEFT JOIN osh_book b
+                    ON i.goods_type = 2
+                   AND b.id = i.goods_id
+                   AND b.status = '0'
+                   AND b.delete_flag = 0
+                LEFT JOIN (
+                    SELECT
+                        book_id,
+                        SUM(CASE WHEN is_free = 1 THEN 1 ELSE 0 END) AS free_chapter_count
+                    FROM osh_book_chapter
+                    WHERE delete_flag = 0
+                    GROUP BY book_id
+                ) bs ON bs.book_id = b.id
+                LEFT JOIN (
+                    SELECT
+                        MAX(LN(1 + IFNULL(comment_count, 0))) AS maxCourseCommentRaw,
+                        MAX(LN(1 + IFNULL(collection_count, 0))) AS maxCourseCollectRaw,
+                        MAX(LN(1 + IFNULL(like_count, 0))) AS maxCourseLikeRaw
+                    FROM osh_course
+                    WHERE status = 4
+                      AND delete_flag = 0
+                ) cm ON 1 = 1
+                LEFT JOIN (
+                    SELECT
+                        MAX(LN(1 + IFNULL(b2.sub_count, 0))) AS maxBookSubRaw,
+                        MAX(LN(1 + IFNULL(cs2.free_chapter_count, 0))) AS maxBookFreeChapterRaw
+                    FROM osh_book b2
+                    LEFT JOIN (
+                        SELECT
+                            book_id,
+                            SUM(CASE WHEN is_free = 1 THEN 1 ELSE 0 END) AS free_chapter_count
+                        FROM osh_book_chapter
+                        WHERE delete_flag = 0
+                        GROUP BY book_id
+                    ) cs2 ON cs2.book_id = b2.id
+                    WHERE b2.status = '0'
+                      AND b2.delete_flag = 0
+                ) bm ON 1 = 1
+                WHERE a.status = 2
+                  AND (a.delete_flag = 0 OR a.delete_flag IS NULL)
+                  AND (i.delete_flag = 0 OR i.delete_flag IS NULL)
+                  AND i.available_stock > 0
+            ) t
+            JOIN (
+                SELECT
+                    MAX(LN(1 + IFNULL(i2.sold_count, 0))) AS maxSoldRaw,
+                    MAX(CASE
+                        WHEN IFNULL(i2.total_stock, 0) > 0
+                            THEN LEAST(IFNULL(i2.sold_count, 0) / i2.total_stock, 1)
+                        ELSE 0
+                    END) AS maxSellThroughRaw,
+                    MAX(LN(1 + CASE
+                        WHEN i2.goods_type = 1 THEN GREATEST(IFNULL(c2.sales_count, 0), IFNULL(c2.buy_count, 0))
+                        WHEN i2.goods_type = 2 THEN IFNULL(b2.sub_count, 0)
+                        ELSE 0
+                    END)) AS maxPurchaseRaw,
+                    MAX(LN(1 + CASE
+                        WHEN i2.goods_type = 1 THEN IFNULL(c2.view_count, 0)
+                        ELSE 0
+                    END)) AS maxViewRaw
+                FROM osh_seckill_activity_item i2
+                INNER JOIN osh_seckill_activity a2 ON a2.id = i2.activity_id
+                LEFT JOIN osh_course c2
+                    ON i2.goods_type = 1
+                   AND c2.id = i2.goods_id
+                   AND c2.status = 4
+                   AND c2.delete_flag = 0
+                LEFT JOIN osh_book b2
+                    ON i2.goods_type = 2
+                   AND b2.id = i2.goods_id
+                   AND b2.status = '0'
+                   AND b2.delete_flag = 0
+                WHERE a2.status = 2
+                  AND (a2.delete_flag = 0 OR a2.delete_flag IS NULL)
+                  AND (i2.delete_flag = 0 OR i2.delete_flag IS NULL)
+                  AND i2.available_stock > 0
+            ) m ON 1 = 1
+        ) s
+        ORDER BY s.hotScore DESC, s.itemSort ASC, s.startTime DESC, s.createTime DESC
         LIMIT #{limit}
     </select>
 
