@@ -1,6 +1,7 @@
 package com.backstage.system.service.bundle.impl;
 
 import com.backstage.common.exception.ServiceException;
+import com.backstage.system.domain.UserBookRelation;
 import com.backstage.system.domain.bundle.OshBundleItem;
 import com.backstage.system.domain.bundle.OshProductBundle;
 import com.backstage.system.domain.bundle.dto.BundleItemRequest;
@@ -12,10 +13,26 @@ import com.backstage.system.domain.bundle.vo.BundleDetailVO;
 import com.backstage.system.domain.bundle.vo.BundleItemVO;
 import com.backstage.system.domain.bundle.vo.BundleListVO;
 import com.backstage.system.domain.bundle.vo.BundleResourceVO;
+import com.backstage.system.domain.order.OrderStatusResult;
+import com.backstage.system.domain.order.OshOrder;
+import com.backstage.system.domain.order.OshPayment;
+import com.backstage.system.domain.order.enums.PayChannelEnum;
+import com.backstage.system.domain.order.enums.ProductTypeEnum;
+import com.backstage.system.domain.course.OshCourse;
+import com.backstage.system.domain.vo.pay.OrderCheckoutRespVO;
+import com.backstage.system.enums.CourseResourceEnum;
+import com.backstage.system.mapper.book.UserBookRelationMapper;
+import com.backstage.system.mapper.course.CourseBuyMapper;
+import com.backstage.system.mapper.course.OshCourseMapper;
 import com.backstage.system.mapper.bundle.OshBundleItemMapper;
 import com.backstage.system.mapper.bundle.OshBundleResourceMapper;
 import com.backstage.system.mapper.bundle.OshProductBundleMapper;
+import com.backstage.system.mapper.order.OshOrderMapper;
+import com.backstage.system.mapper.order.OshPaymentMapper;
+import com.backstage.system.service.common.OssService;
 import com.backstage.system.service.bundle.ProductBundleService;
+import com.backstage.system.service.impl.course.CourseBundlePayCheckoutService;
+import com.backstage.system.service.order.OrderService;
 import com.backstage.system.utils.OssUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.github.pagehelper.PageHelper;
@@ -27,11 +44,17 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.math.BigDecimal;
+import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -48,6 +71,22 @@ public class ProductBundleServiceImpl implements ProductBundleService {
     private OshBundleResourceMapper bundleResourceMapper;
     @Resource
     private OssUtil ossUtil;
+    @Resource
+    private OssService ossService;
+    @Resource
+    private CourseBundlePayCheckoutService courseBundlePayCheckoutService;
+    @Resource
+    private OrderService orderService;
+    @Resource
+    private OshOrderMapper orderMapper;
+    @Resource
+    private OshPaymentMapper paymentMapper;
+    @Resource
+    private CourseBuyMapper courseBuyMapper;
+    @Resource
+    private OshCourseMapper oshCourseMapper;
+    @Resource
+    private UserBookRelationMapper userBookRelationMapper;
 
     private static final int MAX_BUNDLE_RESOURCE_PAGE_SIZE = 200;
 
@@ -123,7 +162,7 @@ public class ProductBundleServiceImpl implements ProductBundleService {
         }
 
         bundle.setName(request.getName().trim());
-        bundle.setCoverUrl(StringUtils.trimToNull(request.getCoverUrl()));
+        bundle.setCoverUrl(StringUtils.trimToNull(normalizeCoverStoragePath(request.getCoverUrl())));
         bundle.setDescription(StringUtils.trimToNull(request.getDescription()));
         bundle.setSaleMode(request.getSaleMode().trim());
         bundle.setBundlePrice(request.getBundlePrice());
@@ -249,6 +288,190 @@ public class ProductBundleServiceImpl implements ProductBundleService {
         return new PageInfo<>(rows);
     }
 
+    @Override
+    public List<BundleDetailVO> recommendByResource(String resourceType, Long resourceId) {
+        String normalizedType = normalizeResourceType(resourceType);
+        if (resourceId == null || resourceId < 1) {
+            throw new ServiceException("资源ID不能为空");
+        }
+
+        List<OshBundleItem> matchedItems = bundleItemMapper.selectList(new LambdaQueryWrapper<OshBundleItem>()
+                .eq(OshBundleItem::getResourceType, normalizedType)
+                .eq(OshBundleItem::getResourceId, resourceId));
+        if (matchedItems.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        Set<Long> bundleIds = matchedItems.stream()
+                .map(OshBundleItem::getBundleId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        List<OshProductBundle> bundles = bundleMapper.selectList(new LambdaQueryWrapper<OshProductBundle>()
+                .in(OshProductBundle::getId, bundleIds)
+                .eq(OshProductBundle::getStatus, 1)
+                .orderByDesc(OshProductBundle::getSortOrder)
+                .orderByDesc(OshProductBundle::getUpdateTime));
+
+        return bundles.stream()
+                .limit(6)
+                .map(bundle -> toRecommendDetailVO(bundle, listItems(bundle.getId())))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public OrderCheckoutRespVO createBundlePay(Long bundleId, String payType, String clientIp, Long userId) {
+        if (bundleId == null || bundleId < 1) {
+            throw new ServiceException("套餐ID不能为空");
+        }
+        if (userId == null || userId < 1) {
+            throw new ServiceException("请先登录后再支付");
+        }
+        OshProductBundle bundle = requireBundle(bundleId);
+        if (!Integer.valueOf(1).equals(bundle.getStatus())) {
+            throw new ServiceException("套餐未上架，暂不可购买");
+        }
+        if (countItems(bundleId) < 1) {
+            throw new ServiceException("套餐内容为空，暂不可购买");
+        }
+        ensureBundleItemsPayable(bundleId);
+        BigDecimal price = bundle.getBundlePrice();
+        if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ServiceException("套餐价格无效");
+        }
+
+        return courseBundlePayCheckoutService.checkout(
+                userId,
+                ProductTypeEnum.BUNDLE,
+                bundle.getId(),
+                bundle.getName() == null ? ("套餐#" + bundle.getId()) : bundle.getName(),
+                bundle.getOriginalPrice() == null ? price : bundle.getOriginalPrice(),
+                price,
+                normalizePayType(payType),
+                normalizeClientIp(clientIp)
+        );
+    }
+
+    private void ensureBundleItemsPayable(Long bundleId) {
+        List<OshBundleItem> items = listItems(bundleId);
+        for (OshBundleItem item : items) {
+            if (!"course".equals(item.getResourceType())) {
+                continue;
+            }
+            OshCourse course = oshCourseMapper.selectCourseById(item.getResourceId());
+            if (course == null) {
+                throw new ServiceException("套餐包含不存在的课程，暂不可购买");
+            }
+            if (!isCoursePayableInBundle(course)) {
+                throw new ServiceException("套餐包含小班专属/内部专属课程，暂不支持购买");
+            }
+        }
+    }
+
+    private boolean isCoursePayableInBundle(OshCourse course) {
+        CourseResourceEnum resourceEnum = CourseResourceEnum.fromCode(course.getResourceType());
+        if (resourceEnum == CourseResourceEnum.VIP
+                || resourceEnum == CourseResourceEnum.CASH_ONLY
+                || resourceEnum == CourseResourceEnum.CASH_POINT) {
+            return true;
+        }
+        return resourceEnum == null && Integer.valueOf(2).equals(course.getLevel());
+    }
+
+    @Override
+    public Map<String, Object> getBundlePayStatus(String orderNo, Long userId) {
+        if (StringUtils.isBlank(orderNo) || userId == null || userId < 1) {
+            throw new ServiceException("参数不完整");
+        }
+        OrderStatusResult status = orderService.getOrderStatusForUser(orderNo, userId);
+        if (status != null && status.isPayStatus()) {
+            grantBundleAccess(orderNo);
+        }
+        OshOrder order = orderMapper.selectByOrderNo(orderNo);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("paid", status != null && status.isPayStatus());
+        data.put("orderNo", orderNo);
+        data.put("bundleId", order == null ? null : order.getProductId());
+        return data;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void grantBundleAccess(String orderNo) {
+        OshOrder order = orderMapper.selectByOrderNo(orderNo);
+        if (order == null) {
+            throw new ServiceException("套餐订单不存在: " + orderNo);
+        }
+        if (!Integer.valueOf(ProductTypeEnum.BUNDLE.getCode()).equals(order.getProductType())) {
+            throw new ServiceException("订单商品类型不是套餐: " + orderNo);
+        }
+        List<OshBundleItem> items = listItems(order.getProductId());
+        if (items.isEmpty()) {
+            throw new ServiceException("套餐内容为空: " + order.getProductId());
+        }
+        for (OshBundleItem item : items) {
+            if ("course".equals(item.getResourceType())) {
+                grantCourseItem(order, item);
+            } else if ("book".equals(item.getResourceType())) {
+                grantBookItem(order, item);
+            }
+        }
+    }
+
+    private void grantCourseItem(OshOrder order, OshBundleItem item) {
+        if (courseBuyMapper.countPaidByUserAndCourse(order.getUserId(), item.getResourceId()) > 0) {
+            return;
+        }
+        BigDecimal itemPrice = item.getUnitPrice() == null ? BigDecimal.ZERO : item.getUnitPrice();
+        courseBuyMapper.upsertPendingOrder(
+                order.getUserId(),
+                item.getResourceId(),
+                order.getOrderNo(),
+                resolvePayMethod(order),
+                itemPrice,
+                itemPrice
+        );
+        courseBuyMapper.markPaidByOrderNoAndUserId(order.getOrderNo(), order.getUserId());
+    }
+
+    private void grantBookItem(OshOrder order, OshBundleItem item) {
+        UserBookRelation relation = userBookRelationMapper.selectByUserIdAndBookId(order.getUserId(), item.getResourceId());
+        if (relation != null && Integer.valueOf(1).equals(relation.getPurchased())) {
+            return;
+        }
+        BigDecimal itemPrice = item.getUnitPrice() == null ? BigDecimal.ZERO : item.getUnitPrice();
+        userBookRelationMapper.upsertPurchased(order.getUserId(), item.getResourceId(), itemPrice, order.getOrderNo(), "system");
+    }
+
+    private String normalizePayType(String payType) {
+        String channel = StringUtils.defaultIfBlank(payType, PayChannelEnum.WXPAY.getValue()).trim().toLowerCase();
+        if (PayChannelEnum.WXPAY.getValue().equals(channel) || PayChannelEnum.ALIPAY.getValue().equals(channel)) {
+            return channel;
+        }
+        throw new ServiceException("不支持的支付方式: " + payType);
+    }
+
+    private String normalizeClientIp(String clientIp) {
+        if (StringUtils.isBlank(clientIp) || "0:0:0:0:0:0:0:1".equals(clientIp.trim())) {
+            return "127.0.0.1";
+        }
+        String ip = clientIp.trim();
+        int commaIndex = ip.indexOf(',');
+        if (commaIndex >= 0) {
+            ip = ip.substring(0, commaIndex).trim();
+        }
+        return StringUtils.defaultIfBlank(ip, "127.0.0.1");
+    }
+
+    private String resolvePayMethod(OshOrder order) {
+        OshPayment payment = paymentMapper.selectByOrderNo(order.getOrderNo());
+        if (payment != null && payment.getChannel() != null) {
+            PayChannelEnum channel = PayChannelEnum.fromCode(payment.getChannel());
+            if (channel != null) {
+                return channel.getValue();
+            }
+        }
+        return PayChannelEnum.WXPAY.getValue();
+    }
+
     private BundleResourceSearchQuery normalizeResourceSearch(BundleResourceSearchQuery query) {
         BundleResourceSearchQuery normalized = query == null ? new BundleResourceSearchQuery() : query;
         if (normalized.getPageNum() == null || normalized.getPageNum() < 1) {
@@ -279,14 +502,50 @@ public class ProductBundleServiceImpl implements ProductBundleService {
         return normalized;
     }
 
+    private String normalizeResourceType(String resourceType) {
+        if (StringUtils.isBlank(resourceType)) {
+            throw new ServiceException("资源类型不能为空");
+        }
+        String normalizedType = resourceType.trim();
+        if (!"course".equals(normalizedType)
+                && !"book".equals(normalizedType)
+                && !"tool".equals(normalizedType)
+                && !"exam".equals(normalizedType)) {
+            throw new ServiceException("不支持的资源类型");
+        }
+        return normalizedType;
+    }
+
     private String resolveCoverUrl(String cover) {
+        String storagePath = normalizeCoverStoragePath(cover);
+        if (StringUtils.isBlank(storagePath)) {
+            return null;
+        }
+        try {
+            return ossService.getLimitedUrl(storagePath, 1440);
+        } catch (Exception ignored) {
+            return ossUtil.getFullFilePath(storagePath);
+        }
+    }
+
+    private String normalizeCoverStoragePath(String cover) {
         if (StringUtils.isBlank(cover)) {
             return null;
         }
-        if (cover.startsWith("http://") || cover.startsWith("https://")) {
-            return cover;
+        String normalized = cover.trim();
+        if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
+            try {
+                normalized = URLDecoder.decode(URI.create(normalized).getPath(), StandardCharsets.UTF_8.name());
+            } catch (Exception ignored) {
+                return null;
+            }
         }
-        return ossUtil.getFullFilePath(cover);
+        normalized = normalized.replaceFirst("^/+", "");
+        String bucketName = ossUtil.getOssProperties().getBucketName();
+        if (StringUtils.isNotBlank(bucketName) && normalized.startsWith(bucketName + "/")) {
+            normalized = normalized.substring(bucketName.length() + 1);
+        }
+        return StringUtils.trimToNull(normalized);
     }
 
     private BigDecimal resolveOriginalPrice(BigDecimal originalPrice, List<BundleItemRequest> items) {
@@ -330,6 +589,12 @@ public class ProductBundleServiceImpl implements ProductBundleService {
         BundleDetailVO vo = new BundleDetailVO();
         BeanUtils.copyProperties(bundle, vo);
         vo.setItems(items.stream().map(this::toItemVO).collect(Collectors.toList()));
+        return vo;
+    }
+
+    private BundleDetailVO toRecommendDetailVO(OshProductBundle bundle, List<OshBundleItem> items) {
+        BundleDetailVO vo = toDetailVO(bundle, items);
+        vo.setCoverUrl(resolveCoverUrl(bundle.getCoverUrl()));
         return vo;
     }
 
