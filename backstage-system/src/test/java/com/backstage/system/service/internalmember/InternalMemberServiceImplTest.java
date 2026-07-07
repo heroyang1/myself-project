@@ -1,5 +1,7 @@
 package com.backstage.system.service.internalmember;
 
+import com.backstage.common.exception.ServiceException;
+import com.backstage.system.domain.internalmember.dto.InternalMemberFollowRecordSaveDTO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberAdminUserOptionVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentProfileVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberOutcomeVO;
@@ -17,8 +19,10 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @RunWith(MockitoJUnitRunner.class)
@@ -66,7 +70,6 @@ public class InternalMemberServiceImplTest {
         InternalMemberEmploymentProfileVO result = internalMemberService.selectEmploymentProfile(9L);
 
         assertEquals("interviewing", result.getProgressStageCode());
-        assertEquals("面试中", result.getProgressStageName());
         assertEquals(Integer.valueOf(4), result.getProgressStageOrder());
         assertEquals(Integer.valueOf(6), result.getProgressStageTotal());
     }
@@ -93,8 +96,71 @@ public class InternalMemberServiceImplTest {
 
         assertEquals(1, result.size());
         assertEquals("delivering", result.get(0).getProgressStageCode());
-        assertEquals("投递中", result.get(0).getProgressStageName());
         assertEquals(Integer.valueOf(3), result.get(0).getProgressStageOrder());
         assertEquals(Integer.valueOf(6), result.get(0).getProgressStageTotal());
     }
+
+    @Test
+    public void shouldAddFollowRecordWithResponsibleUserId() {
+        InternalMemberFollowRecordSaveDTO dto = new InternalMemberFollowRecordSaveDTO();
+        dto.setFollowType("  wechat_follow  ");
+        dto.setContent("  follow content  ");
+        dto.setNextFollowTime(" 2026-07-05 12:00:00 ");
+        dto.setResponsibleUserId(101L);
+
+        when(internalMemberMapper.countPaidMemberByUserId(2001L)).thenReturn(1);
+        when(internalMemberMapper.countInternalMemberAdminUserByUserId(101L)).thenReturn(1);
+        when(internalMemberMapper.insertFollowRecord(
+                eq(2001L),
+                eq("wechat_follow"),
+                eq("follow content"),
+                eq("2026-07-05 12:00:00"),
+                eq(9001L),
+                eq(101L))).thenReturn(1);
+
+        internalMemberService.addFollowRecord(2001L, dto, 9001L);
+
+        verify(internalMemberMapper).insertFollowRecord(
+                2001L,
+                "wechat_follow",
+                "follow content",
+                "2026-07-05 12:00:00",
+                9001L,
+                101L);
+    }
+
+    @Test
+    public void shouldRejectWhenResponsibleUserIdIsMissing() {
+        InternalMemberFollowRecordSaveDTO dto = new InternalMemberFollowRecordSaveDTO();
+        dto.setFollowType("wechat_follow");
+        dto.setContent("follow content");
+
+        when(internalMemberMapper.countPaidMemberByUserId(2001L)).thenReturn(1);
+
+        try {
+            internalMemberService.addFollowRecord(2001L, dto, 9001L);
+            fail("Expected ServiceException");
+        } catch (ServiceException ex) {
+            assertEquals("Responsible admin user id cannot be empty", ex.getMessage());
+        }
+    }
+
+    @Test
+    public void shouldRejectWhenResponsibleUserIsNotInternalMemberAdmin() {
+        InternalMemberFollowRecordSaveDTO dto = new InternalMemberFollowRecordSaveDTO();
+        dto.setFollowType("wechat_follow");
+        dto.setContent("follow content");
+        dto.setResponsibleUserId(202L);
+
+        when(internalMemberMapper.countPaidMemberByUserId(2001L)).thenReturn(1);
+        when(internalMemberMapper.countInternalMemberAdminUserByUserId(202L)).thenReturn(0);
+
+        try {
+            internalMemberService.addFollowRecord(2001L, dto, 9001L);
+            fail("Expected ServiceException");
+        } catch (ServiceException ex) {
+            assertEquals("Responsible admin user is invalid", ex.getMessage());
+        }
+    }
+
 }

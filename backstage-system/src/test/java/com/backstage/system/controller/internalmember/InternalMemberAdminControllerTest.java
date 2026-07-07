@@ -1,12 +1,19 @@
 package com.backstage.system.controller.internalmember;
 
+import com.backstage.common.constant.OshUserConstants;
+import com.backstage.common.threadlocal.ThreadLocalUtil;
+import com.backstage.system.domain.internalmember.dto.InternalMemberFollowRecordSaveDTO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberAdminUserOptionVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentProfileVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberFollowRecordVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberOutcomeVO;
 import com.backstage.system.service.internalmember.IInternalMemberService;
 import com.backstage.system.service.internalmember.IInternalMemberStudyService;
+import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -17,8 +24,11 @@ import java.util.Collections;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -34,6 +44,11 @@ public class InternalMemberAdminControllerTest {
         ReflectionTestUtils.setField(controller, "internalMemberService", internalMemberService);
         ReflectionTestUtils.setField(controller, "internalMemberStudyService", mock(IInternalMemberStudyService.class));
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+    }
+
+    @After
+    public void tearDown() {
+        ThreadLocalUtil.remove();
     }
 
     @Test
@@ -81,6 +96,47 @@ public class InternalMemberAdminControllerTest {
                 .andExpect(jsonPath("$.data[0].username").value("alice"))
                 .andExpect(jsonPath("$.data[0].roleCode").value("manager"))
                 .andExpect(jsonPath("$.data[1].roleCode").value("founder"));
+    }
+
+    @Test
+    public void shouldReturnFollowRecordsWithResponsibleFields() throws Exception {
+        InternalMemberFollowRecordVO record = new InternalMemberFollowRecordVO();
+        record.setId(1L);
+        record.setUserId(2001L);
+        record.setFollowType("wechat_follow");
+        record.setContent("follow content");
+        record.setOperatorId(9001L);
+        record.setOperatorName("current-admin");
+        record.setResponsibleUserId(101L);
+        record.setResponsibleUserName("alice");
+        record.setNextFollowTime("2026-07-05 12:00:00");
+        record.setCreateTime("2026-07-05 10:00:00");
+
+        when(internalMemberService.selectFollowRecordList(eq(2001L))).thenReturn(Collections.singletonList(record));
+
+        mockMvc.perform(get("/pc/admin/internal-member/2001/follow-records"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data[0].operatorId").value(9001))
+                .andExpect(jsonPath("$.data[0].operatorName").value("current-admin"))
+                .andExpect(jsonPath("$.data[0].responsibleUserId").value(101))
+                .andExpect(jsonPath("$.data[0].responsibleUserName").value("alice"));
+    }
+
+    @Test
+    public void shouldPassResponsibleUserIdWhenAddingFollowRecord() throws Exception {
+        ThreadLocalUtil.set(OshUserConstants.USER_ID, 9001L);
+
+        mockMvc.perform(post("/pc/admin/internal-member/2001/follow-records")
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"followType\":\"wechat_follow\",\"content\":\"follow content\",\"nextFollowTime\":\"2026-07-05 12:00:00\",\"responsibleUserId\":101}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        ArgumentCaptor<InternalMemberFollowRecordSaveDTO> dtoCaptor =
+                ArgumentCaptor.forClass(InternalMemberFollowRecordSaveDTO.class);
+        verify(internalMemberService).addFollowRecord(eq(2001L), dtoCaptor.capture(), eq(9001L));
+        Assert.assertEquals(Long.valueOf(101L), dtoCaptor.getValue().getResponsibleUserId());
     }
 
     @Test

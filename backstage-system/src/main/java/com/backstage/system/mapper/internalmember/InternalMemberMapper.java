@@ -6,6 +6,7 @@ import com.backstage.system.domain.internalmember.dto.InternalMemberOutcomeQuery
 import com.backstage.system.domain.internalmember.dto.InternalMemberPageQueryDTO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberAdminUserOptionVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberCourseProgressVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentDocumentVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberExamItemVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentProfileVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberFollowRecordVO;
@@ -32,6 +33,8 @@ public interface InternalMemberMapper {
 
     InternalMemberEmploymentProfileVO selectEmploymentProfileByUserId(@Param("userId") Long userId);
 
+    InternalMemberEmploymentDocumentVO selectEmploymentDocumentByUserId(@Param("userId") Long userId);
+
     InternalMemberResumeSummaryVO selectResumeSummaryByUserId(@Param("userId") Long userId);
 
     InternalMemberInterviewSummaryVO selectInterviewSummaryByUserId(@Param("userId") Long userId);
@@ -44,13 +47,31 @@ public interface InternalMemberMapper {
                                 @Param("dto") InternalMemberEmploymentProfileSaveDTO dto,
                                 @Param("operatorId") Long operatorId);
 
+    int insertEmploymentProfileShellIfAbsent(@Param("userId") Long userId,
+                                             @Param("operatorId") Long operatorId);
+
+    int updateEmploymentDocument(@Param("userId") Long userId,
+                                 @Param("resumeFileKey") String resumeFileKey,
+                                 @Param("resumeFileName") String resumeFileName,
+                                 @Param("offerFileKey") String offerFileKey,
+                                 @Param("offerFileName") String offerFileName,
+                                 @Param("operatorId") Long operatorId);
+
+    int clearEmploymentDocument(@Param("userId") Long userId,
+                                @Param("clearResume") boolean clearResume,
+                                @Param("clearOffer") boolean clearOffer,
+                                @Param("operatorId") Long operatorId);
+
     List<InternalMemberFollowRecordVO> selectFollowRecordListByUserId(@Param("userId") Long userId);
 
     int insertFollowRecord(@Param("userId") Long userId,
                            @Param("followType") String followType,
                            @Param("content") String content,
                            @Param("nextFollowTime") String nextFollowTime,
-                           @Param("operatorId") Long operatorId);
+                           @Param("operatorId") Long operatorId,
+                           @Param("responsibleUserId") Long responsibleUserId);
+
+    int countInternalMemberAdminUserByUserId(@Param("userId") Long userId);
 
     List<InternalMemberOutcomeVO> selectOutcomeList(@Param("query") InternalMemberOutcomeQueryDTO query);
 

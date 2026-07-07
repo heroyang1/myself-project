@@ -12,6 +12,9 @@ import com.backstage.system.domain.internalmember.dto.InternalMemberOutcomeQuery
 import com.backstage.system.domain.internalmember.dto.InternalMemberPageQueryDTO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberAdminUserOptionVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberCourseProgressVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberDocumentDownloadVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberDocumentPreviewVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberDocumentUploadVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberExamSummaryVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentProfileVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberFollowRecordVO;
@@ -33,10 +36,12 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import java.util.List;
@@ -105,6 +110,42 @@ public class InternalMemberAdminController extends BaseController {
             @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId,
             @Validated @RequestBody InternalMemberEmploymentProfileSaveDTO dto) {
         internalMemberService.saveEmploymentProfile(userId, dto, currentOperatorId());
+        return R.ok();
+    }
+
+    @ApiOperation("Upload desensitized internal member document")
+    @PostMapping("/{userId}/documents")
+    public R<InternalMemberDocumentUploadVO> uploadDocument(
+            @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId,
+            @RequestParam("docType") String docType,
+            @RequestParam("file") MultipartFile file) {
+        return R.ok(internalMemberService.uploadEmploymentDocument(userId, docType, file, currentOperatorId()));
+    }
+
+    @ApiOperation("Preview internal member document")
+    @GetMapping("/{userId}/documents/preview")
+    public R<InternalMemberDocumentPreviewVO> previewDocument(
+            @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId,
+            @RequestParam("docType") String docType,
+            @RequestParam(value = "minute", required = false, defaultValue = "30") Integer minute) {
+        return R.ok(internalMemberService.previewEmploymentDocument(userId, docType, minute));
+    }
+
+    @ApiOperation("Download internal member document")
+    @GetMapping("/{userId}/documents/download")
+    public R<InternalMemberDocumentDownloadVO> downloadDocument(
+            @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId,
+            @RequestParam("docType") String docType,
+            @RequestParam(value = "minute", required = false, defaultValue = "30") Integer minute) {
+        return R.ok(internalMemberService.downloadEmploymentDocument(userId, docType, minute));
+    }
+
+    @ApiOperation("Delete internal member document")
+    @DeleteMapping("/{userId}/documents")
+    public R<Void> deleteDocument(
+            @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId,
+            @RequestParam("docType") String docType) {
+        internalMemberService.deleteEmploymentDocument(userId, docType, currentOperatorId());
         return R.ok();
     }
 

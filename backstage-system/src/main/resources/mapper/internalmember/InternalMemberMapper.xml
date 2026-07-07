@@ -301,6 +301,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             p.user_id as userId,
             p.job_status as jobStatus,
             p.job_status_name as jobStatusName,
+            p.resume_file_key as resumeFileKey,
+            p.resume_file_name as resumeFileName,
+            p.offer_file_key as offerFileKey,
+            p.offer_file_name as offerFileName,
             p.company_name as companyName,
             p.position_name as positionName,
             p.city as city,
@@ -325,6 +329,19 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             date_format(p.last_interview_time, '%Y-%m-%d %H:%i:%s') as lastInterviewTime,
             p.update_by as updateBy,
             date_format(p.update_time, '%Y-%m-%d %H:%i:%s') as updateTime
+        from osh_internal_member_employment_profile p
+        where p.user_id = #{userId}
+          and p.delete_flag = 0
+        limit 1
+    </select>
+
+    <select id="selectEmploymentDocumentByUserId" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentDocumentVO">
+        select
+            p.user_id as userId,
+            p.resume_file_key as resumeFileKey,
+            p.resume_file_name as resumeFileName,
+            p.offer_file_key as offerFileKey,
+            p.offer_file_name as offerFileName
         from osh_internal_member_employment_profile p
         where p.user_id = #{userId}
           and p.delete_flag = 0
@@ -403,6 +420,54 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
           and delete_flag = 0
     </update>
 
+    <insert id="insertEmploymentProfileShellIfAbsent">
+        insert ignore into osh_internal_member_employment_profile (
+            user_id, create_by, create_time, update_by, update_time, delete_flag
+        ) values (
+            #{userId}, #{operatorId}, now(), #{operatorId}, now(), 0
+        )
+    </insert>
+
+    <update id="updateEmploymentDocument">
+        update osh_internal_member_employment_profile
+        <set>
+            <if test="resumeFileKey != null">
+                resume_file_key = #{resumeFileKey},
+            </if>
+            <if test="resumeFileName != null">
+                resume_file_name = #{resumeFileName},
+            </if>
+            <if test="offerFileKey != null">
+                offer_file_key = #{offerFileKey},
+            </if>
+            <if test="offerFileName != null">
+                offer_file_name = #{offerFileName},
+            </if>
+            update_by = #{operatorId},
+            update_time = now()
+        </set>
+        where user_id = #{userId}
+          and delete_flag = 0
+    </update>
+
+    <update id="clearEmploymentDocument">
+        update osh_internal_member_employment_profile
+        <set>
+            <if test="clearResume">
+                resume_file_key = null,
+                resume_file_name = null,
+            </if>
+            <if test="clearOffer">
+                offer_file_key = null,
+                offer_file_name = null,
+            </if>
+            update_by = #{operatorId},
+            update_time = now()
+        </set>
+        where user_id = #{userId}
+          and delete_flag = 0
+    </update>
+
     <select id="selectFollowRecordListByUserId" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberFollowRecordVO">
         select
             r.id as id,
@@ -411,10 +476,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             r.content as content,
             r.operator_id as operatorId,
             u.username as operatorName,
+            r.responsible_user_id as responsibleUserId,
+            ru.username as responsibleUserName,
             date_format(r.next_follow_time, '%Y-%m-%d %H:%i:%s') as nextFollowTime,
             date_format(r.create_time, '%Y-%m-%d %H:%i:%s') as createTime
         from osh_internal_member_follow_record r
         left join osh_user u on u.id = r.operator_id
+        left join osh_user ru on ru.id = r.responsible_user_id
         where r.user_id = #{userId}
           and r.delete_flag = 0
         order by r.create_time desc, r.id desc
@@ -422,12 +490,28 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <insert id="insertFollowRecord">
         insert into osh_internal_member_follow_record (
-            user_id, follow_type, content, next_follow_time, operator_id, create_time, update_time, delete_flag
+            user_id, follow_type, content, next_follow_time,
+            operator_id, responsible_user_id, create_time, update_time, delete_flag
         ) values (
             #{userId}, #{followType}, #{content}, str_to_date(#{nextFollowTime}, '%Y-%m-%d %H:%i:%s'),
-            #{operatorId}, now(), now(), 0
+            #{operatorId}, #{responsibleUserId}, now(), now(), 0
         )
     </insert>
+
+    <select id="countInternalMemberAdminUserByUserId" resultType="int">
+        select count(1)
+        from osh_user u
+        inner join osh_user_role ur on ur.user_id = u.id
+        inner join osh_role r on r.id = ur.role_id
+        where u.id = #{userId}
+          and u.delete_flag = 0
+          and u.status = 0
+          and ur.delete_flag = 0
+          and (ur.expire_time is null or ur.expire_time > now())
+          and r.delete_flag = 0
+          and r.status = 1
+          and r.role_code in ('manager', 'core_developer', 'founder')
+    </select>
 
     <select id="selectOutcomeList" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberOutcomeVO">
         select

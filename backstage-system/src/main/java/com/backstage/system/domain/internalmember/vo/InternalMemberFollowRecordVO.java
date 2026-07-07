@@ -7,6 +7,8 @@ public class InternalMemberFollowRecordVO {
     private String content;
     private Long operatorId;
     private String operatorName;
+    private Long responsibleUserId;
+    private String responsibleUserName;
     private String nextFollowTime;
     private String createTime;
 
@@ -56,6 +58,22 @@ public class InternalMemberFollowRecordVO {
 
     public void setOperatorName(String operatorName) {
         this.operatorName = operatorName;
+    }
+
+    public Long getResponsibleUserId() {
+        return responsibleUserId;
+    }
+
+    public void setResponsibleUserId(Long responsibleUserId) {
+        this.responsibleUserId = responsibleUserId;
+    }
+
+    public String getResponsibleUserName() {
+        return responsibleUserName;
+    }
+
+    public void setResponsibleUserName(String responsibleUserName) {
+        this.responsibleUserName = responsibleUserName;
     }
 
     public String getNextFollowTime() {

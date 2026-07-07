@@ -6,6 +6,10 @@ public class InternalMemberEmploymentProfileVO {
     private Long userId;
     private Integer jobStatus;
     private String jobStatusName;
+    private String resumeFileKey;
+    private String resumeFileName;
+    private String offerFileKey;
+    private String offerFileName;
     private String companyName;
     private String positionName;
     private String city;
@@ -53,6 +57,38 @@ public class InternalMemberEmploymentProfileVO {
 
     public void setJobStatusName(String jobStatusName) {
         this.jobStatusName = jobStatusName;
+    }
+
+    public String getResumeFileKey() {
+        return resumeFileKey;
+    }
+
+    public void setResumeFileKey(String resumeFileKey) {
+        this.resumeFileKey = resumeFileKey;
+    }
+
+    public String getResumeFileName() {
+        return resumeFileName;
+    }
+
+    public void setResumeFileName(String resumeFileName) {
+        this.resumeFileName = resumeFileName;
+    }
+
+    public String getOfferFileKey() {
+        return offerFileKey;
+    }
+
+    public void setOfferFileKey(String offerFileKey) {
+        this.offerFileKey = offerFileKey;
+    }
+
+    public String getOfferFileName() {
+        return offerFileName;
+    }
+
+    public void setOfferFileName(String offerFileName) {
+        this.offerFileName = offerFileName;
     }
 
     public String getCompanyName() {

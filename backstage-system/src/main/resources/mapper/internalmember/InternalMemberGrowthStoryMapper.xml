@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.backstage.system.mapper.internalmember.InternalMemberGrowthStoryMapper">
+
+    <select id="selectStoryDetailByUserId" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberGrowthStoryDetailVO">
+        select
+            g.id as id,
+            g.user_id as userId,
+            u.username as username,
+            u.avatar as avatar,
+            g.story_title as storyTitle,
+            g.story_summary as storySummary,
+            g.story_content as storyContent,
+            g.is_public as isPublic,
+            date_format(g.published_time, '%Y-%m-%d %H:%i:%s') as publishedTime,
+            p.company_name as companyName,
+            p.position_name as positionName,
+            p.city as city,
+            date_format(p.entry_time, '%Y-%m-%d %H:%i:%s') as entryTime,
+            date_format(g.create_time, '%Y-%m-%d %H:%i:%s') as createTime,
+            date_format(g.update_time, '%Y-%m-%d %H:%i:%s') as updateTime
+        from osh_internal_member_growth_story g
+        inner join osh_user u on u.id = g.user_id and u.delete_flag = 0
+        left join osh_internal_member_employment_profile p
+            on p.user_id = g.user_id
+           and p.delete_flag = 0
+        where g.user_id = #{userId}
+          and g.delete_flag = 0
+        limit 1
+    </select>
+
+    <select id="selectPublicStoryDetailByUserId" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberGrowthStoryDetailVO">
+        select
+            g.id as id,
+            g.user_id as userId,
+            u.username as username,
+            u.avatar as avatar,
+            g.story_title as storyTitle,
+            g.story_summary as storySummary,
+            g.story_content as storyContent,
+            g.is_public as isPublic,
+            date_format(g.published_time, '%Y-%m-%d %H:%i:%s') as publishedTime,
+            p.company_name as companyName,
+            p.position_name as positionName,
+            p.city as city,
+            date_format(p.entry_time, '%Y-%m-%d %H:%i:%s') as entryTime,
+            date_format(g.create_time, '%Y-%m-%d %H:%i:%s') as createTime,
+            date_format(g.update_time, '%Y-%m-%d %H:%i:%s') as updateTime
+        from osh_internal_member_growth_story g
+        inner join osh_user u
+            on u.id = g.user_id
+           and u.delete_flag = 0
+           and u.status = 0
+        inner join osh_internal_member_employment_profile p
+            on p.user_id = g.user_id
+           and p.delete_flag = 0
+           and (p.job_status = 2 or p.entry_time is not null)
+           and p.resume_file_key is not null
+           and p.resume_file_key != ''
+           and p.offer_file_key is not null
+           and p.offer_file_key != ''
+        where g.user_id = #{userId}
+          and g.delete_flag = 0
+          and g.is_public = 1
+        limit 1
+    </select>
+
+    <select id="selectPublicStoryPage" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberGrowthStoryPageVO">
+        select
+            g.id as id,
+            g.user_id as userId,
+            u.username as username,
+            u.avatar as avatar,
+            g.story_title as storyTitle,
+            g.story_summary as storySummary,
+            p.company_name as companyName,
+            p.position_name as positionName,
+            p.city as city,
+            date_format(p.entry_time, '%Y-%m-%d %H:%i:%s') as entryTime,
+            date_format(g.published_time, '%Y-%m-%d %H:%i:%s') as publishedTime
+        from osh_internal_member_growth_story g
+        inner join osh_user u
+            on u.id = g.user_id
+           and u.delete_flag = 0
+           and u.status = 0
+        inner join osh_internal_member_employment_profile p
+            on p.user_id = g.user_id
+           and p.delete_flag = 0
+           and (p.job_status = 2 or p.entry_time is not null)
+           and p.resume_file_key is not null
+           and p.resume_file_key != ''
+           and p.offer_file_key is not null
+           and p.offer_file_key != ''
+        where g.delete_flag = 0
+          and g.is_public = 1
+          and g.user_id != #{excludeUserId}
+        <if test="keyword != null and keyword != ''">
+            and (
+                u.username like concat('%', #{keyword}, '%')
+                or g.story_title like concat('%', #{keyword}, '%')
+                or g.story_summary like concat('%', #{keyword}, '%')
+                or p.company_name like concat('%', #{keyword}, '%')
+                or p.position_name like concat('%', #{keyword}, '%')
+            )
+        </if>
+        order by g.published_time desc, g.id desc
+    </select>
+
+    <insert id="insertStory">
+        insert into osh_internal_member_growth_story (
+            user_id, story_title, story_summary, story_content, facts_json, generate_status,
+            is_public, published_time, create_by, create_time, update_by, update_time, delete_flag
+        ) values (
+            #{userId}, #{storyTitle}, #{storySummary}, #{storyContent}, #{factsJson}, #{generateStatus},
+            #{isPublic}, str_to_date(#{publishedTime}, '%Y-%m-%d %H:%i:%s'),
+            #{operatorId}, now(), #{operatorId}, now(), 0
+        )
+    </insert>
+
+    <update id="updateStory">
+        update osh_internal_member_growth_story
+        set story_title = #{storyTitle},
+            story_summary = #{storySummary},
+            story_content = #{storyContent},
+            facts_json = #{factsJson},
+            generate_status = #{generateStatus},
+            update_by = #{operatorId},
+            update_time = now()
+        where user_id = #{userId}
+          and delete_flag = 0
+    </update>
+
+    <update id="updateStoryVisibility">
+        update osh_internal_member_growth_story
+        set is_public = #{isPublic},
+            published_time = case when #{isPublic} = 1 then now() else null end,
+            update_by = #{operatorId},
+            update_time = now()
+        where user_id = #{userId}
+          and delete_flag = 0
+    </update>
+</mapper>

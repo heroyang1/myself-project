@@ -7,7 +7,10 @@ import com.backstage.system.domain.internalmember.dto.InternalMemberOutcomeQuery
 import com.backstage.system.domain.internalmember.dto.InternalMemberPageQueryDTO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberCourseProgressVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberAdminUserOptionVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberDocumentDownloadVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberExamSummaryVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberDocumentPreviewVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberDocumentUploadVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentProfileVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberFollowRecordVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberInterviewSummaryVO;
@@ -16,6 +19,7 @@ import com.backstage.system.domain.internalmember.vo.InternalMemberResumeSummary
 import com.backstage.system.domain.internalmember.vo.InternalMemberSalarySummaryVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberStudyOverviewVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberStudySummaryVO;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -37,6 +41,14 @@ public interface IInternalMemberService {
     InternalMemberSalarySummaryVO selectSalarySummary(Long userId);
 
     void saveEmploymentProfile(Long userId, InternalMemberEmploymentProfileSaveDTO dto, Long operatorId);
+
+    InternalMemberDocumentUploadVO uploadEmploymentDocument(Long userId, String docType, MultipartFile file, Long operatorId);
+
+    InternalMemberDocumentPreviewVO previewEmploymentDocument(Long userId, String docType, Integer minute);
+
+    InternalMemberDocumentDownloadVO downloadEmploymentDocument(Long userId, String docType, Integer minute);
+
+    void deleteEmploymentDocument(Long userId, String docType, Long operatorId);
 
     List<InternalMemberFollowRecordVO> selectFollowRecordList(Long userId);
 

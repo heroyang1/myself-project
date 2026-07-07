@@ -28,6 +28,7 @@
         <oshi.version>6.8.2</oshi.version>
         <commons.io.version>2.19.0</commons.io.version>
         <poi.version>4.1.2</poi.version>
+        <pdfbox.version>2.0.31</pdfbox.version>
         <velocity.version>2.3</velocity.version>
         <jwt.version>0.9.1</jwt.version>
         <Redisson.version>3.17.7</Redisson.version>
@@ -173,6 +174,12 @@
                 <groupId>org.apache.poi</groupId>
                 <artifactId>poi-ooxml</artifactId>
                 <version>${poi.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.pdfbox</groupId>
+                <artifactId>pdfbox</artifactId>
+                <version>${pdfbox.version}</version>
             </dependency>
 
             <!-- velocity代码生成使用模板 -->

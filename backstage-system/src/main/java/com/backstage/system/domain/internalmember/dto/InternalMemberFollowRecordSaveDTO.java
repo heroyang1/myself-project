@@ -21,6 +21,9 @@ public class InternalMemberFollowRecordSaveDTO {
     @ApiModelProperty("Next follow time, format: yyyy-MM-dd HH:mm:ss")
     private String nextFollowTime;
 
+    @ApiModelProperty("Responsible admin user id")
+    private Long responsibleUserId;
+
     public String getFollowType() {
         return followType;
     }
@@ -43,5 +46,13 @@ public class InternalMemberFollowRecordSaveDTO {
 
     public void setNextFollowTime(String nextFollowTime) {
         this.nextFollowTime = nextFollowTime;
+    }
+
+    public Long getResponsibleUserId() {
+        return responsibleUserId;
+    }
+
+    public void setResponsibleUserId(Long responsibleUserId) {
+        this.responsibleUserId = responsibleUserId;
     }
 }
