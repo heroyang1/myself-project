@@ -9,6 +9,7 @@ import com.amazonaws.services.s3.model.ListObjectsV2Request;
 import com.amazonaws.services.s3.model.ListObjectsV2Result;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
+import com.amazonaws.services.s3.model.ResponseHeaderOverrides;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.backstage.common.config.OssProperties;
@@ -26,6 +27,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.net.URLEncoder;
+import java.io.UnsupportedEncodingException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
@@ -254,6 +257,14 @@ public class OssUtil {
         return getSignedUrl(ossProperties.getBucketName(), fileKey, expireMinutes);
     }
 
+    public String getInlinePreviewSignedUrl(String fileKey, int expireMinutes, String contentType) {
+        return getInlinePreviewSignedUrl(ossProperties.getBucketName(), fileKey, expireMinutes, contentType);
+    }
+
+    public String getAttachmentDownloadSignedUrl(String fileKey, int expireMinutes, String contentType, String fileName) {
+        return getAttachmentDownloadSignedUrl(ossProperties.getBucketName(), fileKey, expireMinutes, contentType, fileName);
+    }
+
     public String getSignedUrl(String bucketName, String fileKey, int expireMinutes) {
         AmazonS3Client s3 = createS3Client();
 
@@ -275,6 +286,78 @@ public class OssUtil {
         ).withExpiration(expiration);
 
         return s3.generatePresignedUrl(request).toString();
+    }
+
+    public String getInlinePreviewSignedUrl(String bucketName, String fileKey, int expireMinutes, String contentType) {
+        AmazonS3Client s3 = createS3Client();
+
+        long expireTime = System.currentTimeMillis() + (long) expireMinutes * 60 * 1000;
+        Date expiration = new Date(expireTime);
+
+        String decodedKey = fileKey;
+        try {
+            decodedKey = java.net.URLDecoder.decode(fileKey, "UTF-8");
+        } catch (Exception ignored) {
+            // keep raw key on decode failure
+        }
+
+        GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(
+                bucketName,
+                decodedKey
+        ).withExpiration(expiration);
+
+        ResponseHeaderOverrides overrides = new ResponseHeaderOverrides();
+        overrides.setContentDisposition("inline");
+        if (contentType != null && !contentType.trim().isEmpty()) {
+            overrides.setContentType(contentType);
+        }
+        request.setResponseHeaders(overrides);
+
+        return s3.generatePresignedUrl(request).toString();
+    }
+
+    public String getAttachmentDownloadSignedUrl(String bucketName,
+                                                 String fileKey,
+                                                 int expireMinutes,
+                                                 String contentType,
+                                                 String fileName) {
+        AmazonS3Client s3 = createS3Client();
+
+        long expireTime = System.currentTimeMillis() + (long) expireMinutes * 60 * 1000;
+        Date expiration = new Date(expireTime);
+
+        String decodedKey = fileKey;
+        try {
+            decodedKey = java.net.URLDecoder.decode(fileKey, "UTF-8");
+        } catch (Exception ignored) {
+            // keep raw key on decode failure
+        }
+
+        GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(
+                bucketName,
+                decodedKey
+        ).withExpiration(expiration);
+
+        ResponseHeaderOverrides overrides = new ResponseHeaderOverrides();
+        overrides.setContentDisposition(buildAttachmentDisposition(fileName));
+        if (contentType != null && !contentType.trim().isEmpty()) {
+            overrides.setContentType(contentType);
+        }
+        request.setResponseHeaders(overrides);
+
+        return s3.generatePresignedUrl(request).toString();
+    }
+
+    private String buildAttachmentDisposition(String fileName) {
+        String normalizedName = (fileName == null || fileName.trim().isEmpty()) ? "document.pdf" : fileName.trim();
+        String asciiName = normalizedName.replaceAll("[^\\x20-\\x7E]", "_").replace("\"", "_");
+        String encodedName;
+        try {
+            encodedName = URLEncoder.encode(normalizedName, "UTF-8").replace("+", "%20");
+        } catch (UnsupportedEncodingException ex) {
+            throw new IllegalStateException("UTF-8 is not supported", ex);
+        }
+        return "attachment; filename=\"" + asciiName + "\"; filename*=UTF-8''" + encodedName;
     }
 
 }

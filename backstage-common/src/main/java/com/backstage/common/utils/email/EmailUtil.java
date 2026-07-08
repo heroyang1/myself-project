@@ -175,4 +175,27 @@ public class EmailUtil {
             throw new RuntimeException("邮箱格式错误");
         }
     }
+    /**
+     * 发送普通邮件到单个收件人
+     * @param email 收件人邮箱
+     * @param subject 邮件主题
+     * @param content 邮件内容
+     */
+    public void sendEmailCommonTo(String email, String subject, String content) throws MessagingException {
+        checkEmail(email);
+        MimeMessage mimeMessage = javaMailSender.createMimeMessage();
+        MimeMessageHelper mimeMessageHelper = new MimeMessageHelper(mimeMessage, true);
+        Context context = new Context();
+        context.setVariable("subject", subject);
+        context.setVariable("content", content);
+        context.setVariable("sendTime", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        String html = springTemplateEngine.process("Common", context);
+        mimeMessageHelper.setSubject(subject);
+        mimeMessageHelper.setText(html, true);
+        mimeMessageHelper.setTo(email);
+        mimeMessageHelper.setFrom(from);
+        ClassPathResource imageResource = new ClassPathResource("static/open-source-helper.jpg");
+        mimeMessageHelper.addInline("logoImage", imageResource);
+        javaMailSender.send(mimeMessage);
+    }
 }

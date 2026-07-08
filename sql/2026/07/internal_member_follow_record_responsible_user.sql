@@ -1,0 +1,5 @@
+alter table osh_internal_member_follow_record
+add column responsible_user_id bigint null comment '跟进负责人用户ID' after operator_id;
+
+create index idx_internal_member_follow_record_responsible_user_id
+on osh_internal_member_follow_record (responsible_user_id);
