@@ -6,13 +6,11 @@ import com.backstage.common.exception.ServiceException;
 import com.backstage.system.domain.course.OshCourse;
 import com.backstage.system.domain.order.OrderStatusResult;
 import com.backstage.system.domain.order.enums.ProductTypeEnum;
-import com.backstage.system.domain.vo.pay.OrderCheckoutReqVO;
 import com.backstage.system.domain.vo.pay.OrderCheckoutRespVO;
 import com.backstage.system.enums.CourseResourceEnum;
 import com.backstage.system.mapper.course.CourseBuyMapper;
 import com.backstage.system.mapper.course.OshCourseMapper;
 import com.backstage.system.service.course.ICoursePayService;
-import com.backstage.system.service.order.OrderCheckoutService;
 import com.backstage.system.service.order.OrderService;
 import org.springframework.stereotype.Service;
 
@@ -34,7 +32,7 @@ public class CoursePayServiceImpl implements ICoursePayService {
     private CourseBuyMapper courseBuyMapper;
 
     @Resource
-    private OrderCheckoutService orderCheckoutService;
+    private CourseBundlePayCheckoutService courseBundlePayCheckoutService;
 
     @Resource
     private OrderService orderService;
@@ -63,38 +61,34 @@ public class CoursePayServiceImpl implements ICoursePayService {
             throw new ServiceException("课程价格无效");
         }
 
-        return orderCheckoutService.checkout(buildCourseCheckoutReqVO(course, userId, channel, clientIp));
+        OrderCheckoutRespVO checkoutResp = courseBundlePayCheckoutService.checkout(
+                userId,
+                ProductTypeEnum.COURSE,
+                course.getId(),
+                course.getTitle() == null ? ("课程#" + course.getId()) : course.getTitle(),
+                course.getPrice(),
+                course.getPrice(),
+                channel,
+                normalizeClientIp(clientIp)
+        );
+        courseBuyMapper.upsertPendingOrder(userId, courseId, checkoutResp.getOrderNo(), channel, course.getPrice(), course.getPrice());
+        return checkoutResp;
     }
 
     @Override
-    public boolean isCoursePaid(String outTradeNo, Long userId) {
-        if (outTradeNo == null || outTradeNo.isEmpty() || userId == null || userId <= 0) {
+    public boolean isCoursePaid(String orderNo, Long userId) {
+        if (orderNo == null || orderNo.isEmpty() || userId == null || userId <= 0) {
             return false;
         }
-        try {
-            OrderStatusResult status = orderService.getOrderStatusForUser(outTradeNo, userId);
-            return status != null && status.isPayStatus();
-        } catch (ServiceException orderNoNotFound) {
-            return courseBuyMapper.countPaidByOrderNoAndUserId(outTradeNo, userId) > 0;
+        if (courseBuyMapper.countPaidByOrderNoAndUserId(orderNo, userId) > 0) {
+            return true;
         }
-    }
-
-    private OrderCheckoutReqVO buildCourseCheckoutReqVO(OshCourse course,
-                                                        Long userId,
-                                                        String channel,
-                                                        String clientIp) {
-        OrderCheckoutReqVO reqVO = new OrderCheckoutReqVO();
-        reqVO.setUserId(userId);
-        reqVO.setProductType(ProductTypeEnum.COURSE.getCode());
-        reqVO.setProductId(course.getId());
-        reqVO.setProductName(course.getTitle() == null ? ("课程#" + course.getId()) : course.getTitle());
-        reqVO.setOriginalAmount(course.getPrice());
-        reqVO.setPayableAmount(course.getPrice());
-        reqVO.setDiscountAmount(BigDecimal.ZERO);
-        reqVO.setChannel(channel);
-        reqVO.setClientIp(clientIp);
-        reqVO.setUsePoints(Boolean.TRUE);
-        return reqVO;
+        try {
+            OrderStatusResult status = orderService.getOrderStatusForUser(orderNo, userId);
+            return status != null && status.isPayStatus();
+        } catch (ServiceException e) {
+            return false;
+        }
     }
 
     private String normalizePayType(String payType) {
@@ -106,6 +100,18 @@ public class CoursePayServiceImpl implements ICoursePayService {
             return lower;
         }
         throw new ServiceException("不支持的支付方式: " + payType);
+    }
+
+    private String normalizeClientIp(String clientIp) {
+        if (clientIp == null || clientIp.trim().isEmpty() || "0:0:0:0:0:0:0:1".equals(clientIp.trim())) {
+            return "127.0.0.1";
+        }
+        String ip = clientIp.trim();
+        int commaIndex = ip.indexOf(',');
+        if (commaIndex >= 0) {
+            ip = ip.substring(0, commaIndex).trim();
+        }
+        return ip.isEmpty() ? "127.0.0.1" : ip;
     }
 
     private void ensureVipCoursePayable(OshCourse course) {
