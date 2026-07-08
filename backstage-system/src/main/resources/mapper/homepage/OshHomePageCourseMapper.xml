@@ -17,7 +17,7 @@
             s.t_price       AS tPrice,
             s.buy_count     AS buyCount,
             s.view_count    AS viewCount,
-            s.video_count   AS videoCount,
+            IFNULL(vc.video_count, 0) AS videoCount,
             s.rating_score  AS ratingScore,
             s.service_content AS serviceContent,
             s.resource_type AS resourceType,
@@ -58,6 +58,22 @@
             FROM osh_course c
             WHERE c.status = 4 AND c.delete_flag = 0
         ) s
+        LEFT JOIN (
+            SELECT
+                course_id,
+                COUNT(1) AS video_count
+            FROM osh_course_section
+            WHERE delete_flag = 0
+              AND (
+                type = 'video'
+                OR (
+                    (type IS NULL OR type = '')
+                    AND media_url IS NOT NULL
+                    AND media_url != ''
+                )
+              )
+            GROUP BY course_id
+        ) vc ON vc.course_id = s.id
         ORDER BY s.hot_score DESC, s.create_time DESC
         LIMIT #{limit}
     </select>
@@ -79,6 +95,27 @@
           AND t.delete_flag = 0
           AND t.status = 1
         ORDER BY t.sort DESC
+    </select>
+
+    <select id="selectVideoCountsByCourseIds" resultType="com.backstage.system.domain.homepage.vo.HotCourseVO">
+        SELECT
+            s.course_id AS courseId,
+            COUNT(1)    AS videoCount
+        FROM osh_course_section s
+        WHERE s.course_id IN
+        <foreach collection="courseIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          AND s.delete_flag = 0
+          AND (
+            s.type = 'video'
+            OR (
+                (s.type IS NULL OR s.type = '')
+                AND s.media_url IS NOT NULL
+                AND s.media_url != ''
+            )
+          )
+        GROUP BY s.course_id
     </select>
 
 </mapper>

@@ -1,6 +1,7 @@
 package com.backstage.system.service.impl;
 
 import cn.hutool.core.util.StrUtil;
+import com.backstage.common.config.OssProperties;
 import com.backstage.common.enums.AnnouncementModuleEnum;
 import com.backstage.common.enums.ResourceCodePrefixEnum;
 import com.backstage.common.exception.ServiceException;
@@ -48,13 +49,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.math.BigDecimal;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.time.LocalDateTime;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -98,6 +102,9 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
     private com.backstage.system.service.common.OssService ossService;
 
     @Autowired
+    private OssProperties ossProperties;
+
+    @Autowired
     private com.backstage.system.service.book.IBookEsService bookEsService;
 
     @Autowired
@@ -133,7 +140,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
 
     @Override
     public Page<BookListVO> getBookPageList(BookListReqVO reqVO) {
-        int currentLevel = UserContextUtil.getCurrentLevelSafely();
+        int currentLevel = Optional.ofNullable(UserContextUtil.getCurrentLevelSafely()).orElse(0);
         if (currentLevel < 1) {
             currentLevel = 1;
         }
@@ -201,8 +208,9 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         if (Boolean.TRUE.equals(forEdit)) {
             requireManageLevel();
         }
-        BookDetailAggregate aggregate = loadBookDetailAggregate(id, UserContextUtil.getCurrentUserIdSafely());
-        return buildBookDetailVO(aggregate, forEdit);
+        BookAccessContext accessContext = currentBookAccessContext();
+        BookDetailAggregate aggregate = loadBookDetailAggregate(id, accessContext);
+        return buildBookDetailVO(aggregate, forEdit, accessContext);
     }
 
     /**
@@ -214,10 +222,11 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
      */
     @Override
     public BookChapterContentVO selectBookChapterContent(Long bookId, Long id) {
-        BookDO bookDO = requireReadableBook(bookId);
+        BookAccessContext accessContext = currentBookAccessContext();
+        BookDO bookDO = requireReadableBook(bookId, accessContext);
         BookChapter chapter = bookChapterMapper.selectBookChapterByBookIdAndId(bookId, id);
         checkEntityNotNull(chapter, "record not found");
-        if (!canReadChapter(bookDO, chapter)) {
+        if (!canReadChapter(bookDO, chapter, accessContext)) {
             throw new ServiceException("access denied");
         }
 
@@ -232,7 +241,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         return vo;
     }
 
-    private boolean canReadChapter(BookDO bookDO, BookChapter chapter) {
+    private boolean canReadChapter(BookDO bookDO, BookChapter chapter, BookAccessContext accessContext) {
         if (Integer.valueOf(1).equals(chapter.getIsFree())) {
             return true;
         }
@@ -240,12 +249,10 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         if (bookLevel <= 1) {
             return true;
         }
-        int currentLevel = UserContextUtil.getCurrentLevelSafely();
-        if (currentLevel >= bookLevel) {
+        if (accessContext.getUserLevel() >= bookLevel) {
             return true;
         }
-        Long userId = UserContextUtil.getCurrentUserIdSafely();
-        return checkUserHasBought(userId, bookDO.getId());
+        return checkUserHasBought(accessContext.getUserId(), bookDO.getId());
     }
 
     private List<BookChapterPageVO> listComicPages(Long bookId, Long chapterId, Boolean forEdit) {
@@ -271,6 +278,30 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         return result;
     }
 
+    private Map<Long, List<BookChapterPageVO>> listComicPagesByChapterIds(Long bookId, List<Long> chapterIds, Boolean forEdit) {
+        Map<Long, List<BookChapterPageVO>> result = new HashMap<>();
+        if (chapterIds == null || chapterIds.isEmpty()) {
+            return result;
+        }
+        Set<Long> readableChapterIdSet = new HashSet<>(chapterIds);
+        List<BookChapterPageDO> rows = bookChapterPageMapper.selectList(
+                new LambdaQueryWrapper<BookChapterPageDO>()
+                        .eq(BookChapterPageDO::getBookId, bookId)
+                        .in(BookChapterPageDO::getChapterId, chapterIds)
+                        .orderByAsc(BookChapterPageDO::getChapterId)
+                        .orderByAsc(BookChapterPageDO::getPageNo)
+                        .orderByAsc(BookChapterPageDO::getId)
+        );
+        for (BookChapterPageDO row : rows) {
+            if (!readableChapterIdSet.contains(row.getChapterId())) {
+                continue;
+            }
+            BookChapterPageVO page = toComicPageVO(row, forEdit);
+            result.computeIfAbsent(page.getChapterId(), key -> new ArrayList<>()).add(page);
+        }
+        return result;
+    }
+
     private BookChapterPageVO toComicPageVO(BookChapterPageDO row, Boolean forEdit) {
         BookChapterPageVO vo = new BookChapterPageVO();
         BeanUtils.copyProperties(row, vo);
@@ -279,10 +310,85 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
     }
 
     private String resolveBookAssetUrl(String url, Boolean forEdit) {
-        if (StringUtils.isEmpty(url) || Boolean.TRUE.equals(forEdit) || url.startsWith("http") || url.startsWith("data:")) {
+        String trimmed = StringUtils.isEmpty(url) ? url : url.trim();
+        String lowerUrl = StringUtils.isEmpty(trimmed) ? trimmed : trimmed.toLowerCase();
+        if (StringUtils.isEmpty(trimmed) || Boolean.TRUE.equals(forEdit) || lowerUrl.startsWith("data:")) {
             return url;
         }
-        return ossService.getLimitedUrl(url, 120);
+        String objectKey = resolveManagedObjectKey(trimmed);
+        if (StringUtils.isNotEmpty(objectKey)) {
+            return ossService.getLimitedUrl(objectKey, 120);
+        }
+        return lowerUrl.startsWith("http") ? url : ossService.getLimitedUrl(trimmed, 120);
+    }
+
+    // 只把当前 OSS/R2 管理的绝对地址转为签名 URL，避免外部图片链接被误改。
+    private String resolveManagedObjectKey(String url) {
+        if (StringUtils.isEmpty(url)) {
+            return url;
+        }
+        String trimmed = url.trim();
+        if (!trimmed.toLowerCase().startsWith("http")) {
+            return trimLeadingSlash(trimmed);
+        }
+        try {
+            URI uri = URI.create(trimmed);
+            String host = Optional.ofNullable(uri.getHost()).orElse("").toLowerCase();
+            String path = trimLeadingSlash(Optional.ofNullable(uri.getRawPath()).orElse(""));
+            if (StringUtils.isEmpty(host) || StringUtils.isEmpty(path)) {
+                return null;
+            }
+            if (matchesConfiguredHost(host, ossProperties.getPublicDomain())) {
+                return stripBucketPrefix(path);
+            }
+            if (matchesConfiguredHost(host, ossProperties.getEndpoint())) {
+                return stripBucketPrefix(path);
+            }
+            if (host.endsWith(".r2.cloudflarestorage.com") && pathStartsWithBucket(path)) {
+                return stripBucketPrefix(path);
+            }
+        } catch (Exception ignored) {
+            return null;
+        }
+        return null;
+    }
+
+    private boolean matchesConfiguredHost(String host, String configuredUrl) {
+        if (StringUtils.isEmpty(host) || StringUtils.isEmpty(configuredUrl)) {
+            return false;
+        }
+        try {
+            String normalized = configuredUrl.contains("://") ? configuredUrl : "https://" + configuredUrl;
+            String configuredHost = Optional.ofNullable(URI.create(normalized).getHost()).orElse("").toLowerCase();
+            return host.equals(configuredHost);
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private boolean pathStartsWithBucket(String path) {
+        String bucketName = ossProperties.getBucketName();
+        return StringUtils.isNotEmpty(bucketName) && (path.equals(bucketName) || path.startsWith(bucketName + "/"));
+    }
+
+    private String stripBucketPrefix(String path) {
+        String normalized = trimLeadingSlash(path);
+        String bucketName = ossProperties.getBucketName();
+        if (StringUtils.isNotEmpty(bucketName) && normalized.startsWith(bucketName + "/")) {
+            return normalized.substring(bucketName.length() + 1);
+        }
+        return normalized;
+    }
+
+    private String trimLeadingSlash(String path) {
+        if (path == null) {
+            return null;
+        }
+        String normalized = path;
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        return normalized;
     }
 
     private void attachComicPages(List<BookChapterVO> chapters, Long bookId, Boolean forEdit) {
@@ -293,6 +399,47 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         for (BookChapterVO chapter : chapters) {
             chapter.setPages(pageMap.getOrDefault(chapter.getId(), Collections.emptyList()));
         }
+    }
+
+    private void attachReadableComicPages(List<BookChapterVO> chapters, BookDO bookDO, Boolean forEdit,
+                                          BookAccessContext accessContext) {
+        if (Boolean.TRUE.equals(forEdit)) {
+            attachComicPages(chapters, bookDO.getId(), true);
+            return;
+        }
+        if (chapters == null || chapters.isEmpty()) {
+            return;
+        }
+        // 先过滤可读章节，再生成签名 URL，避免未授权章节的对象存储地址进入响应或日志。
+        List<Long> readableChapterIds = new ArrayList<>();
+        for (BookChapterVO chapter : chapters) {
+            chapter.setPages(Collections.emptyList());
+            if (chapter.getId() != null && canReadChapter(bookDO, toBookChapter(chapter, bookDO.getId()), accessContext)) {
+                readableChapterIds.add(chapter.getId());
+            }
+        }
+        if (readableChapterIds.isEmpty()) {
+            return;
+        }
+        Set<Long> readableChapterIdSet = new HashSet<>(readableChapterIds);
+        Map<Long, List<BookChapterPageVO>> pageMap = listComicPagesByChapterIds(bookDO.getId(), readableChapterIds, false);
+        for (BookChapterVO chapter : chapters) {
+            if (readableChapterIdSet.contains(chapter.getId())) {
+                chapter.setPages(pageMap.getOrDefault(chapter.getId(), Collections.emptyList()));
+            }
+        }
+    }
+
+    private BookChapter toBookChapter(BookChapterVO vo, Long bookId) {
+        BookChapter chapter = new BookChapter();
+        chapter.setId(vo.getId());
+        chapter.setBookId(bookId);
+        chapter.setTitle(vo.getTitle());
+        chapter.setChapterNo(vo.getChapterNo());
+        chapter.setSortOrder(vo.getSortOrder());
+        chapter.setIsFree(vo.getIsFree());
+        chapter.setContent(vo.getContent());
+        return chapter;
     }
 
     private void replaceComicPages(Long bookId, Long chapterId, List<BookChapterPageVO> pages) {
@@ -346,8 +493,9 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
      */
     @Override
     public BookMenuVO selectBookMenu(Long id) {
+        BookAccessContext accessContext = currentBookAccessContext();
         CompletableFuture<BookDO> bookFuture = asyncTaskSupport.supplyAsync(() -> {
-            return requireReadableBook(id);
+            return requireReadableBook(id, accessContext);
         }, aggregationTaskExecutor);
         CompletableFuture<List<BookChapterVO>> chapterFuture = asyncTaskSupport.supplyAsync(
                 () -> bookChapterMapper.selectBookChapterListByBookId(id), aggregationTaskExecutor);
@@ -929,16 +1077,16 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         return vo;
     }
 
-    private BookDetailAggregate loadBookDetailAggregate(Long bookId, Long userId)
+    private BookDetailAggregate loadBookDetailAggregate(Long bookId, BookAccessContext accessContext)
     {
-        CompletableFuture<BookDO> bookFuture = asyncTaskSupport.supplyAsync(() -> requireReadableBook(bookId), aggregationTaskExecutor);
+        CompletableFuture<BookDO> bookFuture = asyncTaskSupport.supplyAsync(() -> requireReadableBook(bookId, accessContext), aggregationTaskExecutor);
         CompletableFuture<List<BookChapterVO>> chapterFuture = asyncTaskSupport.supplyAsync(
                 () -> bookChapterMapper.selectBookChapterListByBookId(bookId), aggregationTaskExecutor);
         CompletableFuture<List<String>> tagFuture = asyncTaskSupport.supplyAsync(
                 () -> bookTagDOMapper.selectBookTagListByBookId(bookId), aggregationTaskExecutor);
-        CompletableFuture<BookRelationStatusVO> relationFuture = userId == null
+        CompletableFuture<BookRelationStatusVO> relationFuture = accessContext.getUserId() == null
                 ? asyncTaskSupport.completedFuture(buildAnonymousRelationStatus())
-                : asyncTaskSupport.supplyAsync(() -> buildBookRelationStatus(userId, bookId), aggregationTaskExecutor);
+                : asyncTaskSupport.supplyAsync(() -> buildBookRelationStatus(accessContext.getUserId(), bookId), aggregationTaskExecutor);
 
         asyncTaskSupport.awaitAll(bookFuture, chapterFuture, tagFuture, relationFuture);
         return new BookDetailAggregate(
@@ -949,7 +1097,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         );
     }
 
-    private BookDetailVO buildBookDetailVO(BookDetailAggregate aggregate, Boolean forEdit)
+    private BookDetailVO buildBookDetailVO(BookDetailAggregate aggregate, Boolean forEdit, BookAccessContext accessContext)
     {
         BookDO bookDO = aggregate.getBook();
         BookDetailVO vo = new BookDetailVO();
@@ -970,6 +1118,9 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         List<BookChapterVO> chapters = aggregate.getChapters();
         if (Boolean.TRUE.equals(forEdit) && BookMediaTypeEnum.isComic(mediaType)) {
             attachComicPages(chapters, bookDO.getId(), forEdit);
+        } else if (BookMediaTypeEnum.isComic(mediaType)) {
+            sanitizeChapterContent(chapters);
+            attachReadableComicPages(chapters, bookDO, forEdit, accessContext);
         } else {
             chapters = sanitizeChapterCatalog(chapters);
         }
@@ -991,6 +1142,19 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
             }
             chapter.setContent(null);
             chapter.setPages(null);
+        }
+        return chapters;
+    }
+
+    private List<BookChapterVO> sanitizeChapterContent(List<BookChapterVO> chapters)
+    {
+        if (chapters == null || chapters.isEmpty()) {
+            return chapters;
+        }
+        for (BookChapterVO chapter : chapters) {
+            if (chapter != null) {
+                chapter.setContent(null);
+            }
         }
         return chapters;
     }
@@ -1065,11 +1229,17 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
 
     private BookDO requireReadableBook(Long bookId)
     {
+        return requireReadableBook(bookId, currentBookAccessContext());
+    }
+
+    private BookDO requireReadableBook(Long bookId, BookAccessContext accessContext)
+    {
         BookDO bookDO = bookMapper.selectReadableById(bookId);
         if (bookDO != null) {
             return bookDO;
         }
-        if (UserContextUtil.getCurrentLevelSafely() >= 4) {
+        // 请求线程先生成权限上下文，异步聚合线程只使用快照，避免重新读取 ThreadLocal。
+        if (accessContext.getUserLevel() >= 4) {
             bookDO = bookMapper.selectDeletedById(bookId);
         }
         checkEntityNotNull(bookDO, "该记录不存在");
@@ -1078,14 +1248,16 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
 
     private void requireManageLevel()
     {
-        if (UserContextUtil.getCurrentLevelSafely() < 4) {
+        int currentLevel = Optional.ofNullable(UserContextUtil.getCurrentLevelSafely()).orElse(0);
+        if (currentLevel < 4) {
             throw new ServiceException("access denied");
         }
     }
 
     private void requireFounderLevel()
     {
-        if (UserContextUtil.getCurrentLevelSafely() != 6) {
+        int currentLevel = Optional.ofNullable(UserContextUtil.getCurrentLevelSafely()).orElse(0);
+        if (currentLevel != 6) {
             throw new ServiceException("access denied");
         }
     }
@@ -1132,6 +1304,35 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
         vo.setFollowed(0);
         vo.setPurchased(0);
         return vo;
+    }
+
+    private BookAccessContext currentBookAccessContext()
+    {
+        Integer userLevel = Optional.ofNullable(UserContextUtil.getCurrentLevelSafely()).orElse(0);
+        return new BookAccessContext(UserContextUtil.getCurrentUserIdSafely(), userLevel);
+    }
+
+    private static class BookAccessContext
+    {
+        private final Long userId;
+
+        private final int userLevel;
+
+        private BookAccessContext(Long userId, int userLevel)
+        {
+            this.userId = userId;
+            this.userLevel = userLevel;
+        }
+
+        public Long getUserId()
+        {
+            return userId;
+        }
+
+        public int getUserLevel()
+        {
+            return userLevel;
+        }
     }
 
     private static class BookDetailAggregate

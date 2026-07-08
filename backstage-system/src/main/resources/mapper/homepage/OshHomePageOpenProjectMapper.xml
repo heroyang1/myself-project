@@ -39,7 +39,7 @@
                 WHEN TIMESTAMPDIFF(DAY, p.last_commit_time, NOW()) &lt;= 180 THEN 0.80
                 ELSE 0.60
               END DESC,
-            p.star_count DESC
+            p.create_time DESC
         LIMIT #{limit}
     </select>
 

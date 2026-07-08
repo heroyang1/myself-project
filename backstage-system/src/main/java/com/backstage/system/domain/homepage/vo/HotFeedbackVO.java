@@ -3,11 +3,8 @@ package com.backstage.system.domain.homepage.vo;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 
-/**
- * 首页热门用户反馈 VO
- *
- * @author jayTatum
- */
+import java.util.Date;
+
 @ApiModel(description = "首页热门用户反馈")
 public class HotFeedbackVO {
 
@@ -23,20 +20,23 @@ public class HotFeedbackVO {
     @ApiModelProperty("分类名称")
     private String category;
 
-    @ApiModelProperty("分类图标 emoji")
+    @ApiModelProperty("分类图标")
     private String categoryIcon;
 
-    @ApiModelProperty("状态：PENDING/PROCESSING/RESOLVED/CLOSED/PENDING_USER_CONFIRM")
+    @ApiModelProperty("状态")
     private String status;
 
     @ApiModelProperty("提交用户名")
     private String username;
 
-    @ApiModelProperty("第一个标签名称")
+    @ApiModelProperty("标签名")
     private String tagName;
 
     @ApiModelProperty("点赞数")
     private Integer likeCount;
+
+    @ApiModelProperty("评论数")
+    private Integer commentCount;
 
     @ApiModelProperty("浏览数")
     private Integer viewCount;
@@ -44,10 +44,14 @@ public class HotFeedbackVO {
     @ApiModelProperty("收藏数")
     private Integer collectCount;
 
-    @ApiModelProperty("详情页跳转路径")
-    private String detailUrl;
+    @ApiModelProperty("热度分")
+    private Integer hotScore;
 
-    // ========== getter / setter ==========
+    @ApiModelProperty("创建时间")
+    private Date createTime;
+
+    @ApiModelProperty("详情地址")
+    private String detailUrl;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -76,11 +80,20 @@ public class HotFeedbackVO {
     public Integer getLikeCount() { return likeCount; }
     public void setLikeCount(Integer likeCount) { this.likeCount = likeCount; }
 
+    public Integer getCommentCount() { return commentCount; }
+    public void setCommentCount(Integer commentCount) { this.commentCount = commentCount; }
+
     public Integer getViewCount() { return viewCount; }
     public void setViewCount(Integer viewCount) { this.viewCount = viewCount; }
 
     public Integer getCollectCount() { return collectCount; }
     public void setCollectCount(Integer collectCount) { this.collectCount = collectCount; }
+
+    public Integer getHotScore() { return hotScore; }
+    public void setHotScore(Integer hotScore) { this.hotScore = hotScore; }
+
+    public Date getCreateTime() { return createTime; }
+    public void setCreateTime(Date createTime) { this.createTime = createTime; }
 
     public String getDetailUrl() { return detailUrl; }
     public void setDetailUrl(String detailUrl) { this.detailUrl = detailUrl; }
