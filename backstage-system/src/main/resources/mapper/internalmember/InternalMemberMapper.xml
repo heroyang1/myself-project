@@ -4,6 +4,43 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.backstage.system.mapper.internalmember.InternalMemberMapper">
 
+    <sql id="ActivePaidMemberLatestSubQuery">
+        select
+            t.user_id,
+            t.member_type,
+            t.role_name,
+            t.expire_time
+        from (
+            select
+                ur.user_id,
+                r.role_code as member_type,
+                r.role_name,
+                ur.expire_time,
+                row_number() over (
+                    partition by ur.user_id
+                    order by
+                        case r.role_code
+                            when 'small_class' then 2
+                            when 'vip' then 1
+                            else 0
+                        end desc,
+                        ur.expire_time desc,
+                        ur.update_time desc,
+                        ur.create_time desc
+                ) as rn
+            from osh_user_role ur
+            join osh_role r
+                on r.id = ur.role_id
+               and r.delete_flag = 0
+               and r.status = 1
+            where ur.delete_flag = 0
+              and r.role_code in ('vip', 'small_class')
+              and ur.expire_time is not null
+              and ur.expire_time > now()
+        ) t
+        where t.rn = 1
+    </sql>
+
     <select id="selectAdminUserOptions" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberAdminUserOptionVO">
         select
             u.id as userId,
@@ -60,11 +97,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                 when 'small_class' then 'Small Class Member'
                 else latest.member_type
             end as memberTypeName,
-            latest.plan_name_snapshot as planName,
-            case
-                when latest.expire_time is not null and latest.expire_time > now() then 1
-                else 0
-            end as memberActive,
+            case latest.member_type
+                when 'vip' then 'VIP用户'
+                when 'small_class' then '小班用户'
+                else latest.role_name
+            end as planName,
+            1 as memberActive,
             date_format(latest.expire_time, '%Y-%m-%d %H:%i:%s') as memberExpireTime,
             coalesce(course_total.total_course_count, 0) as totalCourseCount,
             coalesce(progress_summary.started_course_count, 0) as startedCourseCount,
@@ -87,18 +125,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             date_format(progress_summary.last_learn_time, '%Y-%m-%d %H:%i:%s') as lastLearnTime
         from osh_user u
         inner join (
-            select mo.user_id,
-                   mo.member_type,
-                   mo.plan_name_snapshot,
-                   mo.expire_time
-            from osh_member_order mo
-            inner join (
-                select user_id, max(id) as max_id
-                from osh_member_order
-                where pay_status = 1
-                  and delete_flag = 0
-                group by user_id
-            ) latest_order on latest_order.max_id = mo.id
+            <include refid="ActivePaidMemberLatestSubQuery"/>
         ) latest on latest.user_id = u.id
         left join (
             select t.user_id, count(distinct t.course_id) as total_course_count
@@ -137,7 +164,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             and latest.expire_time > now()
         </if>
         order by
-            case when latest.expire_time is not null and latest.expire_time > now() then 1 else 0 end desc,
             progress_summary.last_learn_time desc,
             latest.expire_time desc,
             u.id desc
@@ -155,11 +181,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                 when 'small_class' then 'Small Class Member'
                 else latest.member_type
             end as memberTypeName,
-            latest.plan_name_snapshot as planName,
-            case
-                when latest.expire_time is not null and latest.expire_time > now() then 1
-                else 0
-            end as memberActive,
+            case latest.member_type
+                when 'vip' then 'VIP用户'
+                when 'small_class' then '小班用户'
+                else latest.role_name
+            end as planName,
+            1 as memberActive,
             date_format(latest.expire_time, '%Y-%m-%d %H:%i:%s') as memberExpireTime,
             coalesce(course_total.total_course_count, 0) as totalCourseCount,
             coalesce(progress_summary.started_course_count, 0) as startedCourseCount,
@@ -184,18 +211,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             date_format(progress_summary.last_learn_time, '%Y-%m-%d %H:%i:%s') as lastLearnTime
         from osh_user u
         inner join (
-            select mo.user_id,
-                   mo.member_type,
-                   mo.plan_name_snapshot,
-                   mo.expire_time
-            from osh_member_order mo
-            inner join (
-                select user_id, max(id) as max_id
-                from osh_member_order
-                where pay_status = 1
-                  and delete_flag = 0
-                group by user_id
-            ) latest_order on latest_order.max_id = mo.id
+            <include refid="ActivePaidMemberLatestSubQuery"/>
         ) latest on latest.user_id = u.id
         left join (
             select t.user_id, count(distinct t.course_id) as total_course_count
@@ -498,6 +514,161 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         )
     </insert>
 
+    <select id="selectFollowTaskListByUserId" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberFollowTaskVO">
+        select
+            t.id as id,
+            t.user_id as userId,
+            t.content as content,
+            t.responsible_user_id as responsibleUserId,
+            ru.username as responsibleUserName,
+            date_format(t.planned_follow_time, '%Y-%m-%d %H:%i:%s') as plannedFollowTime,
+            date_format(t.remind_time, '%Y-%m-%d %H:%i:%s') as remindTime,
+            t.status as status,
+            t.notify_channel as notifyChannel,
+            t.notify_sent as notifySent,
+            date_format(t.notify_sent_time, '%Y-%m-%d %H:%i:%s') as notifySentTime,
+            date_format(t.completed_time, '%Y-%m-%d %H:%i:%s') as completedTime,
+            t.completed_by as completedBy,
+            cu.username as completedByName,
+            t.result_note as resultNote,
+            date_format(t.create_time, '%Y-%m-%d %H:%i:%s') as createTime,
+            date_format(t.update_time, '%Y-%m-%d %H:%i:%s') as updateTime
+        from osh_internal_member_follow_task t
+        left join osh_user ru on ru.id = t.responsible_user_id
+        left join osh_user cu on cu.id = t.completed_by
+        where t.user_id = #{userId}
+          and t.delete_flag = 0
+        order by
+            case t.status
+                when 'overdue' then 0
+                when 'pending' then 1
+                when 'notified' then 2
+                when 'completed' then 3
+                when 'canceled' then 4
+                else 5
+            end,
+            t.planned_follow_time asc,
+            t.id desc
+    </select>
+
+    <select id="selectFollowTaskById" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberFollowTaskVO">
+        select
+            t.id as id,
+            t.user_id as userId,
+            t.content as content,
+            t.responsible_user_id as responsibleUserId,
+            ru.username as responsibleUserName,
+            date_format(t.planned_follow_time, '%Y-%m-%d %H:%i:%s') as plannedFollowTime,
+            date_format(t.remind_time, '%Y-%m-%d %H:%i:%s') as remindTime,
+            t.status as status,
+            t.notify_channel as notifyChannel,
+            t.notify_sent as notifySent,
+            date_format(t.notify_sent_time, '%Y-%m-%d %H:%i:%s') as notifySentTime,
+            date_format(t.completed_time, '%Y-%m-%d %H:%i:%s') as completedTime,
+            t.completed_by as completedBy,
+            cu.username as completedByName,
+            t.result_note as resultNote,
+            date_format(t.create_time, '%Y-%m-%d %H:%i:%s') as createTime,
+            date_format(t.update_time, '%Y-%m-%d %H:%i:%s') as updateTime
+        from osh_internal_member_follow_task t
+        left join osh_user ru on ru.id = t.responsible_user_id
+        left join osh_user cu on cu.id = t.completed_by
+        where t.id = #{taskId}
+          and t.delete_flag = 0
+        limit 1
+    </select>
+
+    <insert id="insertFollowTask">
+        insert into osh_internal_member_follow_task (
+            user_id, content, responsible_user_id, planned_follow_time, remind_time,
+            status, notify_channel, notify_sent, notify_sent_time, completed_time,
+            completed_by, result_note, create_by, create_time, update_by, update_time, delete_flag
+        ) values (
+            #{userId}, #{dto.content}, #{dto.responsibleUserId},
+            str_to_date(#{dto.plannedFollowTime}, '%Y-%m-%d %H:%i:%s'),
+            str_to_date(#{dto.remindTime}, '%Y-%m-%d %H:%i:%s'),
+            #{status}, #{notifyChannel}, 0, null, null,
+            null, null, #{operatorId}, now(), #{operatorId}, now(), 0
+        )
+    </insert>
+
+    <update id="updateFollowTask">
+        update osh_internal_member_follow_task
+        set content = #{dto.content},
+            responsible_user_id = #{dto.responsibleUserId},
+            planned_follow_time = str_to_date(#{dto.plannedFollowTime}, '%Y-%m-%d %H:%i:%s'),
+            remind_time = str_to_date(#{dto.remindTime}, '%Y-%m-%d %H:%i:%s'),
+            status = #{status},
+            notify_sent = 0,
+            notify_sent_time = null,
+            result_note = null,
+            completed_time = null,
+            completed_by = null,
+            update_by = #{operatorId},
+            update_time = now()
+        where id = #{taskId}
+          and delete_flag = 0
+    </update>
+
+    <update id="updateFollowTaskStatus">
+        update osh_internal_member_follow_task
+        set status = #{status},
+            result_note = #{resultNote},
+            completed_time = str_to_date(#{completedTime}, '%Y-%m-%d %H:%i:%s'),
+            completed_by = #{completedBy},
+            update_by = #{operatorId},
+            update_time = now()
+        where id = #{taskId}
+          and delete_flag = 0
+    </update>
+
+    <select id="selectDueFollowTaskReminderList" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberFollowTaskReminderVO">
+        select
+            t.id as id,
+            t.user_id as userId,
+            t.content as content,
+            t.responsible_user_id as responsibleUserId,
+            ru.username as responsibleUserName,
+            ru.email as responsibleUserEmail,
+            date_format(t.planned_follow_time, '%Y-%m-%d %H:%i:%s') as plannedFollowTime,
+            date_format(t.remind_time, '%Y-%m-%d %H:%i:%s') as remindTime,
+            t.status as status
+        from osh_internal_member_follow_task t
+        inner join osh_user ru
+            on ru.id = t.responsible_user_id
+           and ru.delete_flag = 0
+           and ru.status = 0
+        where t.delete_flag = 0
+          and t.status in ('pending', 'notified')
+          and t.notify_sent = 0
+          and t.remind_time is not null
+          and t.remind_time &lt;= now()
+        order by t.remind_time asc, t.id asc
+    </select>
+
+    <update id="markFollowTaskReminderSent">
+        update osh_internal_member_follow_task
+        set notify_sent = 1,
+            notify_sent_time = now(),
+            status = case when status = 'pending' then 'notified' else status end,
+            update_by = #{operatorId},
+            update_time = now()
+        where id = #{taskId}
+          and delete_flag = 0
+          and notify_sent = 0
+    </update>
+
+    <update id="markOverdueFollowTasks">
+        update osh_internal_member_follow_task
+        set status = 'overdue',
+            update_by = #{operatorId},
+            update_time = now()
+        where delete_flag = 0
+          and status in ('pending', 'notified')
+          and planned_follow_time is not null
+          and planned_follow_time &lt; now()
+    </update>
+
     <select id="countInternalMemberAdminUserByUserId" resultType="int">
         select count(1)
         from osh_user u
@@ -551,17 +722,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             date_format(follow_summary.next_follow_time, '%Y-%m-%d %H:%i:%s') as nextFollowTime
         from osh_user u
         inner join (
-            select mo.user_id,
-                   mo.member_type,
-                   mo.expire_time
-            from osh_member_order mo
-            inner join (
-                select user_id, max(id) as max_id
-                from osh_member_order
-                where pay_status = 1
-                  and delete_flag = 0
-                group by user_id
-            ) latest_order on latest_order.max_id = mo.id
+            <include refid="ActivePaidMemberLatestSubQuery"/>
         ) latest on latest.user_id = u.id
         left join osh_internal_member_employment_profile p
             on p.user_id = u.id
@@ -633,9 +794,15 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <select id="countPaidMemberByUserId" resultType="int">
         select count(1)
-        from osh_member_order
-        where user_id = #{userId}
-          and pay_status = 1
-          and delete_flag = 0
+        from osh_user_role ur
+        join osh_role r
+            on r.id = ur.role_id
+           and r.delete_flag = 0
+           and r.status = 1
+        where ur.user_id = #{userId}
+          and ur.delete_flag = 0
+          and r.role_code in ('vip', 'small_class')
+          and ur.expire_time is not null
+          and ur.expire_time > now()
     </select>
 </mapper>

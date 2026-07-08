@@ -49,6 +49,43 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         group by lp.user_id, lp.course_id, section_total.total_section_count, c.sub_count
     </sql>
 
+    <sql id="ActivePaidMemberLatestSubQuery">
+        select
+            t.user_id,
+            t.member_type,
+            t.role_name,
+            t.expire_time
+        from (
+            select
+                ur.user_id,
+                r.role_code as member_type,
+                r.role_name,
+                ur.expire_time,
+                row_number() over (
+                    partition by ur.user_id
+                    order by
+                        case r.role_code
+                            when 'small_class' then 2
+                            when 'vip' then 1
+                            else 0
+                        end desc,
+                        ur.expire_time desc,
+                        ur.update_time desc,
+                        ur.create_time desc
+                ) as rn
+            from osh_user_role ur
+            join osh_role r
+                on r.id = ur.role_id
+               and r.delete_flag = 0
+               and r.status = 1
+            where ur.delete_flag = 0
+              and r.role_code in ('vip', 'small_class')
+              and ur.expire_time is not null
+              and ur.expire_time > now()
+        ) t
+        where t.rn = 1
+    </sql>
+
     <select id="selectPaidMemberStudyOverview" resultType="com.backstage.system.domain.internalmember.vo.InternalMemberStudyOverviewVO">
         select
             u.id as userId,
@@ -61,11 +98,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                 when 'small_class' then 'Small Class Member'
                 else latest.member_type
             end as memberTypeName,
-            latest.plan_name_snapshot as planName,
-            case
-                when latest.expire_time is not null and latest.expire_time > now() then 1
-                else 0
-            end as memberActive,
+            case latest.member_type
+                when 'vip' then 'VIP用户'
+                when 'small_class' then '小班用户'
+                else latest.role_name
+            end as planName,
+            1 as memberActive,
             date_format(latest.expire_time, '%Y-%m-%d %H:%i:%s') as memberExpireTime,
             coalesce(course_total.total_course_count, 0) as totalCourseCount,
             coalesce(progress_summary.started_course_count, 0) as startedCourseCount,
@@ -88,18 +126,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             date_format(progress_summary.last_learn_time, '%Y-%m-%d %H:%i:%s') as lastLearnTime
         from osh_user u
         inner join (
-            select mo.user_id,
-                   mo.member_type,
-                   mo.plan_name_snapshot,
-                   mo.expire_time
-            from osh_member_order mo
-            inner join (
-                select user_id, max(id) as max_id
-                from osh_member_order
-                where pay_status = 1
-                  and delete_flag = 0
-                group by user_id
-            ) latest_order on latest_order.max_id = mo.id
+            <include refid="ActivePaidMemberLatestSubQuery"/>
         ) latest on latest.user_id = u.id
         left join (
             select t.user_id, count(distinct t.course_id) as total_course_count
@@ -141,7 +168,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             and latest.expire_time > now()
         </if>
         order by
-            case when latest.expire_time is not null and latest.expire_time > now() then 1 else 0 end desc,
             progress_summary.last_learn_time desc,
             latest.expire_time desc,
             u.id desc
@@ -159,7 +185,11 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                 when 'small_class' then 'Small Class Member'
                 else latest.member_type
             end as memberTypeName,
-            latest.plan_name_snapshot as planName,
+            case latest.member_type
+                when 'vip' then 'VIP用户'
+                when 'small_class' then '小班用户'
+                else latest.role_name
+            end as planName,
             case
                 when latest.expire_time is not null and latest.expire_time > now() then 1
                 else 0
@@ -188,18 +218,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             date_format(progress_summary.last_learn_time, '%Y-%m-%d %H:%i:%s') as lastLearnTime
         from osh_user u
         inner join (
-            select mo.user_id,
-                   mo.member_type,
-                   mo.plan_name_snapshot,
-                   mo.expire_time
-            from osh_member_order mo
-            inner join (
-                select user_id, max(id) as max_id
-                from osh_member_order
-                where pay_status = 1
-                  and delete_flag = 0
-                group by user_id
-            ) latest_order on latest_order.max_id = mo.id
+            <include refid="ActivePaidMemberLatestSubQuery"/>
         ) latest on latest.user_id = u.id
         left join (
             select t.user_id, count(distinct t.course_id) as total_course_count
@@ -301,9 +320,15 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <select id="countPaidMemberByUserId" resultType="int">
         select count(1)
-        from osh_member_order
-        where user_id = #{userId}
-          and pay_status = 1
-          and delete_flag = 0
+        from osh_user_role ur
+        join osh_role r
+            on r.id = ur.role_id
+           and r.delete_flag = 0
+           and r.status = 1
+        where ur.user_id = #{userId}
+          and ur.delete_flag = 0
+          and r.role_code in ('vip', 'small_class')
+          and ur.expire_time is not null
+          and ur.expire_time > now()
     </select>
 </mapper>

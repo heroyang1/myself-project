@@ -6,6 +6,9 @@ import com.backstage.common.utils.StringUtils;
 import com.backstage.system.domain.internalmember.dto.InternalMemberCourseDetailQueryDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberEmploymentProfileSaveDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberFollowRecordSaveDTO;
+import com.backstage.system.domain.internalmember.dto.InternalMemberFollowTaskCompleteDTO;
+import com.backstage.system.domain.internalmember.dto.InternalMemberFollowTaskSaveDTO;
+import com.backstage.system.domain.internalmember.dto.InternalMemberFollowTaskStatusUpdateDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberOutcomeQueryDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberPageQueryDTO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberAdminUserOptionVO;
@@ -18,6 +21,8 @@ import com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentPro
 import com.backstage.system.domain.internalmember.vo.InternalMemberExamItemVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberExamSummaryVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberFollowRecordVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberFollowTaskReminderVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberFollowTaskVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberInterviewSummaryVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberOutcomeVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberResumeSummaryVO;
@@ -25,6 +30,7 @@ import com.backstage.system.domain.internalmember.vo.InternalMemberSalarySummary
 import com.backstage.system.domain.internalmember.vo.InternalMemberStudyOverviewVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberStudySummaryVO;
 import com.backstage.system.enums.internalmember.InternalMemberDocumentTypeEnum;
+import com.backstage.system.enums.internalmember.InternalMemberFollowTaskStatusEnum;
 import com.backstage.system.enums.internalmember.InternalMemberProgressStageEnum;
 import com.backstage.system.enums.internalmember.InterviewResultEnum;
 import com.backstage.system.enums.internalmember.InterviewStatusEnum;
@@ -34,6 +40,9 @@ import com.backstage.system.service.internalmember.IInternalMemberService;
 import com.backstage.system.service.internalmember.support.InternalMemberDocumentProcessor;
 import com.backstage.system.service.internalmember.support.InternalMemberProgressStageResolver;
 import com.backstage.system.utils.OssUtil;
+import com.backstage.common.utils.email.EmailUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -42,14 +51,20 @@ import javax.annotation.Resource;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
 @Service
 public class InternalMemberServiceImpl implements IInternalMemberService {
+    private static final Logger log = LoggerFactory.getLogger(InternalMemberServiceImpl.class);
     private static final DateTimeFormatter YEAR_MONTH_FORMATTER = DateTimeFormatter.ofPattern("yyyyMM");
+    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final int DEFAULT_PREVIEW_MINUTE = 30;
+    private static final String FOLLOW_TASK_NOTIFY_CHANNEL_EMAIL = "email";
+    private static final String FOLLOW_TASK_COMPLETE_RECORD_TYPE = "follow_task";
+    private static final Long SYSTEM_OPERATOR_ID = 0L;
 
     @Resource
     private InternalMemberMapper internalMemberMapper;
@@ -57,6 +72,8 @@ public class InternalMemberServiceImpl implements IInternalMemberService {
     private InternalMemberDocumentProcessor internalMemberDocumentProcessor;
     @Resource
     private OssUtil ossUtil;
+    @Resource
+    private EmailUtil emailUtil;
 
     @Override
     public List<InternalMemberAdminUserOptionVO> selectAdminUserOptions(String keyword) {
@@ -303,6 +320,135 @@ public class InternalMemberServiceImpl implements IInternalMemberService {
     }
 
     @Override
+    public List<InternalMemberFollowTaskVO> selectFollowTaskList(Long userId) {
+        ensurePaidMember(userId);
+        List<InternalMemberFollowTaskVO> list = internalMemberMapper.selectFollowTaskListByUserId(userId);
+        fillFollowTaskStatus(list);
+        return list;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void addFollowTask(Long userId, InternalMemberFollowTaskSaveDTO dto, Long operatorId) {
+        ensurePaidMember(userId);
+        normalizeAndValidateFollowTask(dto);
+        ensureInternalMemberAdminUser(dto.getResponsibleUserId());
+        int affected = internalMemberMapper.insertFollowTask(
+                userId,
+                dto,
+                InternalMemberFollowTaskStatusEnum.PENDING.getCode(),
+                FOLLOW_TASK_NOTIFY_CHANNEL_EMAIL,
+                operatorId
+        );
+        if (affected <= 0) {
+            throw new ServiceException("Failed to create follow task");
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateFollowTask(Long taskId, InternalMemberFollowTaskSaveDTO dto, Long operatorId) {
+        InternalMemberFollowTaskVO task = getRequiredFollowTask(taskId);
+        ensureEditableFollowTask(task);
+        normalizeAndValidateFollowTask(dto);
+        ensureInternalMemberAdminUser(dto.getResponsibleUserId());
+        int affected = internalMemberMapper.updateFollowTask(
+                taskId,
+                dto,
+                InternalMemberFollowTaskStatusEnum.PENDING.getCode(),
+                operatorId
+        );
+        if (affected <= 0) {
+            throw new ServiceException("Failed to update follow task");
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateFollowTaskStatus(Long taskId, InternalMemberFollowTaskStatusUpdateDTO dto, Long operatorId) {
+        InternalMemberFollowTaskVO task = getRequiredFollowTask(taskId);
+        if (dto == null || StringUtils.isEmpty(dto.getStatus())) {
+            throw new ServiceException("Follow task status cannot be empty");
+        }
+        String targetStatus = InternalMemberFollowTaskStatusEnum.normalize(dto.getStatus());
+        if (!InternalMemberFollowTaskStatusEnum.CANCELED.getCode().equals(targetStatus)) {
+            throw new ServiceException("Only canceled status can be updated manually");
+        }
+        ensureCancelableFollowTask(task);
+        int affected = internalMemberMapper.updateFollowTaskStatus(
+                taskId,
+                targetStatus,
+                null,
+                null,
+                null,
+                operatorId
+        );
+        if (affected <= 0) {
+            throw new ServiceException("Failed to update follow task status");
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void completeFollowTask(Long taskId, InternalMemberFollowTaskCompleteDTO dto, Long operatorId) {
+        InternalMemberFollowTaskVO task = getRequiredFollowTask(taskId);
+        ensureCompletableFollowTask(task);
+        String resultNote = dto == null ? null : trimToNull(dto.getResultNote());
+        String completedTime = LocalDateTime.now().format(DATE_TIME_FORMATTER);
+        int affected = internalMemberMapper.updateFollowTaskStatus(
+                taskId,
+                InternalMemberFollowTaskStatusEnum.COMPLETED.getCode(),
+                resultNote,
+                completedTime,
+                operatorId,
+                operatorId
+        );
+        if (affected <= 0) {
+            throw new ServiceException("Failed to complete follow task");
+        }
+        String followRecordContent = buildFollowTaskCompletionRecordContent(task, resultNote);
+        internalMemberMapper.insertFollowRecord(
+                task.getUserId(),
+                FOLLOW_TASK_COMPLETE_RECORD_TYPE,
+                followRecordContent,
+                null,
+                operatorId,
+                task.getResponsibleUserId()
+        );
+    }
+
+    @Override
+    public void processDueFollowTaskReminders() {
+        List<InternalMemberFollowTaskReminderVO> tasks = internalMemberMapper.selectDueFollowTaskReminderList();
+        for (InternalMemberFollowTaskReminderVO task : tasks) {
+            if (StringUtils.isEmpty(task.getResponsibleUserEmail())) {
+                log.info("Skip follow task reminder because responsible admin has no email, taskId={}, responsibleUserId={}",
+                        task.getId(), task.getResponsibleUserId());
+                continue;
+            }
+            try {
+                emailUtil.sendEmailCommonTo(
+                        task.getResponsibleUserEmail(),
+                        "【内推会员跟进提醒】请及时跟进用户",
+                        buildFollowTaskReminderContent(task)
+                );
+                internalMemberMapper.markFollowTaskReminderSent(task.getId(), SYSTEM_OPERATOR_ID);
+            } catch (Exception ex) {
+                log.warn("Failed to send internal-member follow task reminder, taskId={}, email={}",
+                        task.getId(), task.getResponsibleUserEmail(), ex);
+            }
+        }
+    }
+
+    @Override
+    public void markOverdueFollowTasks() {
+        int affected = internalMemberMapper.markOverdueFollowTasks(SYSTEM_OPERATOR_ID);
+        if (affected > 0) {
+            log.info("Marked internal-member follow tasks overdue, count={}", affected);
+        }
+    }
+
+    @Override
     public List<InternalMemberOutcomeVO> selectOutcomeList(InternalMemberOutcomeQueryDTO query) {
         List<InternalMemberOutcomeVO> list = internalMemberMapper.selectOutcomeList(query);
         if (list != null) {
@@ -359,6 +505,53 @@ public class InternalMemberServiceImpl implements IInternalMemberService {
     private void ensureInternalMemberAdminUser(Long userId) {
         if (internalMemberMapper.countInternalMemberAdminUserByUserId(userId) <= 0) {
             throw new ServiceException("Responsible admin user is invalid");
+        }
+    }
+
+    private InternalMemberFollowTaskVO getRequiredFollowTask(Long taskId) {
+        if (taskId == null) {
+            throw new ServiceException("Follow task id cannot be empty");
+        }
+        InternalMemberFollowTaskVO task = internalMemberMapper.selectFollowTaskById(taskId);
+        if (task == null) {
+            throw new ServiceException("Follow task not found");
+        }
+        ensurePaidMember(task.getUserId());
+        fillFollowTaskStatus(task);
+        return task;
+    }
+
+    private void ensureEditableFollowTask(InternalMemberFollowTaskVO task) {
+        if (task == null) {
+            throw new ServiceException("Follow task not found");
+        }
+        if (InternalMemberFollowTaskStatusEnum.COMPLETED.getCode().equals(task.getStatus())
+                || InternalMemberFollowTaskStatusEnum.CANCELED.getCode().equals(task.getStatus())) {
+            throw new ServiceException("Completed or canceled follow task cannot be edited");
+        }
+    }
+
+    private void ensureCancelableFollowTask(InternalMemberFollowTaskVO task) {
+        if (task == null) {
+            throw new ServiceException("Follow task not found");
+        }
+        String status = task.getStatus();
+        if (!InternalMemberFollowTaskStatusEnum.PENDING.getCode().equals(status)
+                && !InternalMemberFollowTaskStatusEnum.NOTIFIED.getCode().equals(status)
+                && !InternalMemberFollowTaskStatusEnum.OVERDUE.getCode().equals(status)) {
+            throw new ServiceException("Current follow task status cannot be canceled");
+        }
+    }
+
+    private void ensureCompletableFollowTask(InternalMemberFollowTaskVO task) {
+        if (task == null) {
+            throw new ServiceException("Follow task not found");
+        }
+        String status = task.getStatus();
+        if (!InternalMemberFollowTaskStatusEnum.PENDING.getCode().equals(status)
+                && !InternalMemberFollowTaskStatusEnum.NOTIFIED.getCode().equals(status)
+                && !InternalMemberFollowTaskStatusEnum.OVERDUE.getCode().equals(status)) {
+            throw new ServiceException("Current follow task status cannot be completed");
         }
     }
 
@@ -430,9 +623,80 @@ public class InternalMemberServiceImpl implements IInternalMemberService {
         dto.setLastInterviewTime(trimToNull(dto.getLastInterviewTime()));
     }
 
+    private void normalizeAndValidateFollowTask(InternalMemberFollowTaskSaveDTO dto) {
+        if (dto == null) {
+            throw new ServiceException("Follow task cannot be empty");
+        }
+        dto.setContent(trimToNull(dto.getContent()));
+        dto.setPlannedFollowTime(trimToNull(dto.getPlannedFollowTime()));
+        dto.setRemindTime(trimToNull(dto.getRemindTime()));
+        if (StringUtils.isEmpty(dto.getContent())) {
+            throw new ServiceException("Follow task content cannot be empty");
+        }
+        if (dto.getResponsibleUserId() == null) {
+            throw new ServiceException("Responsible admin user id cannot be empty");
+        }
+        if (StringUtils.isEmpty(dto.getPlannedFollowTime())) {
+            throw new ServiceException("Planned follow time cannot be empty");
+        }
+        if (StringUtils.isEmpty(dto.getRemindTime())) {
+            throw new ServiceException("Reminder time cannot be empty");
+        }
+        LocalDateTime plannedFollowTime = parseDateTime(dto.getPlannedFollowTime(), "Planned follow time format is invalid");
+        LocalDateTime remindTime = parseDateTime(dto.getRemindTime(), "Reminder time format is invalid");
+        if (plannedFollowTime.isBefore(LocalDateTime.now())) {
+            throw new ServiceException("Planned follow time cannot be earlier than now");
+        }
+        if (remindTime.isAfter(plannedFollowTime)) {
+            throw new ServiceException("Reminder time cannot be later than planned follow time");
+        }
+    }
+
+    private LocalDateTime parseDateTime(String value, String message) {
+        try {
+            return LocalDateTime.parse(value, DATE_TIME_FORMATTER);
+        } catch (Exception ex) {
+            throw new ServiceException(message);
+        }
+    }
+
     private String trimToNull(String value) {
         String trimmed = StringUtils.trim(value);
         return StringUtils.isEmpty(trimmed) ? null : trimmed;
+    }
+
+    private void fillFollowTaskStatus(List<InternalMemberFollowTaskVO> tasks) {
+        if (tasks == null) {
+            return;
+        }
+        for (InternalMemberFollowTaskVO task : tasks) {
+            fillFollowTaskStatus(task);
+        }
+    }
+
+    private void fillFollowTaskStatus(InternalMemberFollowTaskVO task) {
+        if (task == null) {
+            return;
+        }
+        task.setStatusName(InternalMemberFollowTaskStatusEnum.getLabelByCode(task.getStatus()));
+    }
+
+    private String buildFollowTaskCompletionRecordContent(InternalMemberFollowTaskVO task, String resultNote) {
+        if (StringUtils.isEmpty(resultNote)) {
+            return "完成跟进任务: " + task.getContent();
+        }
+        return "完成跟进任务: " + task.getContent() + "；完成说明: " + resultNote;
+    }
+
+    private String buildFollowTaskReminderContent(InternalMemberFollowTaskReminderVO task) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("您有一条内推会员跟进任务即将到期，请及时处理。<br/><br/>");
+        builder.append("会员用户ID：").append(task.getUserId()).append("<br/>");
+        builder.append("任务内容：").append(task.getContent()).append("<br/>");
+        builder.append("计划跟进时间：").append(task.getPlannedFollowTime()).append("<br/>");
+        builder.append("提醒时间：").append(task.getRemindTime()).append("<br/>");
+        builder.append("当前状态：").append(InternalMemberFollowTaskStatusEnum.getLabelByCode(task.getStatus()));
+        return builder.toString();
     }
 
     private int updateEmploymentDocument(Long userId,

@@ -8,6 +8,9 @@ import com.backstage.common.exception.ServiceException;
 import com.backstage.system.domain.internalmember.dto.InternalMemberCourseDetailQueryDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberEmploymentProfileSaveDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberFollowRecordSaveDTO;
+import com.backstage.system.domain.internalmember.dto.InternalMemberFollowTaskCompleteDTO;
+import com.backstage.system.domain.internalmember.dto.InternalMemberFollowTaskSaveDTO;
+import com.backstage.system.domain.internalmember.dto.InternalMemberFollowTaskStatusUpdateDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberOutcomeQueryDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberPageQueryDTO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberAdminUserOptionVO;
@@ -18,6 +21,7 @@ import com.backstage.system.domain.internalmember.vo.InternalMemberDocumentUploa
 import com.backstage.system.domain.internalmember.vo.InternalMemberExamSummaryVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentProfileVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberFollowRecordVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberFollowTaskVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberInterviewSummaryVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberOutcomeVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberResumeSummaryVO;
@@ -162,6 +166,49 @@ public class InternalMemberAdminController extends BaseController {
             @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId,
             @Validated @RequestBody InternalMemberFollowRecordSaveDTO dto) {
         internalMemberService.addFollowRecord(userId, dto, currentOperatorId());
+        return R.ok();
+    }
+
+    @ApiOperation("Follow tasks")
+    @GetMapping("/{userId}/follow-tasks")
+    public R<List<InternalMemberFollowTaskVO>> followTasks(
+            @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId) {
+        return R.ok(internalMemberService.selectFollowTaskList(userId));
+    }
+
+    @ApiOperation("Create follow task")
+    @PostMapping("/{userId}/follow-tasks")
+    public R<Void> addFollowTask(
+            @ApiParam(value = "Paid member user id", required = true) @PathVariable("userId") Long userId,
+            @Validated @RequestBody InternalMemberFollowTaskSaveDTO dto) {
+        internalMemberService.addFollowTask(userId, dto, currentOperatorId());
+        return R.ok();
+    }
+
+    @ApiOperation("Update follow task")
+    @PutMapping("/follow-tasks/{taskId}")
+    public R<Void> updateFollowTask(
+            @ApiParam(value = "Follow task id", required = true) @PathVariable("taskId") Long taskId,
+            @Validated @RequestBody InternalMemberFollowTaskSaveDTO dto) {
+        internalMemberService.updateFollowTask(taskId, dto, currentOperatorId());
+        return R.ok();
+    }
+
+    @ApiOperation("Update follow task status")
+    @PutMapping("/follow-tasks/{taskId}/status")
+    public R<Void> updateFollowTaskStatus(
+            @ApiParam(value = "Follow task id", required = true) @PathVariable("taskId") Long taskId,
+            @Validated @RequestBody InternalMemberFollowTaskStatusUpdateDTO dto) {
+        internalMemberService.updateFollowTaskStatus(taskId, dto, currentOperatorId());
+        return R.ok();
+    }
+
+    @ApiOperation("Complete follow task")
+    @PostMapping("/follow-tasks/{taskId}/complete")
+    public R<Void> completeFollowTask(
+            @ApiParam(value = "Follow task id", required = true) @PathVariable("taskId") Long taskId,
+            @RequestBody(required = false) InternalMemberFollowTaskCompleteDTO dto) {
+        internalMemberService.completeFollowTask(taskId, dto, currentOperatorId());
         return R.ok();
     }
 

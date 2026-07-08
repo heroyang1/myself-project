@@ -3,6 +3,9 @@ package com.backstage.system.service.internalmember;
 import com.backstage.system.domain.internalmember.dto.InternalMemberCourseDetailQueryDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberEmploymentProfileSaveDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberFollowRecordSaveDTO;
+import com.backstage.system.domain.internalmember.dto.InternalMemberFollowTaskCompleteDTO;
+import com.backstage.system.domain.internalmember.dto.InternalMemberFollowTaskSaveDTO;
+import com.backstage.system.domain.internalmember.dto.InternalMemberFollowTaskStatusUpdateDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberOutcomeQueryDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberPageQueryDTO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberCourseProgressVO;
@@ -13,6 +16,7 @@ import com.backstage.system.domain.internalmember.vo.InternalMemberDocumentPrevi
 import com.backstage.system.domain.internalmember.vo.InternalMemberDocumentUploadVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentProfileVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberFollowRecordVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberFollowTaskVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberInterviewSummaryVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberOutcomeVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberResumeSummaryVO;
@@ -53,6 +57,20 @@ public interface IInternalMemberService {
     List<InternalMemberFollowRecordVO> selectFollowRecordList(Long userId);
 
     void addFollowRecord(Long userId, InternalMemberFollowRecordSaveDTO dto, Long operatorId);
+
+    List<InternalMemberFollowTaskVO> selectFollowTaskList(Long userId);
+
+    void addFollowTask(Long userId, InternalMemberFollowTaskSaveDTO dto, Long operatorId);
+
+    void updateFollowTask(Long taskId, InternalMemberFollowTaskSaveDTO dto, Long operatorId);
+
+    void updateFollowTaskStatus(Long taskId, InternalMemberFollowTaskStatusUpdateDTO dto, Long operatorId);
+
+    void completeFollowTask(Long taskId, InternalMemberFollowTaskCompleteDTO dto, Long operatorId);
+
+    void processDueFollowTaskReminders();
+
+    void markOverdueFollowTasks();
 
     List<InternalMemberOutcomeVO> selectOutcomeList(InternalMemberOutcomeQueryDTO query);
 

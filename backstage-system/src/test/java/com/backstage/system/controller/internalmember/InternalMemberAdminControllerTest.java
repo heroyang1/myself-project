@@ -3,9 +3,11 @@ package com.backstage.system.controller.internalmember;
 import com.backstage.common.constant.OshUserConstants;
 import com.backstage.common.threadlocal.ThreadLocalUtil;
 import com.backstage.system.domain.internalmember.dto.InternalMemberFollowRecordSaveDTO;
+import com.backstage.system.domain.internalmember.dto.InternalMemberFollowTaskSaveDTO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberAdminUserOptionVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentProfileVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberFollowRecordVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberFollowTaskVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberOutcomeVO;
 import com.backstage.system.service.internalmember.IInternalMemberService;
 import com.backstage.system.service.internalmember.IInternalMemberStudyService;
@@ -137,6 +139,58 @@ public class InternalMemberAdminControllerTest {
                 ArgumentCaptor.forClass(InternalMemberFollowRecordSaveDTO.class);
         verify(internalMemberService).addFollowRecord(eq(2001L), dtoCaptor.capture(), eq(9001L));
         Assert.assertEquals(Long.valueOf(101L), dtoCaptor.getValue().getResponsibleUserId());
+    }
+
+    @Test
+    public void shouldReturnFollowTasks() throws Exception {
+        InternalMemberFollowTaskVO task = new InternalMemberFollowTaskVO();
+        task.setId(11L);
+        task.setUserId(2001L);
+        task.setContent("need call back");
+        task.setResponsibleUserId(101L);
+        task.setResponsibleUserName("alice");
+        task.setStatus("pending");
+        task.setStatusName("待跟进");
+        task.setNotifySent(0);
+
+        when(internalMemberService.selectFollowTaskList(eq(2001L))).thenReturn(Collections.singletonList(task));
+
+        mockMvc.perform(get("/pc/admin/internal-member/2001/follow-tasks"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data[0].id").value(11))
+                .andExpect(jsonPath("$.data[0].status").value("pending"))
+                .andExpect(jsonPath("$.data[0].statusName").value("待跟进"));
+    }
+
+    @Test
+    public void shouldPassFollowTaskPayloadWhenCreatingTask() throws Exception {
+        ThreadLocalUtil.set(OshUserConstants.USER_ID, 9001L);
+
+        mockMvc.perform(post("/pc/admin/internal-member/2001/follow-tasks")
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"content\":\"need callback\",\"responsibleUserId\":101,\"plannedFollowTime\":\"2099-07-10 12:00:00\",\"remindTime\":\"2099-07-09 12:00:00\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        ArgumentCaptor<InternalMemberFollowTaskSaveDTO> dtoCaptor =
+                ArgumentCaptor.forClass(InternalMemberFollowTaskSaveDTO.class);
+        verify(internalMemberService).addFollowTask(eq(2001L), dtoCaptor.capture(), eq(9001L));
+        Assert.assertEquals(Long.valueOf(101L), dtoCaptor.getValue().getResponsibleUserId());
+        Assert.assertEquals("need callback", dtoCaptor.getValue().getContent());
+    }
+
+    @Test
+    public void shouldPassTaskIdWhenCompletingFollowTask() throws Exception {
+        ThreadLocalUtil.set(OshUserConstants.USER_ID, 9001L);
+
+        mockMvc.perform(post("/pc/admin/internal-member/follow-tasks/11/complete")
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"resultNote\":\"done\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        verify(internalMemberService).completeFollowTask(eq(11L), any(), eq(9001L));
     }
 
     @Test

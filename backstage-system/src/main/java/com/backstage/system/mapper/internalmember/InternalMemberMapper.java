@@ -2,6 +2,7 @@ package com.backstage.system.mapper.internalmember;
 
 import com.backstage.system.domain.internalmember.dto.InternalMemberCourseDetailQueryDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberEmploymentProfileSaveDTO;
+import com.backstage.system.domain.internalmember.dto.InternalMemberFollowTaskSaveDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberOutcomeQueryDTO;
 import com.backstage.system.domain.internalmember.dto.InternalMemberPageQueryDTO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberAdminUserOptionVO;
@@ -10,6 +11,8 @@ import com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentDoc
 import com.backstage.system.domain.internalmember.vo.InternalMemberExamItemVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberEmploymentProfileVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberFollowRecordVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberFollowTaskReminderVO;
+import com.backstage.system.domain.internalmember.vo.InternalMemberFollowTaskVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberInterviewSummaryVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberOutcomeVO;
 import com.backstage.system.domain.internalmember.vo.InternalMemberResumeSummaryVO;
@@ -70,6 +73,35 @@ public interface InternalMemberMapper {
                            @Param("nextFollowTime") String nextFollowTime,
                            @Param("operatorId") Long operatorId,
                            @Param("responsibleUserId") Long responsibleUserId);
+
+    List<InternalMemberFollowTaskVO> selectFollowTaskListByUserId(@Param("userId") Long userId);
+
+    InternalMemberFollowTaskVO selectFollowTaskById(@Param("taskId") Long taskId);
+
+    int insertFollowTask(@Param("userId") Long userId,
+                         @Param("dto") InternalMemberFollowTaskSaveDTO dto,
+                         @Param("status") String status,
+                         @Param("notifyChannel") String notifyChannel,
+                         @Param("operatorId") Long operatorId);
+
+    int updateFollowTask(@Param("taskId") Long taskId,
+                         @Param("dto") InternalMemberFollowTaskSaveDTO dto,
+                         @Param("status") String status,
+                         @Param("operatorId") Long operatorId);
+
+    int updateFollowTaskStatus(@Param("taskId") Long taskId,
+                               @Param("status") String status,
+                               @Param("resultNote") String resultNote,
+                               @Param("completedTime") String completedTime,
+                               @Param("completedBy") Long completedBy,
+                               @Param("operatorId") Long operatorId);
+
+    List<InternalMemberFollowTaskReminderVO> selectDueFollowTaskReminderList();
+
+    int markFollowTaskReminderSent(@Param("taskId") Long taskId,
+                                   @Param("operatorId") Long operatorId);
+
+    int markOverdueFollowTasks(@Param("operatorId") Long operatorId);
 
     int countInternalMemberAdminUserByUserId(@Param("userId") Long userId);
 
