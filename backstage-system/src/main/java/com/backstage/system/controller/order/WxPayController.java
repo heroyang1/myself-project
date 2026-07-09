@@ -13,7 +13,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -127,14 +126,4 @@ public class WxPayController extends BaseController
         return toAjax(wxPayService.updateWxPay(wxPay));
     }
 
-    /**
-     * 删除微信支付
-     */
-    @PreAuthorize("@ss.hasPermi('system:wxpay:remove')")
-    @Log(title = "微信支付", businessType = BusinessType.DELETE)
-	@DeleteMapping("/{ids}")
-    public AjaxResult remove(@PathVariable Long[] ids)
-    {
-        return toAjax(wxPayService.deleteWxPayByIds(ids));
-    }
 }

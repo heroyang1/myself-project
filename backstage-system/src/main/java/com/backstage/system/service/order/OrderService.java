@@ -1,14 +1,12 @@
 package com.backstage.system.service.order;
 
-import com.backstage.system.domain.order.OshOrder;
 import com.backstage.system.domain.vo.pay.OrderCheckoutReqVO;
 import com.backstage.system.domain.vo.pay.OrderCheckoutRespVO;
 import com.backstage.system.domain.order.OrderStatusResult;
-import com.baomidou.mybatisplus.extension.service.IService;
 
 import java.util.Map;
 
-public interface OrderService extends IService<OshOrder> {
+public interface OrderService {
 
     /**
      * 统一下单
