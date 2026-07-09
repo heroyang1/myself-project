@@ -47,19 +47,4 @@ public interface IOshGroupOrderService
      */
     public int updateOshGroupOrder(OshGroupOrder oshGroupOrder);
 
-    /**
-     * 批量删除订单
-     * 
-     * @param ids 需要删除的订单主键集合
-     * @return 结果
-     */
-    public int deleteOshGroupOrderByIds(Long[] ids);
-
-    /**
-     * 删除订单信息
-     * 
-     * @param id 订单主键
-     * @return 结果
-     */
-    public int deleteOshGroupOrderById(Long id);
 }

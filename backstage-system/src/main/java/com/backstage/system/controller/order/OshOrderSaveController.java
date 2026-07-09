@@ -11,7 +11,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -112,14 +111,4 @@ public class OshOrderSaveController extends BaseController
         return toAjax(oshOrderSaveService.updateOshOrderSave(oshOrderSave));
     }
 
-    /**
-     * 删除创建订单
-     */
-    @PreAuthorize("@ss.hasPermi('order:save:remove')")
-    @Log(title = "创建订单", businessType = BusinessType.DELETE)
-	@DeleteMapping("/{ids}")
-    public AjaxResult remove(@PathVariable Long[] ids)
-    {
-        return toAjax(oshOrderSaveService.deleteOshOrderSaveByIds(ids));
-    }
 }

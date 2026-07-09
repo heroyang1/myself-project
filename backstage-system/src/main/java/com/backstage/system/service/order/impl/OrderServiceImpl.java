@@ -41,7 +41,6 @@ import com.backstage.system.service.order.OrderPaidHandlerRegistry;
 import com.backstage.system.service.order.OrderService;
 import com.backstage.system.utils.SignUtil;
 import com.backstage.system.utils.UserContextUtil;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -72,7 +71,7 @@ import java.util.function.Supplier;
  * 统一订单服务实现，负责订单创建、支付查询和支付回调处理。
  */
 @Service
-public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> implements OrderService {
+public class OrderServiceImpl implements OrderService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderServiceImpl.class);
 

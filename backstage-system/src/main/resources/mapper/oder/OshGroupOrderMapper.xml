@@ -83,14 +83,4 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where id = #{id}
     </update>
 
-    <delete id="deleteOshGroupOrderById" parameterType="Long">
-        delete from osh_group_order where id = #{id}
-    </delete>
-
-    <delete id="deleteOshGroupOrderByIds" parameterType="String">
-        delete from osh_group_order where id in 
-        <foreach item="id" collection="array" open="(" separator="," close=")">
-            #{id}
-        </foreach>
-    </delete>
 </mapper>

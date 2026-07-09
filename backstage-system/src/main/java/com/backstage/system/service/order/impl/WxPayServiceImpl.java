@@ -77,27 +77,4 @@ public class WxPayServiceImpl implements IWxPayService
         return wxPayMapper.updateWxPay(wxPay);
     }
 
-    /**
-     * 批量删除微信支付
-     * 
-     * @param ids 需要删除的微信支付主键
-     * @return 结果
-     */
-    @Override
-    public int deleteWxPayByIds(Long[] ids)
-    {
-        return wxPayMapper.deleteWxPayByIds(ids);
-    }
-
-    /**
-     * 删除微信支付信息
-     * 
-     * @param id 微信支付主键
-     * @return 结果
-     */
-    @Override
-    public int deleteWxPayById(Long id)
-    {
-        return wxPayMapper.deleteWxPayById(id);
-    }
 }

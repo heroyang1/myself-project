@@ -67,27 +67,4 @@ public class OshOrderListServiceImpl implements IOshOrderListService
         return oshOrderListMapper.updateOshOrderList(oshOrderList);
     }
 
-    /**
-     * 批量删除我的订单列
-     * 
-     * @param ids 需要删除的我的订单列主键
-     * @return 结果
-     */
-    @Override
-    public int deleteOshOrderListByIds(Long[] ids)
-    {
-        return oshOrderListMapper.deleteOshOrderListByIds(ids);
-    }
-
-    /**
-     * 删除我的订单列信息
-     * 
-     * @param id 我的订单列主键
-     * @return 结果
-     */
-    @Override
-    public int deleteOshOrderListById(Long id)
-    {
-        return oshOrderListMapper.deleteOshOrderListById(id);
-    }
 }
