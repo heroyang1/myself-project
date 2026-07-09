@@ -8,6 +8,7 @@
         <result property="courseId" column="course_id"/>
         <result property="collectionFlag" column="collection_flag"/>
         <result property="buyFlag" column="buy_flag"/>
+        <result property="salesCount" column="sales_count"/>
     </resultMap>
 
     <select id="selectUserCourseStates" resultMap="CourseSearchUserStateResult">
@@ -40,5 +41,20 @@
         <foreach collection="courseIds" item="courseId" open="(" separator="," close=")">
             #{courseId}
         </foreach>
+    </select>
+
+    <select id="selectCoursePaidCounts" resultMap="CourseSearchUserStateResult">
+        select c.id as course_id,
+               count(distinct cb.user_id) as sales_count
+        from osh_course c
+        left join osh_course_buy cb
+          on cb.course_id = c.id
+         and cb.pay_status = 'paid'
+         and cb.delete_flag = 0
+        where c.id in
+        <foreach collection="courseIds" item="courseId" open="(" separator="," close=")">
+            #{courseId}
+        </foreach>
+        group by c.id
     </select>
 </mapper>
