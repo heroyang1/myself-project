@@ -22,6 +22,12 @@ public class OshGroupOrder {
     
     /** 关联参团记录ID */
     private Long groupWorkId;
+
+    /** 拼团来源：system-系统活动，initiated-用户发起 */
+    private String sourceType;
+
+    /** 用户发起拼团记录ID；system 来源为空 */
+    private Long initiatedId;
     
     /** 订单编号（唯一） */
     private String orderNo;
@@ -111,6 +117,22 @@ public class OshGroupOrder {
     
     public void setGroupWorkId(Long groupWorkId) {
         this.groupWorkId = groupWorkId;
+    }
+
+    public String getSourceType() {
+        return sourceType;
+    }
+
+    public void setSourceType(String sourceType) {
+        this.sourceType = sourceType;
+    }
+
+    public Long getInitiatedId() {
+        return initiatedId;
+    }
+
+    public void setInitiatedId(Long initiatedId) {
+        this.initiatedId = initiatedId;
     }
     
     public String getOrderNo() {

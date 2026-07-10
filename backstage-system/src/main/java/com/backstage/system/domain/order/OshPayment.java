@@ -36,6 +36,11 @@ public class OshPayment implements Serializable {
     private Integer channel;
 
     /**
+     * 支付提供方（legacy/huifu/internal）。
+     */
+    private String provider;
+
+    /**
      * 金额
      */
     private BigDecimal amount;
@@ -125,6 +130,14 @@ public class OshPayment implements Serializable {
 
     public void setChannel(Integer channel) {
         this.channel = channel;
+    }
+
+    public String getProvider() {
+        return provider;
+    }
+
+    public void setProvider(String provider) {
+        this.provider = provider;
     }
 
     public BigDecimal getAmount() {

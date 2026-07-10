@@ -72,6 +72,15 @@
         limit 1
     </select>
 
+    <select id="selectByOrderNoForUpdate" resultMap="OshToolPurchaseRecordResult">
+        select <include refid="purchaseRecordColumns"/>
+        from osh_tool_package_purchase_record
+        where order_no = #{orderNo}
+          and delete_flag = 0
+        limit 1
+        for update
+    </select>
+
     <select id="selectByPaymentNo" resultMap="OshToolPurchaseRecordResult">
         select <include refid="purchaseRecordColumns"/>
         from osh_tool_package_purchase_record

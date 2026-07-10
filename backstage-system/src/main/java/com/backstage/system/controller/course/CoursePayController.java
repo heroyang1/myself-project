@@ -44,7 +44,7 @@ public class CoursePayController {
             return R.fail("请先登录后再支付");
         }
         Long courseId = parseCourseId(body.get("course_id"));
-        String payType = body.get("pay_type") == null ? "wxpay" : body.get("pay_type").toString();
+        String payType = body.get("pay_type") == null ? "alipay" : body.get("pay_type").toString();
         String clientIp = resolveClientIp(request);
 
         try {

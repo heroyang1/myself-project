@@ -36,7 +36,7 @@ public class ToolPaidHandler implements OrderPaidHandler {
     @Transactional(rollbackFor = Exception.class)
     public void handle(String orderNo) {
         log.info("工具点数支付成功后置处理开始, orderNo={}", orderNo);
-        OshToolPurchaseRecord record = oshToolPurchaseRecordMapper.selectByOrderNo(orderNo);
+        OshToolPurchaseRecord record = oshToolPurchaseRecordMapper.selectByOrderNoForUpdate(orderNo);
         if (record == null) {
             log.warn("工具点数支付成功后置处理失败，购买记录不存在, orderNo={}", orderNo);
             throw new ServiceException("工具点数购买记录不存在");

@@ -13,7 +13,7 @@ public interface ICoursePayService {
      * Create a unified order for a course and request a QR code from the upstream gateway.
      *
      * @param courseId target course id (price is fetched server-side to avoid client tampering)
-     * @param payType  payment channel: "wxpay" or "alipay"
+     * @param payType  payment channel; current checkout is unified to "alipay"
      * @param clientIp end-user IP, required by the gateway
      * @return unified checkout response holding orderNo / paymentNo / qrcode / payurl
      */

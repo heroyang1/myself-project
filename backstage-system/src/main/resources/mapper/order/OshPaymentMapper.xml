@@ -10,6 +10,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="orderNo" column="order_no"/>
         <result property="paymentNo" column="payment_no"/>
         <result property="channel" column="channel"/>
+        <result property="provider" column="provider"/>
         <result property="amount" column="amount"/>
         <result property="status" column="status"/>
         <result property="platformTradeNo" column="platform_trade_no"/>
@@ -25,7 +26,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </resultMap>
 
     <sql id="selectOshPaymentColumns">
-        select id, order_id, order_no, payment_no, channel, amount, status,
+        select id, order_id, order_no, payment_no, channel, provider, amount, status,
                platform_trade_no, pay_url, qrcode, request_payload, response_payload,
                paid_time, expire_time, created_time, updated_time, delete_flag
         from osh_payment
@@ -33,11 +34,11 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <insert id="insertOshPayment" parameterType="com.backstage.system.domain.order.OshPayment" useGeneratedKeys="true" keyProperty="id">
         insert into osh_payment (
-            order_id, order_no, payment_no, channel, amount, status,
+            order_id, order_no, payment_no, channel, provider, amount, status,
             platform_trade_no, pay_url, qrcode, request_payload, response_payload,
             paid_time, expire_time, created_time, updated_time, delete_flag
         ) values (
-            #{orderId}, #{orderNo}, #{paymentNo}, #{channel}, #{amount}, #{status},
+            #{orderId}, #{orderNo}, #{paymentNo}, #{channel}, #{provider}, #{amount}, #{status},
             #{platformTradeNo}, #{payUrl}, #{qrcode}, #{requestPayload}, #{responsePayload},
             #{paidTime}, #{expireTime}, #{createdTime}, #{updatedTime}, #{deleteFlag}
         )
@@ -80,6 +81,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         update osh_payment
         set status = 1,
             platform_trade_no = #{platformTradeNo},
+            channel = COALESCE(#{channel}, channel),
             paid_time = #{paidTime},
             updated_time = CURRENT_TIMESTAMP
         where payment_no = #{paymentNo}

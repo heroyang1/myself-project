@@ -37,6 +37,7 @@ public class PermitAllUrlProperties implements InitializingBean, ApplicationCont
     @Override
     public void afterPropertiesSet()
     {
+        urls.add("/pc/pay/huifu/notify");
         RequestMappingHandlerMapping mapping = applicationContext.getBean(RequestMappingHandlerMapping.class);
         Map<RequestMappingInfo, HandlerMethod> map = mapping.getHandlerMethods();
 

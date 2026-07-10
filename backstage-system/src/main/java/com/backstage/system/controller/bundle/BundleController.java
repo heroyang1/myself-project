@@ -41,7 +41,7 @@ public class BundleController {
         }
         try {
             Long bundleId = parseLong(body.get("bundle_id"), "套餐ID不能为空");
-            String payType = body.get("pay_type") == null ? "wxpay" : body.get("pay_type").toString();
+            String payType = body.get("pay_type") == null ? "alipay" : body.get("pay_type").toString();
             OrderCheckoutRespVO checkout = productBundleService.createBundlePay(
                     bundleId, payType, resolveClientIp(request), userId);
             return R.ok(toPayResponse(checkout, bundleId, payType));

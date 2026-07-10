@@ -29,7 +29,8 @@ public class PayStatusUpdateTask {
     /**
      * 关闭超时未支付的支付流水和关联订单。
      */
-//    @Scheduled(cron = "0 0/30 * * * ?")
+    @Scheduled(fixedDelayString = "${pay.status.reconcile-delay-ms:60000}",
+            initialDelayString = "${pay.status.reconcile-initial-delay-ms:60000}")
     public void updateOrderStatus() {
         log.info("【支付-定时任务】开始关闭超时未支付订单");
 

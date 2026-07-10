@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.backstage.system.mapper.order.OshOrderEntitlementTaskMapper">
+
+    <resultMap id="EntitlementTaskResult" type="com.backstage.system.domain.order.OshOrderEntitlementTask">
+        <id property="id" column="id"/>
+        <result property="orderNo" column="order_no"/>
+        <result property="productType" column="product_type"/>
+        <result property="status" column="status"/>
+        <result property="attempts" column="attempts"/>
+        <result property="nextRetryTime" column="next_retry_time"/>
+        <result property="lockedAt" column="locked_at"/>
+        <result property="completedTime" column="completed_time"/>
+        <result property="lastError" column="last_error"/>
+        <result property="createdTime" column="created_time"/>
+        <result property="updatedTime" column="updated_time"/>
+    </resultMap>
+
+    <sql id="taskColumns">
+        select id, order_no, product_type, status, attempts, next_retry_time,
+               locked_at, completed_time, last_error, created_time, updated_time
+        from osh_order_entitlement_task
+    </sql>
+
+    <insert id="insertOrKeep">
+        insert into osh_order_entitlement_task (
+            order_no, product_type, status, attempts, next_retry_time, created_time, updated_time
+        ) values (
+            #{orderNo}, #{productType}, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+        on duplicate key update order_no = values(order_no)
+    </insert>
+
+    <select id="selectByOrderNo" resultMap="EntitlementTaskResult">
+        <include refid="taskColumns"/>
+        where order_no = #{orderNo}
+        limit 1
+    </select>
+
+    <select id="selectDueTasks" resultMap="EntitlementTaskResult">
+        <include refid="taskColumns"/>
+        where (status = 0 and next_retry_time &lt;= #{now})
+           or (status = 1 and locked_at &lt;= #{staleBefore})
+        order by next_retry_time asc, id asc
+        limit #{limit}
+    </select>
+
+    <update id="claim">
+        update osh_order_entitlement_task
+        set status = 1,
+            attempts = attempts + 1,
+            locked_at = #{now},
+            updated_time = #{now}
+        where order_no = #{orderNo}
+          and ((status = 0 and next_retry_time &lt;= #{now})
+            or (status = 1 and locked_at &lt;= #{staleBefore}))
+    </update>
+
+    <update id="markSuccess">
+        update osh_order_entitlement_task
+        set status = 2,
+            completed_time = #{completedTime},
+            locked_at = null,
+            last_error = null,
+            updated_time = #{completedTime}
+        where order_no = #{orderNo}
+          and status = 1
+    </update>
+
+    <update id="markRetry">
+        update osh_order_entitlement_task
+        set status = 0,
+            next_retry_time = #{nextRetryTime},
+            locked_at = null,
+            last_error = #{lastError},
+            updated_time = CURRENT_TIMESTAMP
+        where order_no = #{orderNo}
+          and status = 1
+    </update>
+</mapper>

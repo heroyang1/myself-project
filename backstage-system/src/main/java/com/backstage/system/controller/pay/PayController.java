@@ -3,20 +3,11 @@ package com.backstage.system.controller.pay;
 
 import com.backstage.common.annotation.OshUserLevel;
 import com.backstage.common.core.domain.R;
-import com.backstage.system.domain.vo.pay.OrderCheckoutReqVO;
-import com.backstage.system.domain.vo.pay.OrderCheckoutRespVO;
-import com.backstage.system.domain.vo.pay.PayCreateRespVO;
-import com.backstage.system.domain.order.OrderPaymentInfo;
 import com.backstage.system.domain.order.OrderStatusResult;
-import com.backstage.system.service.order.OrderCheckoutService;
 import com.backstage.system.service.order.OrderService;
 import com.backstage.system.utils.UserContextUtil;
-import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import javax.validation.Valid;
 
 @RestController
 @RequestMapping("/pc/pay")
@@ -25,32 +16,8 @@ public class PayController {
     @Autowired
     private OrderService orderService;
 
-    @Autowired
-    private OrderCheckoutService orderCheckoutService;
-
-    /**
-     * 创建支付订单。
-     *
-     * @param reqVO 订单结算参数
-     * @return 支付创建结果
-     */
-    @PostMapping("/create")
-    @PreAuthorize("hasAuthority('pay:create')")
-    public R<PayCreateRespVO> create(@Valid @RequestBody OrderCheckoutReqVO reqVO) {
-        OrderCheckoutRespVO checkoutResult = orderCheckoutService.checkout(reqVO);
-
-        PayCreateRespVO response = new PayCreateRespVO();
-        BeanUtils.copyProperties(checkoutResult, response);
-        response.setCode(1);
-        response.setMsg("ok");
-        response.setOutTradeNo(checkoutResult.getPaymentNo());
-        OrderPaymentInfo payment = checkoutResult.getPayment();
-        if (payment != null) {
-            response.setQrcode(payment.getQrcode());
-            response.setPayUrl(payment.getPayUrl());
-        }
-        return R.ok(response);
-    }
+    // 不提供通用公网下单入口。课程、套餐、电子书、会员、工具等必须走各自的
+    // 服务端定价接口，用户、商品和金额都不能由浏览器直接提交。
 
     /**
      * 查询订单支付状态（前端轮询）。
