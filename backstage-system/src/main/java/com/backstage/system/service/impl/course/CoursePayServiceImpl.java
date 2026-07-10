@@ -22,7 +22,6 @@ import javax.annotation.Resource;
 @Service
 public class CoursePayServiceImpl implements ICoursePayService {
 
-    private static final String PAY_TYPE_WECHAT = "wxpay";
     private static final String PAY_TYPE_ALIPAY = "alipay";
 
     @Resource
@@ -92,12 +91,16 @@ public class CoursePayServiceImpl implements ICoursePayService {
     }
 
     private String normalizePayType(String payType) {
-        if (payType == null) {
-            return PAY_TYPE_WECHAT;
+        if (payType == null || payType.trim().isEmpty()) {
+            return PAY_TYPE_ALIPAY;
         }
         String lower = payType.trim().toLowerCase();
-        if (PAY_TYPE_WECHAT.equals(lower) || PAY_TYPE_ALIPAY.equals(lower)) {
-            return lower;
+        if (PAY_TYPE_ALIPAY.equals(lower)
+                || "wxpay".equals(lower)
+                || "wechat".equals(lower)
+                || "union".equals(lower)
+                || "unionpay".equals(lower)) {
+            return PAY_TYPE_ALIPAY;
         }
         throw new ServiceException("不支持的支付方式: " + payType);
     }

@@ -18,7 +18,7 @@ public class ToolPurchaseCreateRequest {
     private Integer payType;
 
     @NotBlank(message = "支付方式标识不能为空")
-    @ApiModelProperty(value = "支付方式标识：points/wxpay/alipay", required = true, example = "points")
+    @ApiModelProperty(value = "支付方式标识：points/alipay，历史 wxpay 参数会兼容转为 alipay", required = true, example = "points")
     private String paymentMethod;
 
     public Long getPackageId() {

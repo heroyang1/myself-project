@@ -196,6 +196,9 @@ public class OshAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private boolean isWhiteList(String uri) {
+        if (pathMatcher.match("/pc/pay/huifu/notify", uri)) {
+            return true;
+        }
         // 匹配 @Anonymous 注解收集的 URL
         for (String pattern : permitAllUrl.getUrls()) {
             if (pathMatcher.match(pattern, uri)) {

@@ -4,10 +4,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpServletRequest;
 
 import com.backstage.common.annotation.Anonymous;
+import com.backstage.common.exception.ServiceException;
 import com.backstage.system.domain.order.OshOrderSave;
+import com.backstage.system.domain.vo.order.PayResponse;
 import com.backstage.system.service.order.IOshOrderSaveService;
+import com.backstage.system.service.order.PayService;
+import com.backstage.system.utils.IpUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,8 +32,13 @@ import com.backstage.system.service.order.IWxPayService;
 import com.backstage.common.utils.poi.ExcelUtil;
 import com.backstage.common.core.page.TableDataInfo;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+
 /**
- * 微信支付Controller
+ * 历史扫码支付Controller。
+ *
+ * <p>接口地址保留 /pc/order/wxpay，兼容旧前端；实际统一发起支付宝扫码订单。</p>
  * 
  * @author ruoyi
  * @date 2026-03-08
@@ -42,8 +53,11 @@ public class WxPayController extends BaseController
     @Autowired
     private IOshOrderSaveService orderSaveService;
 
+    @Autowired
+    private PayService payService;
+
     /**
-     * 查询微信支付列表
+     * 查询历史扫码支付列表
      */
 //    @PreAuthorize("@ss.hasPermi('system:wxpay:list')")
     @Anonymous
@@ -56,21 +70,21 @@ public class WxPayController extends BaseController
     }
 
     /**
-     * 导出微信支付列表
+     * 导出历史扫码支付列表
      */
 //    @PreAuthorize("@ss.hasPermi('system:wxpay:export')")
     @Anonymous
-    @Log(title = "微信支付", businessType = BusinessType.EXPORT)
+    @Log(title = "历史扫码支付", businessType = BusinessType.EXPORT)
     @PostMapping("/export")
     public void export(HttpServletResponse response, WxPay wxPay)
     {
         List<WxPay> list = wxPayService.selectWxPayList(wxPay);
         ExcelUtil<WxPay> util = new ExcelUtil<WxPay>(WxPay.class);
-        util.exportExcel(response, list, "微信支付数据");
+        util.exportExcel(response, list, "历史扫码支付数据");
     }
 
     /**
-     * 获取微信支付详细信息
+     * 获取历史扫码支付详细信息
      */
 //    @PreAuthorize("@ss.hasPermi('system:wxpay:query')")
     @Anonymous
@@ -81,45 +95,85 @@ public class WxPayController extends BaseController
     }
 
     /**
-     * 新增微信支付
+     * 新增历史扫码支付
      */
 //    @PreAuthorize("@ss.hasPermi('system:wxpay:add')")
 //    @Log(title = "微信支付", businessType = BusinessType.INSERT)
     @Anonymous
     @PostMapping
-    public Map<String, Object> add(@RequestBody WxPay wxPay)
+    public Map<String, Object> add(@RequestBody WxPay wxPay, HttpServletRequest request)
     {
-
-        OshOrderSave orderSave = orderSaveService.selectOshOrderSaveByNo(wxPay.getNo());
-        Map<String, Object> data = new LinkedHashMap<String, Object>();
-        if (wxPayService.selectWxPayByNo(wxPay.getNo())!= null)
-            return data;
-        if (orderSave!= null){
-            wxPay.setNo(orderSave.getNo());
-            wxPay.setPrice(orderSave.getPrice().toString());
-            wxPay.setCodeUrl("weixin:asddasd");
-            int rows = wxPayService.insertWxPay(wxPay);
-
-            // 修改返回格式
-            if (rows > 0) {
-                Map<String, Object> dataInner = new LinkedHashMap<String, Object>();
-                data.put("msg", "ok");
-                dataInner.put("price", wxPay.getPrice());
-                dataInner.put("code_url", wxPay.getCodeUrl());
-                data.put("data", dataInner);
-                data.put("code", 20000);
-            }
-
-            return data;
+        if (wxPay == null || StringUtils.isBlank(wxPay.getNo())) {
+            throw new ServiceException("订单号不能为空");
         }
-        return toAjax(0);
+        OshOrderSave orderSave = orderSaveService.selectOshOrderSaveByNo(wxPay.getNo());
+        if (orderSave == null) {
+            throw new ServiceException("订单不存在");
+        }
+        if ("success".equals(orderSave.getStatus())) {
+            throw new ServiceException("订单已支付");
+        }
+
+        WxPay cached = wxPayService.selectWxPayByNo(wxPay.getNo());
+        if (cached != null && StringUtils.isNotBlank(cached.getCodeUrl())) {
+            return payResult(cached.getPrice(), cached.getCodeUrl(), legacyPaymentNo(wxPay.getNo()), "复用支付宝二维码");
+        }
+
+        String paymentNo = legacyPaymentNo(orderSave.getNo());
+        PayResponse response = payService.createPay(
+                paymentNo,
+                "OSH商品",
+                orderSave.getPrice().toPlainString(),
+                IpUtils.getClientIp(request),
+                "alipay"
+        );
+
+        if (response == null || response.getCode() != 1
+                || StringUtils.isBlank(StringUtils.defaultIfBlank(response.getQrcode(), response.getPayUrl()))) {
+            throw new ServiceException(response == null || StringUtils.isBlank(response.getMsg())
+                    ? "支付宝订单创建失败"
+                    : response.getMsg());
+        }
+
+        wxPay.setNo(orderSave.getNo());
+        wxPay.setPrice(orderSave.getPrice().toPlainString());
+        wxPay.setCodeUrl(StringUtils.defaultIfBlank(response.getQrcode(), response.getPayUrl()));
+        wxPayService.insertWxPay(wxPay);
+
+        return payResult(wxPay.getPrice(), wxPay.getCodeUrl(), paymentNo, "支付宝订单创建成功");
+    }
+
+    private Map<String, Object> payResult(String price, String qrcode, String paymentNo, String msg) {
+        Map<String, Object> data = new LinkedHashMap<String, Object>();
+        Map<String, Object> dataInner = new LinkedHashMap<String, Object>();
+        dataInner.put("price", price);
+        dataInner.put("qrcode", qrcode);
+        dataInner.put("code_url", qrcode);
+        dataInner.put("pay_type", "alipay");
+        dataInner.put("paymentNo", paymentNo);
+        data.put("msg", msg);
+        data.put("data", dataInner);
+        data.put("code", 200);
+        return data;
+    }
+
+    public static String legacyPaymentNo(String orderNo) {
+        String digits = orderNo == null ? "" : orderNo.replaceAll("\\D", "");
+        String date = digits.length() >= 8
+                ? digits.substring(0, 8)
+                : LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
+        String suffix = orderNo == null ? "" : orderNo.replaceAll("[^A-Za-z0-9]", "");
+        if (suffix.length() > 40) {
+            suffix = suffix.substring(0, 40);
+        }
+        return "P" + date + suffix;
     }
 
     /**
-     * 修改微信支付
+     * 修改历史扫码支付
      */
     @PreAuthorize("@ss.hasPermi('system:wxpay:edit')")
-    @Log(title = "微信支付", businessType = BusinessType.UPDATE)
+    @Log(title = "历史扫码支付", businessType = BusinessType.UPDATE)
     @PutMapping
     public AjaxResult edit(@RequestBody WxPay wxPay)
     {

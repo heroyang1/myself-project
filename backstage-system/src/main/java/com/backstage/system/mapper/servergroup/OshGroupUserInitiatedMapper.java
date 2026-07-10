@@ -33,6 +33,9 @@ public interface OshGroupUserInitiatedMapper {
      * @return 发起记录
      */
     OshGroupUserInitiated selectById(@Param("id") Long id);
+
+    /** 参团创建事务内锁定用户发起记录，串行化最后名额校验。 */
+    OshGroupUserInitiated selectByIdForUpdate(@Param("id") Long id);
     
     /**
      * 查询用户发起的拼团列表
@@ -154,4 +157,3 @@ public interface OshGroupUserInitiatedMapper {
             @Param("serverStartTime") LocalDateTime serverStartTime,
             @Param("serverExpireTime") LocalDateTime serverExpireTime);
 }
-

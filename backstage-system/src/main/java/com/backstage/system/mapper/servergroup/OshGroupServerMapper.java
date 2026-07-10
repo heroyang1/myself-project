@@ -41,6 +41,9 @@ public interface OshGroupServerMapper {
      */
     OshGroupActivity selectGroupActivityById(@Param("id") Long id);
 
+    /** 参团创建事务内锁定系统活动，串行化最后名额校验。 */
+    OshGroupActivity selectGroupActivityByIdForUpdate(@Param("id") Long id);
+
     /**
      * 查询我加入的拼团列表（性能优化拆分版）
      */
@@ -111,6 +114,21 @@ public interface OshGroupServerMapper {
      * @return 参团记录
      */
     OshGroupWork selectGroupWorkByActivityAndUser(@Param("activityId") Long activityId, @Param("userId") Long userId);
+
+    /** 支付/取消必须按订单保存的精确 work 主键定位，禁止 activityId + userId + LIMIT 1。 */
+    OshGroupWork selectGroupWorkById(@Param("id") Long id);
+
+    OshGroupWork selectActiveGroupWorkForUser(@Param("sourceType") String sourceType,
+                                               @Param("sourceId") Long sourceId,
+                                               @Param("userId") Long userId);
+
+    int countActiveSystemOrders(@Param("activityId") Long activityId);
+
+    int countActiveInitiatedOrders(@Param("initiatedId") Long initiatedId);
+
+    int countActiveSystemOrdersForUser(@Param("activityId") Long activityId, @Param("userId") Long userId);
+
+    int countActiveInitiatedOrdersForUser(@Param("initiatedId") Long initiatedId, @Param("userId") Long userId);
     
     /**
      * 插入参团记录
@@ -179,6 +197,8 @@ public interface OshGroupServerMapper {
      * @return 影响行数
      */
     int updateGroupWorkStatus(@Param("id") Long id, @Param("groupStatus") Integer groupStatus);
+
+    int updatePendingGroupWorkToPaid(@Param("id") Long id);
     
     /**
      * 插入拼团订单
@@ -195,6 +215,8 @@ public interface OshGroupServerMapper {
      * @return 订单
      */
     OshGroupOrder selectGroupOrderByOrderNo(@Param("orderNo") String orderNo);
+
+    OshGroupOrder selectGroupOrderByOrderNoForUpdate(@Param("orderNo") String orderNo);
     
     /**
      * 更新订单状态
@@ -205,6 +227,12 @@ public interface OshGroupServerMapper {
      * @return 影响行数
      */
     int updateOrderStatus(@Param("id") Long id, @Param("status") String status, @Param("updateTime") LocalDateTime updateTime);
+
+    int updatePendingGroupOrderToCancelled(@Param("id") Long id, @Param("updateTime") LocalDateTime updateTime);
+
+    int updatePendingGroupWorkToCancelled(@Param("id") Long id);
+
+    int updatePendingOrderToPaid(@Param("id") Long id, @Param("updateTime") LocalDateTime updateTime);
     
     /**
      * 计算动态价格
@@ -245,7 +273,11 @@ public interface OshGroupServerMapper {
      * @return 影响行数
      */
     int insertGroupPayment(@Param("paymentNo") String paymentNo, @Param("orderNo") String orderNo, 
-                           @Param("orderId") Long orderId, @Param("amount") BigDecimal amount, @Param("requestPayload") String requestPayload);
+                           @Param("orderId") Long orderId,
+                           @Param("amount") BigDecimal amount,
+                           @Param("provider") String provider,
+                           @Param("channel") Integer channel,
+                           @Param("requestPayload") String requestPayload);
 
     /**
      * 校验支付流水是否已存在（按 payment_no，仅统计未逻辑删除的记录）
@@ -264,6 +296,8 @@ public interface OshGroupServerMapper {
      * @return 影响行数
      */
     int updateOrderGroupWorkId(@Param("orderId") Long orderId, @Param("groupWorkId") Long groupWorkId);
+
+    int updateOrderInitiatedId(@Param("orderId") Long orderId, @Param("initiatedId") Long initiatedId);
 
     // ==================== 定时任务 + 安全校验相关方法 ====================
 

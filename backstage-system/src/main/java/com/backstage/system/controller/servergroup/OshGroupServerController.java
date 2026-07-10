@@ -12,6 +12,7 @@ import com.backstage.common.utils.SecurityUtils;
 import com.backstage.system.domain.dto.GroupCreateDTO;
 import com.backstage.system.domain.dto.AddUserToGroupDTO;
 import com.backstage.system.domain.order.enums.OrderStatusEnum;
+import com.backstage.system.domain.order.enums.PayChannelEnum;
 import com.backstage.system.domain.servergroup.OshGroupOrder;
 import com.backstage.system.domain.order.OshOrder;
 import com.backstage.system.mapper.order.OshOrderMapper;
@@ -25,6 +26,7 @@ import com.backstage.system.domain.vo.UserInitiatedActivityListVO;
 import com.backstage.system.domain.vo.UserSearchVO;
 import com.backstage.system.domain.vo.order.PayResponse;
 import com.backstage.system.service.servergroup.IOshGroupServerService;
+import com.backstage.system.service.order.OrderService;
 import com.backstage.system.service.order.PayService;
 import com.backstage.system.utils.UserContextUtil;
 import com.backstage.system.utils.IpUtils;
@@ -64,6 +66,9 @@ public class OshGroupServerController extends BaseController {
     
     @Autowired
     private PayService payService;
+
+    @Autowired
+    private OrderService orderService;
 
     @Autowired
     private OshOrderMapper oshOrderMapper;
@@ -148,7 +153,8 @@ public class OshGroupServerController extends BaseController {
     @ApiOperation("拼团详情")
     @GetMapping("/work/detail")
     public R<GroupDetailVO> detail(
-            @ApiParam("拼团发起记录ID（可选）") @RequestParam(value = "activityId", required = false) Long activityId) {
+            @ApiParam("拼团发起记录ID（可选）") @RequestParam(value = "activityId", required = false) Long activityId,
+            @ApiParam("来源：system/initiated") @RequestParam(value = "sourceType") String sourceType) {
         // 尝试获取当前用户ID（如果已登录）
         Long userId = null;
         try {
@@ -161,7 +167,7 @@ public class OshGroupServerController extends BaseController {
         GroupDetailVO detail;
         if (activityId != null) {
             // 双数据源策略：先查用户发起记录，未找到则回退到系统活动模板
-            detail = groupServerService.selectGroupDetailWithFallback(activityId, userId);
+            detail = groupServerService.selectGroupDetailWithFallback(activityId, userId, sourceType);
         }  else {
             return R.fail("拼团id为空");
         }
@@ -178,7 +184,7 @@ public class OshGroupServerController extends BaseController {
      * POST /pc/group/work/join
      * 
      * @param activityId 拼团记录ID或活动模板ID
-     * @param payMethod 支付方式：wechat-微信支付 alipay-支付宝
+     * @param payMethod 支付方式：当前统一为 alipay
      * @return 参团结果（包含订单号、支付状态等）
      */
     @ApiOperation("参与拼团")
@@ -186,8 +192,9 @@ public class OshGroupServerController extends BaseController {
     @PostMapping("/work/join")
     public R<com.backstage.system.domain.vo.group.JoinGroupVO> join(
             @ApiParam("拼团记录ID或活动模板ID") @RequestParam(value = "activityId") Long activityId,
-            @ApiParam("支付方式：wechat-微信支付 alipay-支付宝") 
-            @RequestParam(value = "payMethod", defaultValue = "wechat") String payMethod) {
+            @ApiParam("支付方式：当前统一为支付宝") 
+            @RequestParam(value = "payMethod", defaultValue = "alipay") String payMethod,
+            @ApiParam("来源：system/initiated") @RequestParam(value = "sourceType") String sourceType) {
         // 从 ThreadLocal 获取网校用户ID（OshAuthenticationFilter 已写入）
         Long userId = ThreadLocalUtil.get(OshUserConstants.USER_ID, Long.class);
         if (userId == null) {
@@ -196,7 +203,8 @@ public class OshGroupServerController extends BaseController {
         
         try {
             // 参与拼团无需额外权限检查，登录用户均可参与
-            com.backstage.system.domain.vo.group.JoinGroupVO result = groupServerService.joinGroup(activityId, userId, payMethod);
+            com.backstage.system.domain.vo.group.JoinGroupVO result =
+                    groupServerService.joinGroup(activityId, userId, payMethod, sourceType);
             return R.ok(result, result.getMessage());
         } catch (com.backstage.common.exception.ServiceException e) {
             return R.fail(e.getMessage()); // 业务异常保留原始消息
@@ -347,7 +355,7 @@ public class OshGroupServerController extends BaseController {
      * POST /pc/group/work/pay
      * 
      * @param orderNo 订单号
-     * @param payMethod 支付方式：wechat-微信支付 alipay-支付宝
+     * @param payMethod 支付方式：当前统一为 alipay
      * @param name 商品名称
      * @return 支付二维码链接
      */
@@ -356,7 +364,7 @@ public class OshGroupServerController extends BaseController {
     @PostMapping("/work/pay")
     public R<PayResponse> pay(
             @ApiParam("订单号") @RequestParam(value = "orderNo") String orderNo,
-            @ApiParam("支付方式：wechat-微信支付 alipay-支付宝") @RequestParam(value = "payMethod", defaultValue = "wechat") String payMethod,
+            @ApiParam("支付方式：当前统一为支付宝") @RequestParam(value = "payMethod", defaultValue = "alipay") String payMethod,
             @ApiParam("商品名称") @RequestParam(value = "name") String name,
             HttpServletRequest request) {
         // 从 ThreadLocal 获取网校用户ID（验证登录状态）
@@ -383,6 +391,9 @@ public class OshGroupServerController extends BaseController {
             if (!"pending".equals(order.getStatus())) {
                 return R.fail("订单状态不允许支付");
             }
+            if (!("system".equals(order.getSourceType()) || "initiated".equals(order.getSourceType()))) {
+                return R.fail("该旧拼团订单缺少来源信息，请重新发起拼团后支付");
+            }
             
             // 4. 获取客户端IP
             String clientIp = IpUtils.getClientIp(request);
@@ -390,11 +401,21 @@ public class OshGroupServerController extends BaseController {
             // 5. 获取实际支付金额
             String money = order.getPrice() != null ? order.getPrice().toString() : "0";
             
-            // 6. 创建支付流水记录（必须先创建，才能被回调处理）
-            groupServerService.createGroupPayment(orderNo, order.getId(), money, clientIp);
-            
-            // 7. 调用支付服务创建支付（默认使用微信支付）
-            PayResponse response = payService.createPay(orderNo, name, money, clientIp, "wxpay");
+            String channel = PayChannelEnum.ALIPAY.getValue();
+
+            // 6. 支付流水固化 provider；历史待支付流水继续走原平台，避免切换时错查单。
+            String provider = groupServerService.createGroupPayment(
+                    orderNo,
+                    order.getId(),
+                    money,
+                    clientIp,
+                    payService.currentProvider(),
+                    PayChannelEnum.fromValue(channel).getCode()
+            );
+
+            // 7. 复用统一支付创建逻辑，完整保存二维码/平台响应，并正确处理确定失败。
+            PayResponse response = orderService.createPaymentForExistingOrder(
+                    orderNo, orderNo, clientIp, channel);
             
             if (response.getCode() == 1) {
                 return R.ok(response, "获取支付链接成功");
@@ -427,7 +448,8 @@ public class OshGroupServerController extends BaseController {
         }
         
         try {
-            // 直接查询 osh_order 表（拼团支付链路已同步写入）
+            // 统一状态查询会在本地 pending 时主动向原支付平台查单补单。
+            orderService.getOrderStatusForUser(orderNo, userId);
             OshOrder order = oshOrderMapper.selectByOrderNo(orderNo);
             if (order == null) {
                 return R.fail("订单不存在");
@@ -475,10 +497,11 @@ public class OshGroupServerController extends BaseController {
     @ApiOperation("获取服务器教程")
     @GetMapping("/server/tutorial")
     public R<com.backstage.system.domain.vo.group.ServerTutorialVO> getServerTutorial(
-            @ApiParam("拼团活动ID") @RequestParam(value = "activityId") Long activityId) {
+            @ApiParam("拼团活动ID") @RequestParam(value = "activityId") Long activityId,
+            @ApiParam("来源：system/initiated") @RequestParam(value = "sourceType") String sourceType) {
         try {
             com.backstage.system.domain.vo.group.ServerTutorialVO tutorial = 
-                groupServerService.getServerTutorial(activityId);
+                groupServerService.getServerTutorial(activityId, sourceType);
             return R.ok(tutorial, "查询成功");
         } catch (com.backstage.common.exception.ServiceException e) {
             return R.fail(e.getMessage());
@@ -500,7 +523,8 @@ public class OshGroupServerController extends BaseController {
     @ApiOperation("获取服务器SSH信息")
     @GetMapping("/server/ssh-info")
     public R<com.backstage.system.domain.vo.group.ServerSshInfoVO> getServerSshInfo(
-            @ApiParam("拼团活动ID") @RequestParam(value = "activityId") Long activityId) {
+            @ApiParam("拼团活动ID") @RequestParam(value = "activityId") Long activityId,
+            @ApiParam("来源：system/initiated") @RequestParam(value = "sourceType") String sourceType) {
         try {
             // 从 ThreadLocal 获取网校用户ID
             Long userId = ThreadLocalUtil.get(OshUserConstants.USER_ID, Long.class);
@@ -509,14 +533,14 @@ public class OshGroupServerController extends BaseController {
             }
 
             // 校验用户是否为该拼团的成员（防止越权获取服务器凭证）
-            boolean isMember = groupServerService.isUserInGroup(userId, activityId);
+            boolean isMember = groupServerService.isUserInGroup(userId, activityId, sourceType);
             if (!isMember) {
                 logger.warn("【拼团SSH】越权访问尝试: userId={}, activityId={}", userId, activityId);
                 return R.fail("无权访问");
             }
             
             com.backstage.system.domain.vo.group.ServerSshInfoVO sshInfo = 
-                groupServerService.getServerSshInfo(activityId, userId);
+                groupServerService.getServerSshInfo(activityId, userId, sourceType);
             return R.ok(sshInfo, "查询成功");
         } catch (Exception e) {
             logger.error("获取服务器SSH信息失败", e);

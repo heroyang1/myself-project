@@ -1,12 +1,15 @@
 package com.backstage.system.task;
 
 import com.backstage.system.domain.servergroup.OshGroupOrder;
-import com.backstage.system.domain.servergroup.OshGroupUserInitiated;
+import com.backstage.system.domain.order.OshPayment;
+import com.backstage.system.domain.order.enums.PaymentStatusEnum;
+import com.backstage.system.mapper.order.OshPaymentMapper;
 import com.backstage.system.mapper.servergroup.OshGroupServerMapper;
-import com.backstage.system.mapper.servergroup.OshGroupUserInitiatedMapper;
+import com.backstage.system.service.order.OrderService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -33,13 +36,16 @@ public class GroupOrderTimeoutCancelTask {
     private static final Logger log = LoggerFactory.getLogger(GroupOrderTimeoutCancelTask.class);
 
     /** 订单超时时间（分钟） */
-    private static final int TIMEOUT_MINUTES = 15;
+    private static final int TIMEOUT_MINUTES = 30;
 
     @Autowired
     private OshGroupServerMapper groupServerMapper;
 
     @Autowired
-    private OshGroupUserInitiatedMapper userInitiatedMapper;
+    private OshPaymentMapper paymentMapper;
+
+    @Autowired
+    private OrderService orderService;
 
     /**
      * 取消超时未支付的拼团订单
@@ -48,7 +54,8 @@ public class GroupOrderTimeoutCancelTask {
      * 建议执行时间：每5分钟
      * Cron 表达式：0 0/5 * * * ?
      */
-    // @Scheduled(cron = "0 0/5 * * * ?")
+    @Scheduled(fixedDelayString = "${pay.group.reconcile-delay-ms:60000}",
+            initialDelayString = "${pay.group.reconcile-initial-delay-ms:60000}")
     public void cancelTimeoutOrders() {
         log.info("========== 开始取消超时拼团订单 ==========");
         
@@ -74,8 +81,9 @@ public class GroupOrderTimeoutCancelTask {
             
             for (OshGroupOrder order : timeoutOrders) {
                 try {
-                    cancelOrder(order);
-                    cancelledCount++;
+                    if (cancelOrderSafely(order)) {
+                        cancelledCount++;
+                    }
                 } catch (Exception e) {
                     failedCount++;
                     log.error("取消订单失败，订单号: {}", order.getOrderNo(), e);
@@ -119,11 +127,8 @@ public class GroupOrderTimeoutCancelTask {
         log.info("开始取消订单: {}, 用户ID: {}", order.getOrderNo(), order.getUserId());
         
         // 1. 更新订单状态为已取消
-        int updateOrderResult = groupServerMapper.updateOrderStatus(
-            order.getId(), 
-            "cancelled",
-            LocalDateTime.now()
-        );
+        int updateOrderResult = groupServerMapper.updatePendingGroupOrderToCancelled(
+                order.getId(), LocalDateTime.now());
         
         if (updateOrderResult <= 0) {
             throw new RuntimeException("更新订单状态失败");
@@ -131,7 +136,7 @@ public class GroupOrderTimeoutCancelTask {
         
         // 2. 更新参团记录状态为已取消（3=已取消）
         if (order.getGroupWorkId() != null) {
-            groupServerMapper.updateGroupWorkStatus(order.getGroupWorkId(), 3);
+            groupServerMapper.updatePendingGroupWorkToCancelled(order.getGroupWorkId());
         }
         
         // 注意：不再释放拼团活动人数（currentNum），因为 join 时未递增 currentNum，
@@ -141,55 +146,26 @@ public class GroupOrderTimeoutCancelTask {
     }
 
     /**
-     * 释放系统活动拼团名额
+     * 有统一支付流水时，必须先查单、关单并再次查单；只有从未创建支付流水的预占单
+     * 才能直接释放，避免二维码仍可付款但拼团已经被本地取消。
      */
-    private void releaseActivityQuota(Long activityId) {
-        // 查询当前人数
-        com.backstage.system.domain.servergroup.OshGroupActivity activity = groupServerMapper.selectGroupActivityById(activityId);
-        if (activity == null) {
-            log.warn("拼团活动不存在，ID: {}", activityId);
-            return;
+    private boolean cancelOrderSafely(OshGroupOrder order) {
+        OshPayment payment = paymentMapper.selectByPaymentNo(order.getOrderNo());
+        if (payment == null) {
+            cancelOrder(order);
+            return true;
         }
-        
-        // 减少人数（至少为0）
-        int newCurrentNum = Math.max(0, activity.getCurrentNum() - 1);
-        
-        int updateResult = groupServerMapper.incrementGroupActivityCurrentNum(
-            activityId,
-            newCurrentNum,
-            activity.getStatus(),
-            LocalDateTime.now()
-        );
-        
-        if (updateResult > 0) {
-            log.info("释放系统活动拼团名额成功，活动ID: {}, 当前人数: {}", activityId, newCurrentNum);
+        if (PaymentStatusEnum.PENDING.getCode() == payment.getStatus()) {
+            orderService.cancelPayment(payment.getPaymentNo());
+            return true;
         }
+        if (PaymentStatusEnum.SUCCESS.getCode() == payment.getStatus()) {
+            log.warn("拼团统一订单已支付，禁止超时取消, orderNo={}", order.getOrderNo());
+            return false;
+        }
+        // 统一支付已明确失败/关闭，但拼团后置状态尚未同步，安全释放预占。
+        cancelOrder(order);
+        return true;
     }
 
-    /**
-     * 释放用户发起拼团名额
-     */
-    private void releaseUserInitiatedQuota(Long initiatedId) {
-        // 尝试查询用户发起记录
-        OshGroupUserInitiated initiated = userInitiatedMapper.selectById(initiatedId);
-        if (initiated == null) {
-            // 可能不是用户发起的拼团，忽略
-            return;
-        }
-        
-        // 减少人数（至少为0）
-        int newCurrentNum = Math.max(0, initiated.getCurrentNum() - 1);
-        
-        int updateResult = userInitiatedMapper.updateCurrentNum(initiatedId, newCurrentNum);
-        
-        if (updateResult > 0) {
-            log.info("释放用户发起拼团名额成功，记录ID: {}, 当前人数: {}", initiatedId, newCurrentNum);
-            
-            // 如果人数低于最低成团人数，更新状态为招募中
-            if (newCurrentNum < initiated.getMinNum() && initiated.getGroupStatus() == 1) {
-                userInitiatedMapper.updateGroupStatus(initiatedId, 0); // 0-招募中
-                log.info("拼团人数低于最低要求，状态更新为招募中，记录ID: {}", initiatedId);
-            }
-        }
-    }
 }

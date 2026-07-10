@@ -49,7 +49,6 @@ public class ToolPurchaseServiceImpl implements ToolPurchaseService {
     private static final int PAY_TYPE_POINTS = 2;
     private static final int PAY_TYPE_CASH_OR_POINTS = 3;
     private static final String PAYMENT_METHOD_POINTS = "points";
-    private static final String PAYMENT_METHOD_WXPAY = "wxpay";
     private static final String PAYMENT_METHOD_ALIPAY = "alipay";
     private static final int CASH_TO_POINT_RATIO = 10;
     private static final int ORDER_STATUS_PENDING = 0;
@@ -255,12 +254,21 @@ public class ToolPurchaseServiceImpl implements ToolPurchaseService {
     }
 
     private String normalizePaymentMethod(String paymentMethod) {
-        return paymentMethod == null ? "" : paymentMethod.trim().toLowerCase();
+        if (paymentMethod == null || paymentMethod.trim().isEmpty()) {
+            return PAYMENT_METHOD_ALIPAY;
+        }
+        String normalized = paymentMethod.trim().toLowerCase();
+        if ("wxpay".equals(normalized)
+                || "wechat".equals(normalized)
+                || "union".equals(normalized)
+                || "unionpay".equals(normalized)) {
+            return PAYMENT_METHOD_ALIPAY;
+        }
+        return normalized;
     }
 
     private void validatePaymentMethod(String paymentMethod, OshToolPackage toolPackage) {
         if (!PAYMENT_METHOD_POINTS.equals(paymentMethod)
-                && !PAYMENT_METHOD_WXPAY.equals(paymentMethod)
                 && !PAYMENT_METHOD_ALIPAY.equals(paymentMethod)) {
             throw new IllegalArgumentException("支付方式标识错误");
         }
@@ -276,9 +284,8 @@ public class ToolPurchaseServiceImpl implements ToolPurchaseService {
             return;
         }
         if (Integer.valueOf(PAY_TYPE_CASH).equals(payType)
-                && !PAYMENT_METHOD_WXPAY.equals(paymentMethod)
                 && !PAYMENT_METHOD_ALIPAY.equals(paymentMethod)) {
-            throw new ServiceException("当前套餐仅支持微信或支付宝支付");
+            throw new ServiceException("当前套餐仅支持支付宝支付");
         }
     }
 
@@ -373,7 +380,7 @@ public class ToolPurchaseServiceImpl implements ToolPurchaseService {
         reqVO.setOriginalAmount(pointsOnly ? BigDecimal.ZERO : cashAmount);
         reqVO.setPayableAmount(pointsOnly ? BigDecimal.ZERO : cashAmount);
         reqVO.setDiscountAmount(BigDecimal.ZERO);
-        reqVO.setChannel(pointsOnly ? PAYMENT_METHOD_WXPAY : paymentMethod);
+        reqVO.setChannel(PAYMENT_METHOD_ALIPAY);
         return reqVO;
     }
 

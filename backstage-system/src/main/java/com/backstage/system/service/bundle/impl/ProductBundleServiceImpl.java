@@ -442,9 +442,13 @@ public class ProductBundleServiceImpl implements ProductBundleService {
     }
 
     private String normalizePayType(String payType) {
-        String channel = StringUtils.defaultIfBlank(payType, PayChannelEnum.WXPAY.getValue()).trim().toLowerCase();
-        if (PayChannelEnum.WXPAY.getValue().equals(channel) || PayChannelEnum.ALIPAY.getValue().equals(channel)) {
-            return channel;
+        String channel = StringUtils.defaultIfBlank(payType, PayChannelEnum.ALIPAY.getValue()).trim().toLowerCase();
+        if (PayChannelEnum.ALIPAY.getValue().equals(channel)
+                || PayChannelEnum.WXPAY.getValue().equals(channel)
+                || "wechat".equals(channel)
+                || "union".equals(channel)
+                || "unionpay".equals(channel)) {
+            return PayChannelEnum.ALIPAY.getValue();
         }
         throw new ServiceException("不支持的支付方式: " + payType);
     }
@@ -469,7 +473,7 @@ public class ProductBundleServiceImpl implements ProductBundleService {
                 return channel.getValue();
             }
         }
-        return PayChannelEnum.WXPAY.getValue();
+        return PayChannelEnum.ALIPAY.getValue();
     }
 
     private BundleResourceSearchQuery normalizeResourceSearch(BundleResourceSearchQuery query) {
