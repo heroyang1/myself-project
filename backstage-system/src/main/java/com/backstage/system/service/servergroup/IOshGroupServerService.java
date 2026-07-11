@@ -10,13 +10,12 @@ import com.backstage.system.domain.vo.InitiableActivityVO;
 import com.backstage.system.domain.vo.MyGroupListVO;
 import com.backstage.system.domain.vo.UserInitiatedActivityListVO;
 import com.backstage.system.domain.vo.UserSearchVO;
+import com.backstage.system.domain.vo.group.AddUserToGroupVO;
 import com.backstage.system.domain.vo.group.JoinGroupVO;
 import com.backstage.system.domain.vo.group.ServerTutorialVO;
 import com.backstage.system.domain.vo.group.SharePosterVO;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 服务器拼团Service接口
@@ -132,7 +131,7 @@ public interface IOshGroupServerService {
      * @param operatorId 操作人ID（管理员）
      * @return 添加结果
      */
-    Map<String, Object> addUserToGroup(Long activityId, Long userId, String remark, Long operatorId);
+    AddUserToGroupVO addUserToGroup(Long activityId, Long userId, String remark, Long operatorId);
     
     /**
      * 根据订单号查询订单（用于支付接口获取金额）

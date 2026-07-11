@@ -3,6 +3,9 @@ package com.backstage.system.domain.vo.group;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import com.backstage.system.domain.servergroup.enums.GroupConstants;
+import com.backstage.system.domain.servergroup.enums.GroupOrderStatusEnum;
+
 /**
  * 参与拼团响应VO
  * 
@@ -53,14 +56,14 @@ public class JoinGroupVO {
         JoinGroupVO vo = new JoinGroupVO();
         vo.setOrderNo(orderNo);
         vo.setNeedPay(true);
-        vo.setStatus("pending");
+        vo.setStatus(GroupOrderStatusEnum.PENDING.getCode());
         vo.setPrice(price);
-        vo.setMessage("请在30分钟内完成支付");
+        vo.setMessage("请在" + GroupConstants.PAY_TIMEOUT_MINUTES + "分钟内完成支付");
         vo.setCreateTime(LocalDateTime.now().toString());
-        // 设置支付过期时间为30分钟后
-        LocalDateTime expireTime = LocalDateTime.now().plusMinutes(30);
+        // 设置支付过期时间
+        LocalDateTime expireTime = LocalDateTime.now().plusMinutes(GroupConstants.PAY_TIMEOUT_MINUTES);
         vo.setPayExpireTime(expireTime);
-        vo.setPayExpireSeconds(30 * 60L);
+        vo.setPayExpireSeconds(GroupConstants.PAY_TIMEOUT_MINUTES * 60L);
         return vo;
     }
     
@@ -70,7 +73,7 @@ public class JoinGroupVO {
     public static JoinGroupVO success(String message) {
         JoinGroupVO vo = new JoinGroupVO();
         vo.setNeedPay(false);
-        vo.setStatus("success");
+        vo.setStatus(GroupOrderStatusEnum.SUCCESS.getCode());
         vo.setPrice(BigDecimal.ZERO);
         vo.setMessage(message != null ? message : "参团成功");
         return vo;

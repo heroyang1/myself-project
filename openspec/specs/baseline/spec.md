@@ -41,3 +41,23 @@
 - GIVEN 当前业务依赖 ES 查询和同步
 - WHEN 计划升级 ES 版本
 - THEN design SHALL 说明客户端兼容、索引迁移、查询语法差异和回滚方式
+
+### Requirement: 拼团模块写操作必须具备并发防护
+
+拼团模块的 join、create、pay 等写操作接口 SHALL 使用 Redis 分布式锁防止重复提交，锁 Key 格式和 TTL 由 `GroupConstants` 统一管理。
+
+#### Scenario: 新增拼团写操作接口
+
+- GIVEN 开发人员新增拼团模块的写操作接口
+- WHEN 设计接口实现
+- THEN SHALL 参照现有 join/create/pay 的分布式锁模式（setIfAbsent + TTL + finally delete）
+
+### Requirement: 拼团模块状态码必须使用枚举管理
+
+拼团模块 SHALL 使用 `GroupStatusEnum` 和 `GroupOrderStatusEnum` 管理状态值，禁止硬编码。`osh_group_user_initiated.group_status` 的独立映射（0=招募中, 1=已成团, 2=已结束）SHALL 在代码中通过注释明确标注。
+
+#### Scenario: 新增状态相关逻辑
+
+- GIVEN 开发人员新增拼团状态相关代码
+- WHEN 比较或设置状态值
+- THEN SHALL 使用对应枚举常量，禁止使用裸数字或字符串
