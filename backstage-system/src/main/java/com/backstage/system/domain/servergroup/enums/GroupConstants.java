@@ -47,11 +47,18 @@ public final class GroupConstants {
     public static final int MAX_DURATION_MONTHS = 120;
 
     // ==================== 支付方式 ====================
-    /** 默认支付方式：微信支付 */
-    public static final String DEFAULT_PAY_METHOD = "wechat";
-
     /** 支付宝支付方式 */
     public static final String PAY_METHOD_ALIPAY = "alipay";
+
+    /** 默认支付方式：支付宝（统一归一化后） */
+    public static final String DEFAULT_PAY_METHOD = PAY_METHOD_ALIPAY;
+
+    // ==================== 订单来源类型 ====================
+    /** 系统活动模板拼团 */
+    public static final String SOURCE_TYPE_SYSTEM = "system";
+
+    /** 用户发起拼团 */
+    public static final String SOURCE_TYPE_INITIATED = "initiated";
 
     // ==================== 缓存 Key 前缀 ====================
     /** 活动列表缓存前缀 */
@@ -70,18 +77,10 @@ public final class GroupConstants {
     /** 分享链接前缀（可通过配置注入覆盖） */
     public static final String SHARE_URL_PREFIX = "https://osh.net.cn/group/detail";
 
-    // ==================== Redis Key 前缀 ====================
-    /** 拼团分布式锁前缀 */
-    public static final String LOCK_JOIN_PREFIX = "group:join:lock:";
-
-    /** 拼团创建分布式锁前缀 */
-    public static final String LOCK_CREATE_PREFIX = "group:create:lock:";
-
-    /** 拼团支付分布式锁前缀 */
-    public static final String LOCK_PAY_PREFIX = "group:pay:lock:";
-
-    /** 分布式锁默认过期秒数 */
-    public static final long LOCK_EXPIRE_SECONDS = 10;
+    // ==================== Redis Key 前缀（预留） ====================
+    // 注意：当前拼团并发安全通过 SELECT FOR UPDATE + CAS 原子操作保证，
+    // 不使用 Redis 分布式锁。以下常量保留供未来扩展使用。
+    // 如需启用 Redis 锁，请配合 AOP 切面统一实现。
 
     // ==================== 日志模块标识 ====================
     /** 拼团模块日志标识 */

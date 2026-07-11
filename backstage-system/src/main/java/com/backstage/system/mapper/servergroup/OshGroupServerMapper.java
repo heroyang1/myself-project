@@ -139,12 +139,30 @@ public interface OshGroupServerMapper {
     int insertGroupWork(OshGroupWork work);
 
     /**
-     * 查询全量组团记录列表（管理端）
+     * 查询全量组团记录列表（管理端）- 已拆分为两个独立查询 + Java 层合并
      *
      * @param groupStatus 组团状态筛选（可选）：0-进行中 1-已成团 2-已结束
      * @return 组团记录列表
+     * @deprecated 使用 {@link #selectSystemGroupWorkList(Integer)} + {@link #selectInitiatedGroupWorkList(Integer)} 拆分查询替代
      */
+    @Deprecated
     List<GroupWorkListVO> selectGroupWorkList(@Param("groupStatus") Integer groupStatus);
+
+    /**
+     * 查询系统活动拼团记录列表（管理端拆分查询 - 系统活动部分）
+     *
+     * @param groupStatus 组团状态筛选（可选）
+     * @return 系统活动拼团记录
+     */
+    List<GroupWorkListVO> selectSystemGroupWorkList(@Param("groupStatus") Integer groupStatus);
+
+    /**
+     * 查询用户发起拼团记录列表（管理端拆分查询 - 用户发起部分）
+     *
+     * @param groupStatus 组团状态筛选（可选）
+     * @return 用户发起拼团记录
+     */
+    List<GroupWorkListVO> selectInitiatedGroupWorkList(@Param("groupStatus") Integer groupStatus);
     
     /**
      * 更新拼团活动人数（乐观锁）

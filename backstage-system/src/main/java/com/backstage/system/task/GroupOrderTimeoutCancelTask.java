@@ -1,6 +1,7 @@
 package com.backstage.system.task;
 
 import com.backstage.system.domain.servergroup.OshGroupOrder;
+import com.backstage.system.domain.servergroup.enums.GroupOrderStatusEnum;
 import com.backstage.system.domain.order.OshPayment;
 import com.backstage.system.domain.order.enums.PaymentStatusEnum;
 import com.backstage.system.mapper.order.OshPaymentMapper;
@@ -113,7 +114,7 @@ public class GroupOrderTimeoutCancelTask {
             log.warn("拼团订单不存在，跳过取消，订单号: {}", orderNo);
             return;
         }
-        if (!"pending".equals(order.getStatus())) {
+        if (!GroupOrderStatusEnum.PENDING.getCode().equals(order.getStatus())) {
             log.info("拼团订单不是待支付状态，跳过取消，订单号: {}, status={}", orderNo, order.getStatus());
             return;
         }

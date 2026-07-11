@@ -14,6 +14,8 @@ import com.backstage.system.domain.dto.AddUserToGroupDTO;
 import com.backstage.system.domain.order.enums.OrderStatusEnum;
 import com.backstage.system.domain.order.enums.PayChannelEnum;
 import com.backstage.system.domain.servergroup.OshGroupOrder;
+import com.backstage.system.domain.servergroup.enums.GroupConstants;
+import com.backstage.system.domain.servergroup.enums.GroupOrderStatusEnum;
 import com.backstage.system.domain.order.OshOrder;
 import com.backstage.system.mapper.order.OshOrderMapper;
 import com.backstage.system.domain.vo.GroupActivityListVO;
@@ -24,6 +26,8 @@ import com.backstage.system.domain.vo.InitiableActivityVO;
 import com.backstage.system.domain.vo.MyGroupListVO;
 import com.backstage.system.domain.vo.UserInitiatedActivityListVO;
 import com.backstage.system.domain.vo.UserSearchVO;
+import com.backstage.system.domain.vo.group.AddUserToGroupVO;
+import com.backstage.system.domain.vo.group.GroupOrderStatusVO;
 import com.backstage.system.domain.vo.order.PayResponse;
 import com.backstage.system.service.servergroup.IOshGroupServerService;
 import com.backstage.system.service.order.OrderService;
@@ -44,9 +48,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.DataIntegrityViolationException;
 import javax.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 服务器拼团C端Controller
@@ -193,7 +195,7 @@ public class OshGroupServerController extends BaseController {
     public R<com.backstage.system.domain.vo.group.JoinGroupVO> join(
             @ApiParam("拼团记录ID或活动模板ID") @RequestParam(value = "activityId") Long activityId,
             @ApiParam("支付方式：当前统一为支付宝") 
-            @RequestParam(value = "payMethod", defaultValue = "alipay") String payMethod,
+            @RequestParam(value = "payMethod", defaultValue = GroupConstants.PAY_METHOD_ALIPAY) String payMethod,
             @ApiParam("来源：system/initiated") @RequestParam(value = "sourceType") String sourceType) {
         // 从 ThreadLocal 获取网校用户ID（OshAuthenticationFilter 已写入）
         Long userId = ThreadLocalUtil.get(OshUserConstants.USER_ID, Long.class);
@@ -324,7 +326,7 @@ public class OshGroupServerController extends BaseController {
     @ApiOperation("手动添加用户到拼团")
     @PreAuthorize("hasAuthority('group:user:add')")
     @PostMapping("/user/add")
-    public R<Map<String, Object>> addUserToGroup(
+    public R<AddUserToGroupVO> addUserToGroup(
             @ApiParam("添加用户请求参数") @Validated @RequestBody AddUserToGroupDTO dto) {
         // 从 ThreadLocal 获取管理员ID
         Long operatorId = ThreadLocalUtil.get(OshUserConstants.USER_ID, Long.class);
@@ -333,13 +335,13 @@ public class OshGroupServerController extends BaseController {
         }
         
         try {
-            Map<String, Object> result = groupServerService.addUserToGroup(
+            AddUserToGroupVO result = groupServerService.addUserToGroup(
                 dto.getActivityId(), 
                 dto.getUserId(), 
                 dto.getRemark(), 
                 operatorId
             );
-            return R.ok(result, result.get("message").toString());
+            return R.ok(result, result.getMessage());
         } catch (com.backstage.common.exception.ServiceException e) {
             return R.fail(e.getMessage());
         } catch (Exception e) {
@@ -364,8 +366,8 @@ public class OshGroupServerController extends BaseController {
     @PostMapping("/work/pay")
     public R<PayResponse> pay(
             @ApiParam("订单号") @RequestParam(value = "orderNo") String orderNo,
-            @ApiParam("支付方式：当前统一为支付宝") @RequestParam(value = "payMethod", defaultValue = "alipay") String payMethod,
-            @ApiParam("商品名称") @RequestParam(value = "name") String name,
+            @ApiParam("支付方式：当前统一为支付宝") @RequestParam(value = "payMethod", defaultValue = GroupConstants.PAY_METHOD_ALIPAY) String payMethod,
+            @ApiParam("商品名称（保留参数，实际从数据库订单读取）") @RequestParam(value = "name", required = false, defaultValue = "") String name,
             HttpServletRequest request) {
         // 从 ThreadLocal 获取网校用户ID（验证登录状态）
         Long userId = ThreadLocalUtil.get(OshUserConstants.USER_ID, Long.class);
@@ -388,10 +390,10 @@ public class OshGroupServerController extends BaseController {
             }
             
             // 3. 校验订单状态（必须是待支付）
-            if (!"pending".equals(order.getStatus())) {
+            if (!GroupOrderStatusEnum.PENDING.getCode().equals(order.getStatus())) {
                 return R.fail("订单状态不允许支付");
             }
-            if (!("system".equals(order.getSourceType()) || "initiated".equals(order.getSourceType()))) {
+            if (!(GroupConstants.SOURCE_TYPE_SYSTEM.equals(order.getSourceType()) || GroupConstants.SOURCE_TYPE_INITIATED.equals(order.getSourceType()))) {
                 return R.fail("该旧拼团订单缺少来源信息，请重新发起拼团后支付");
             }
             
@@ -400,11 +402,10 @@ public class OshGroupServerController extends BaseController {
             
             // 5. 获取实际支付金额
             String money = order.getPrice() != null ? order.getPrice().toString() : "0";
-            
             String channel = PayChannelEnum.ALIPAY.getValue();
 
-            // 6. 支付流水固化 provider；历史待支付流水继续走原平台，避免切换时错查单。
-            String provider = groupServerService.createGroupPayment(
+            // 6. 创建支付流水记录（内部固化 provider 到 osh_payment，并同步写入 osh_order）
+            groupServerService.createGroupPayment(
                     orderNo,
                     order.getId(),
                     money,
@@ -416,7 +417,6 @@ public class OshGroupServerController extends BaseController {
             // 7. 复用统一支付创建逻辑，完整保存二维码/平台响应，并正确处理确定失败。
             PayResponse response = orderService.createPaymentForExistingOrder(
                     orderNo, orderNo, clientIp, channel);
-            
             if (response.getCode() == 1) {
                 return R.ok(response, "获取支付链接成功");
             } else {
@@ -439,7 +439,7 @@ public class OshGroupServerController extends BaseController {
      */
     @ApiOperation("查询拼团订单状态")
     @GetMapping("/order/status")
-    public R<Map<String, Object>> getOrderStatus(
+    public R<GroupOrderStatusVO> getOrderStatus(
             @ApiParam("订单号") @RequestParam(value = "orderNo") String orderNo) {
         // 从 ThreadLocal 获取网校用户ID（验证登录状态）
         Long userId = ThreadLocalUtil.get(OshUserConstants.USER_ID, Long.class);
@@ -463,21 +463,21 @@ public class OshGroupServerController extends BaseController {
             }
             
             // 构造返回结果
-            Map<String, Object> result = new HashMap<>();
-            result.put("orderNo", order.getOrderNo());
-            result.put("status", OrderStatusEnum.fromCode(order.getStatus()).getName());
-            result.put("paidTime", order.getPaidTime());
-            result.put("payableAmount", order.getPayableAmount());
-            result.put("productName", order.getProductName());
+            GroupOrderStatusVO vo = new GroupOrderStatusVO();
+            vo.setOrderNo(order.getOrderNo());
+            vo.setStatus(OrderStatusEnum.fromCode(order.getStatus()).getName());
+            vo.setPaidTime(order.getPaidTime());
+            vo.setPayableAmount(order.getPayableAmount());
+            vo.setProductName(order.getProductName());
             
             // 支付倒计时（待支付订单：创建后30分钟内需完成支付）
             if (order.getStatus() != null && order.getStatus() == OrderStatusEnum.PENDING.getCode() && order.getCreatedTime() != null) {
                 long elapsedSeconds = java.time.Duration.between(order.getCreatedTime(), java.time.LocalDateTime.now()).getSeconds();
                 long countdownSeconds = Math.max(30 * 60 - elapsedSeconds, 0);
-                result.put("countdownSeconds", countdownSeconds);
+                vo.setCountdownSeconds(countdownSeconds);
             }
             
-            return R.ok(result, "查询成功");
+            return R.ok(vo, "查询成功");
         } catch (Exception e) {
             logger.error("查询订单状态失败", e);
             return R.fail("查询失败，请稍后重试");

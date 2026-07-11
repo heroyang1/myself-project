@@ -3,7 +3,6 @@ package com.backstage.system.mapper.servergroup;
 import com.backstage.system.domain.servergroup.OshGroupUserInitiated;
 import com.backstage.system.domain.vo.UserInitiatedActivityListVO;
 import org.apache.ibatis.annotations.Mapper;
-import org.apache.ibatis.annotations.MapKey;
 import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
@@ -105,8 +104,7 @@ public interface OshGroupUserInitiatedMapper {
      * @param activityId 拼团活动ID
      * @return 拼团活动信息（包含当前人数、最大人数、状态等）
      */
-    @MapKey("id")
-    java.util.Map<String, Object> selectActivityDetail(@Param("activityId") Long activityId);
+    OshGroupUserInitiated selectActivityDetail(@Param("activityId") Long activityId);
 
     // ==================== 定时任务相关方法 ====================
 

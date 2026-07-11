@@ -94,15 +94,19 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="type != null and type != ''">
                 AND gui.user_id IS NOT NULL
             </if>
-            <if test="status != null">
-                AND (
-                    CASE 
-                        WHEN gui.group_status = 0 THEN 1
-                        WHEN gui.group_status = 1 THEN 2
-                        WHEN gui.group_status = 2 THEN 3
-                        ELSE 1
-                    END
-                ) = #{status}
+            <!-- 状态映射：前端 status → 数据库 group_status
+                 status=1(进行中) → group_status=0(招募中)
+                 status=2(拼团成功) → group_status=1(已成团)
+                 status=3(已结束) → group_status=2(已取消/过期)
+                 使用直接等值比较，避免 CASE WHEN 导致索引失效 -->
+            <if test="status != null and status == 1">
+                AND gui.group_status = 0
+            </if>
+            <if test="status != null and status == 2">
+                AND gui.group_status = 1
+            </if>
+            <if test="status != null and status == 3">
+                AND gui.group_status = 2
             </if>
         </where>
         ORDER BY gui.initiate_time DESC
@@ -234,10 +238,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </select>
 
     <!-- 查询拼团活动详情（用于校验） -->
-    <select id="selectActivityDetail" resultType="java.util.HashMap">
+    <select id="selectActivityDetail" resultMap="OshGroupUserInitiatedResult">
         SELECT 
             id,
-            user_id AS leaderUserId,
+            user_id,
             min_num,
             max_num,
             current_num,

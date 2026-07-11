@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
  * @author system
  * @date 2026-04-18
  */
-public class GroupActivityListVO {
+public class GroupActivityListVO implements GroupPriceCalculable {
     
     /** 拼团ID */
     private Long id;
