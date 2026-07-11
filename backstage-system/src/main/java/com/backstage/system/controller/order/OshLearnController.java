@@ -11,7 +11,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -109,14 +108,4 @@ public class OshLearnController extends BaseController
         return toAjax(oshLearnService.updateOshLearn(oshLearn));
     }
 
-    /**
-     * 删除立即学习
-     */
-    @PreAuthorize("@ss.hasPermi('system:learn:remove')")
-    @Log(title = "立即学习", businessType = BusinessType.DELETE)
-	@DeleteMapping("/{ids}")
-    public AjaxResult remove(@PathVariable Long[] ids)
-    {
-        return toAjax(oshLearnService.deleteOshLearnByIds(ids));
-    }
 }

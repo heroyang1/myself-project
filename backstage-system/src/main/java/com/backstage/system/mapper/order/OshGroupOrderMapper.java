@@ -43,19 +43,4 @@ public interface OshGroupOrderMapper
      */
     public int updateOshGroupOrder(OshGroupOrder oshGroupOrder);
 
-    /**
-     * 删除订单
-     * 
-     * @param id 订单主键
-     * @return 结果
-     */
-    public int deleteOshGroupOrderById(Long id);
-
-    /**
-     * 批量删除订单
-     * 
-     * @param ids 需要删除的数据主键集合
-     * @return 结果
-     */
-    public int deleteOshGroupOrderByIds(Long[] ids);
 }

@@ -43,19 +43,4 @@ public interface OshOrderListMapper
      */
     public int updateOshOrderList(OshOrderList oshOrderList);
 
-    /**
-     * 删除我的订单列
-     * 
-     * @param id 我的订单列主键
-     * @return 结果
-     */
-    public int deleteOshOrderListById(Long id);
-
-    /**
-     * 批量删除我的订单列
-     * 
-     * @param ids 需要删除的数据主键集合
-     * @return 结果
-     */
-    public int deleteOshOrderListByIds(Long[] ids);
 }

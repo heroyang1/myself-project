@@ -9,6 +9,7 @@ import com.backstage.common.annotation.OshUserEvent;
 import com.backstage.common.constant.ResourceType;
 import com.backstage.common.core.domain.R;
 import com.backstage.common.exception.ServiceException;
+import com.backstage.system.domain.order.OrderPaymentInfo;
 import com.backstage.system.domain.vo.pay.OrderCheckoutRespVO;
 import com.backstage.system.mapper.course.CourseBuyMapper;
 import com.backstage.system.service.course.ICoursePayService;
@@ -43,7 +44,7 @@ public class CoursePayController {
             return R.fail("请先登录后再支付");
         }
         Long courseId = parseCourseId(body.get("course_id"));
-        String payType = body.get("pay_type") == null ? "wxpay" : body.get("pay_type").toString();
+        String payType = body.get("pay_type") == null ? "alipay" : body.get("pay_type").toString();
         String clientIp = resolveClientIp(request);
 
         try {
@@ -63,36 +64,47 @@ public class CoursePayController {
             resourceNameExpression = "#result.data['order_no']",
             recordConditionExpression = "#result.data['consume_recorded'] == true",
             description = "课程支付成功消费", recordAnonymous = true, successOnly = true)
-    public R<Map<String, Object>> status(@RequestParam("out_trade_no") String outTradeNo) {
+    public R<Map<String, Object>> status(@RequestParam(value = "out_trade_no", required = false) String outTradeNo,
+                                         @RequestParam(value = "orderNo", required = false) String orderNo) {
         Long userId = UserContextUtil.getCurrentUserIdSafely();
         if (userId == null) {
             return R.fail("请先登录后再查询支付状态");
         }
-        Map<String, Object> before = courseBuyMapper.selectByOrderNoAndUserId(outTradeNo, userId);
+        String queryOrderNo = orderNo == null || orderNo.trim().isEmpty() ? outTradeNo : orderNo;
+        if (queryOrderNo == null || queryOrderNo.trim().isEmpty()) {
+            return R.fail("订单号不能为空");
+        }
+
+        Map<String, Object> before = courseBuyMapper.selectByOrderNoAndUserId(queryOrderNo, userId);
         boolean wasPaid = isPaid(before);
-        boolean paid = coursePayService.isCoursePaid(outTradeNo, userId);
-        Map<String, Object> latest = courseBuyMapper.selectByOrderNoAndUserId(outTradeNo, userId);
+        boolean paid = coursePayService.isCoursePaid(queryOrderNo, userId);
+        Map<String, Object> latest = courseBuyMapper.selectByOrderNoAndUserId(queryOrderNo, userId);
         boolean changedToPaid = paid && !wasPaid && isPaid(latest);
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("paid", paid);
         data.put("consume_recorded", changedToPaid);
-        data.put("order_no", outTradeNo);
+        data.put("order_no", queryOrderNo);
+        data.put("orderNo", queryOrderNo);
         putIfNotNull(data, "course_id", latest == null ? null : latest.get("courseId"));
         putIfNotNull(data, "pay_price", latest == null ? null : latest.get("payPrice"));
         return R.ok(data);
     }
 
     private Map<String, Object> toCreateResponse(OrderCheckoutRespVO checkoutResp, String payType, Long courseId) {
+        OrderPaymentInfo payment = checkoutResp.getPayment();
+        String qrcode = payment == null ? null : firstNonBlank(payment.getQrcode(), payment.getPayUrl());
+        String payUrl = payment == null ? null : payment.getPayUrl();
+
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("needPay", checkoutResp.isNeedPay());
-        data.put("qrcode", checkoutResp.getPayment() == null ? null : checkoutResp.getPayment().getQrcode());
-        data.put("payurl", checkoutResp.getPayment() == null ? null : checkoutResp.getPayment().getPayUrl());
-        data.put("payUrl", checkoutResp.getPayment() == null ? null : checkoutResp.getPayment().getPayUrl());
+        data.put("qrcode", qrcode);
+        data.put("payurl", payUrl);
+        data.put("payUrl", payUrl);
         data.put("out_trade_no", checkoutResp.getOrderNo());
         data.put("orderNo", checkoutResp.getOrderNo());
         data.put("paymentNo", checkoutResp.getPaymentNo());
-        data.put("pay_type", payType);
+        data.put("pay_type", payment == null ? payType : payment.getChannel());
         data.put("course_id", courseId);
         data.put("price", checkoutResp.getPrice());
         data.put("pointsUsed", checkoutResp.getPointsUsed());
@@ -101,6 +113,13 @@ public class CoursePayController {
         data.put("expireTime", checkoutResp.getExpireTime());
         data.put("closeExpireMinutes", checkoutResp.getCloseExpireMinutes());
         return data;
+    }
+
+    private String firstNonBlank(String first, String second) {
+        if (first != null && !first.trim().isEmpty()) {
+            return first;
+        }
+        return second;
     }
 
     private boolean isPaid(Map<String, Object> courseBuy) {

@@ -43,19 +43,4 @@ public interface WxPayMapper
      */
     public int updateWxPay(WxPay wxPay);
 
-    /**
-     * 删除微信支付
-     * 
-     * @param id 微信支付主键
-     * @return 结果
-     */
-    public int deleteWxPayById(Long id);
-
-    /**
-     * 批量删除微信支付
-     * 
-     * @param ids 需要删除的数据主键集合
-     * @return 结果
-     */
-    public int deleteWxPayByIds(Long[] ids);
 }

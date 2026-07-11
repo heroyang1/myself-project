@@ -88,14 +88,4 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where id = #{id}
     </update>
 
-    <delete id="deleteOshFlashsaleListById" parameterType="Long">
-        delete from osh_flashsale_list where id = #{id}
-    </delete>
-
-    <delete id="deleteOshFlashsaleListByIds" parameterType="String">
-        delete from osh_flashsale_list where id in 
-        <foreach item="id" collection="array" open="(" separator="," close=")">
-            #{id}
-        </foreach>
-    </delete>
 </mapper>

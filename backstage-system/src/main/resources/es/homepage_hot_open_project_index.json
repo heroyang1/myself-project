@@ -1,0 +1,21 @@
+{
+  "settings": { "number_of_shards": 1, "number_of_replicas": 0 },
+  "mappings": {
+    "properties": {
+      "id": { "type": "long" },
+      "projectName": { "type": "text", "fields": { "keyword": { "type": "keyword", "ignore_above": 256 } } },
+      "projectDesc": { "type": "text" },
+      "projectUrl": { "type": "keyword" },
+      "authorName": { "type": "keyword" },
+      "projectCover": { "type": "keyword" },
+      "starCount": { "type": "integer" },
+      "forkCount": { "type": "integer" },
+      "lastCommit": { "type": "keyword" },
+      "tagList": { "type": "keyword" },
+      "detailUrl": { "type": "keyword" },
+      "sortNo": { "type": "integer" },
+      "sourceLimit": { "type": "integer" },
+      "syncTime": { "type": "date", "format": "yyyy-MM-dd HH:mm:ss||strict_date_optional_time||epoch_millis" }
+    }
+  }
+}

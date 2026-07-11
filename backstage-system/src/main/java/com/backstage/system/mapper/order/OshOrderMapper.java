@@ -5,13 +5,12 @@ import com.backstage.system.domain.vo.order.AdminOrderDashboardVO;
 import com.backstage.system.domain.vo.order.AdminOrderPageItemVO;
 import com.backstage.system.domain.vo.order.AdminOrderPageQueryVO;
 import com.backstage.system.domain.vo.order.AdminOrderPaymentVO;
-import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
-public interface OshOrderMapper extends BaseMapper<OshOrder> {
+public interface OshOrderMapper {
 
     int insertOshOrder(OshOrder order);
 

@@ -11,11 +11,9 @@ import java.util.List;
  */
 public interface IOshHomePageOpenProjectService {
 
-    /**
-     * 查询首页热门开源项目
-     *
-     * @param limit 返回数量
-     * @return 热门开源项目列表（含标签）
-     */
     List<HotOpenProjectVO> getHotOpenProjects(int limit);
+
+    List<HotOpenProjectVO> getHotOpenProjectsFromMysql(int effectiveLimit);
+
+    int syncHotOpenProjectsToEs();
 }

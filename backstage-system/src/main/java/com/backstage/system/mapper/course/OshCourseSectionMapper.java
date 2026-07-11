@@ -1,5 +1,6 @@
 package com.backstage.system.mapper.course;
 
+import com.backstage.system.domain.homepage.vo.HotCourseLatestSectionVO;
 import com.backstage.system.domain.course.OshCourseSection;
 import org.apache.ibatis.annotations.MapKey;
 import org.apache.ibatis.annotations.Mapper;
@@ -20,7 +21,6 @@ public interface OshCourseSectionMapper {
     /**
      * 查询章节列表
      */
-    @MapKey("id")
     List<Map<String, Object>> selectSectionsByCourseId(@Param("courseId") Long courseId);
     
     /**
@@ -37,11 +37,22 @@ public interface OshCourseSectionMapper {
      */
     @MapKey("id")
     Map<String, Object> selectSectionVideoById(@Param("sectionId") Long sectionId);
+
+    /**
+     * 查询课程最近更新的两个视频小节
+     */
+    List<HotCourseLatestSectionVO> selectLatestUpdatedSectionsByCourseId(@Param("courseId") Long courseId,
+                                                                         @Param("limit") Integer limit);
     
     /**
      * 统计章节数量
      */
     int countSectionsByCourseId(@Param("courseId") Long courseId);
+
+    /**
+     * 统计课程下视频小节数量，兼容早期 type 为空但 media_url 已写入的历史数据。
+     */
+    int countVideoSectionsByCourseId(@Param("courseId") Long courseId);
     
     /**
      * 新增章节
@@ -58,7 +69,7 @@ public interface OshCourseSectionMapper {
     /**
      * 修改章节
      */
-    int updateSection(Map<String, Object> params);
+    int updateSection(OshCourseSection section);
     
     /**
      * 删除章节
@@ -81,5 +92,5 @@ public interface OshCourseSectionMapper {
      * @param ids 章节ID列表
      * @return 章节列表（包含id和media_url）
      */
-    List<OshCourseSection> selectSectionsByIds(@Param("ids") List<Long> ids);
+    List<OshCourseSection> selectSectionsByIds(List<Long> ids);
 }

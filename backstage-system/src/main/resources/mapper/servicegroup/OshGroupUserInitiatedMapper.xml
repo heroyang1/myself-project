@@ -150,6 +150,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         WHERE id = #{id} AND delete_flag = 0
     </select>
 
+    <select id="selectByIdForUpdate" parameterType="java.lang.Long" resultMap="OshGroupUserInitiatedResult">
+        <include refid="selectUserInitiatedVo"/>
+        WHERE id = #{id} AND delete_flag = 0
+        FOR UPDATE
+    </select>
+
     <!-- 查询用户发起的拼团列表 -->
     <select id="selectByUserId" resultMap="OshGroupUserInitiatedResult">
         <include refid="selectUserInitiatedVo"/>

@@ -9,6 +9,7 @@ import com.backstage.system.domain.order.OshOrder;
 import com.backstage.system.domain.order.OshPayment;
 import com.backstage.system.domain.order.enums.OrderStatusEnum;
 import com.backstage.system.domain.order.enums.PayChannelEnum;
+import com.backstage.system.domain.order.enums.PaymentProviderEnum;
 import com.backstage.system.domain.order.enums.PaymentStatusEnum;
 import com.backstage.system.domain.order.enums.ProductTypeEnum;
 import com.backstage.system.domain.order.enums.PurchaseModeEnum;
@@ -546,6 +547,7 @@ public class RedeemServiceImpl implements RedeemService {
         payment.setOrderNo(order.getOrderNo());
         payment.setPaymentNo(paymentNo);
         payment.setChannel(PayChannelEnum.OFFLINE.getCode());
+        payment.setProvider(PaymentProviderEnum.INTERNAL.getValue());
         payment.setAmount(code.getAmount());
         payment.setStatus(PaymentStatusEnum.SUCCESS.getCode());
         payment.setPlatformTradeNo(code.getCode());

@@ -5,6 +5,7 @@ public class CourseSearchUserStateVo {
     private Long courseId;
     private Integer collectionFlag;
     private Integer buyFlag;
+    private Integer salesCount;
 
     public Long getCourseId() {
         return courseId;
@@ -28,5 +29,13 @@ public class CourseSearchUserStateVo {
 
     public void setBuyFlag(Integer buyFlag) {
         this.buyFlag = buyFlag;
+    }
+
+    public Integer getSalesCount() {
+        return salesCount;
+    }
+
+    public void setSalesCount(Integer salesCount) {
+        this.salesCount = salesCount;
     }
 }

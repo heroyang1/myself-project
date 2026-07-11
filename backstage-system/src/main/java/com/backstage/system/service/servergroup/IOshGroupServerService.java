@@ -84,7 +84,7 @@ public interface IOshGroupServerService {
      * @param userId 当前用户ID（可为null）
      * @return 拼团详情
      */
-    GroupDetailVO selectGroupDetailWithFallback(Long activityId, Long userId);
+    GroupDetailVO selectGroupDetailWithFallback(Long activityId, Long userId, String sourceType);
     
     /**
      * 参与拼团
@@ -94,7 +94,7 @@ public interface IOshGroupServerService {
      * @param payMethod 支付方式
      * @return 参团结果（包含订单号、支付状态等）
      */
-    JoinGroupVO joinGroup(Long activityId, Long userId, String payMethod);
+    JoinGroupVO joinGroup(Long activityId, Long userId, String payMethod, String sourceType);
     
     /**
      * 发起拼团（创建组团）
@@ -147,7 +147,7 @@ public interface IOshGroupServerService {
      * @param activityId 拼团活动ID（osh_group_user_initiated表ID或osh_group_activity表ID）
      * @return 服务器教程VO
      */
-    ServerTutorialVO getServerTutorial(Long activityId);
+    ServerTutorialVO getServerTutorial(Long activityId, String sourceType);
     
     /**
      * 获取服务器SSH连接信息
@@ -156,7 +156,7 @@ public interface IOshGroupServerService {
      * @param userId 用户ID
      * @return 服务器SSH信息VO
      */
-    com.backstage.system.domain.vo.group.ServerSshInfoVO getServerSshInfo(Long activityId, Long userId);
+    com.backstage.system.domain.vo.group.ServerSshInfoVO getServerSshInfo(Long activityId, Long userId, String sourceType);
     
     /**
      * 处理拼团订单支付成功后的业务逻辑
@@ -182,7 +182,12 @@ public interface IOshGroupServerService {
      * @param amount 支付金额
      * @param clientIp 客户端IP
      */
-    void createGroupPayment(String orderNo, Long orderId, String amount, String clientIp);
+    String createGroupPayment(String orderNo,
+                              Long orderId,
+                              String amount,
+                              String clientIp,
+                              String provider,
+                              Integer channel);
 
     // ==================== 定时任务业务方法 ====================
 
@@ -247,7 +252,7 @@ public interface IOshGroupServerService {
      * @param activityId 活动ID
      * @return 是否为成员
      */
-    boolean isUserInGroup(Long userId, Long activityId);
+    boolean isUserInGroup(Long userId, Long activityId, String sourceType);
 
     /**
      * 校验用户是否为指定订单的所有者

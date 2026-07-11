@@ -58,6 +58,7 @@ public class GroupPaidHandler implements OrderPaidHandler {
                 logger.info("【GroupPaidHandler】拼团订单处理成功，订单号: {}", orderNo);
             } else {
                 logger.error("【GroupPaidHandler】拼团订单处理失败，订单号: {}", orderNo);
+                throw new IllegalStateException("拼团权益处理返回失败: " + orderNo);
             }
         } catch (Exception e) {
             logger.error("【GroupPaidHandler】拼团订单处理异常，订单号: {}", orderNo, e);

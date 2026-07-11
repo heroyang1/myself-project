@@ -35,6 +35,7 @@ import com.backstage.system.request.CourseTextSectionCreateRequest;
 import com.backstage.system.request.CourseUpdateRequest;
 import com.backstage.system.request.CourseVideoSectionCreateRequest;
 import com.backstage.system.service.IOshCourseService;
+import com.backstage.system.service.homepage.IOshHomePageCourseService;
 import com.backstage.system.service.OutboxEventService;
 import com.backstage.system.service.common.OssService;
 import com.backstage.system.service.course.CourseIndexDeleteMessage;
@@ -50,6 +51,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.CollectionUtils;
 import com.github.pagehelper.PageHelper;
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -68,6 +71,8 @@ import java.util.stream.Collectors;
  */
 @Service
 public class OshCourseServiceImpl implements IOshCourseService {
+    private static final Logger log = LoggerFactory.getLogger(OshCourseServiceImpl.class);
+
     @Autowired
     private OshCourseMapper oshCourseMapper;
 
@@ -103,6 +108,9 @@ public class OshCourseServiceImpl implements IOshCourseService {
 
     @Autowired
     private OshDocMapper oshDocMapper;
+
+    @Autowired
+    private IOshHomePageCourseService oshHomePageCourseService;
 
     /**
      * 对付费课程开放全部章节的角色（多角色时任一命中即可）。
@@ -658,6 +666,8 @@ public class OshCourseServiceImpl implements IOshCourseService {
             OshCourseSection section = buildTextSectionForUpdate(request, existingSection, operator);
             oshCourseMapper.updateCourseSection(section);
             saveOrBindSectionDoc(section.getId(), request, operator);
+            refreshCourseSectionStats(existingSection.getCourseId());
+            scheduleSectionDrivenEsRefreshAfterCommit(existingSection.getCourseId());
             return section.getId();
         }
 
@@ -692,12 +702,15 @@ public class OshCourseServiceImpl implements IOshCourseService {
     public Long createCourseVideoSection(CourseVideoSectionCreateRequest request, OshUser operator) {
         // 有 id → 更新
         if (request.getId() != null) {
+            OshCourseSection existingSection = ensureSectionExists(request.getId());
             OshCourseSection section = buildVideoSectionForUpdate(request, operator);
             section.setId(request.getId());
             oshCourseMapper.updateCourseSection(section);
             if (shouldHandleDocForVideoRequest(request)) {
                 saveOrBindSectionDoc(request.getId(), buildDocBindRequestForVideo(request), operator);
             }
+            refreshCourseSectionStats(existingSection.getCourseId());
+            scheduleSectionDrivenEsRefreshAfterCommit(existingSection.getCourseId());
             return request.getId();
         }
         // 无 id → 新增，先校验必填
@@ -772,7 +785,12 @@ public class OshCourseServiceImpl implements IOshCourseService {
         }
 
         // 4. 删除当前节点本身
-        return oshCourseMapper.deleteCourseSectionById(sectionId, operatorName) > 0;
+        boolean deleted = oshCourseMapper.deleteCourseSectionById(sectionId, operatorName) > 0;
+        if (deleted) {
+            refreshCourseSectionStats(section.getCourseId());
+            scheduleSectionDrivenEsRefreshAfterCommit(section.getCourseId());
+        }
+        return deleted;
     }
 
 
@@ -787,6 +805,7 @@ public class OshCourseServiceImpl implements IOshCourseService {
         s.setTextContent(req.getTextContent());
         s.setFileSize(req.getFileSize());
         s.setSort(req.getSort());
+        s.setType(CourseSectionConstants.TYPE_VIDEO);
         s.setUpdateBy(operator.getUsername());
         return s;
     }
@@ -1303,7 +1322,58 @@ public class OshCourseServiceImpl implements IOshCourseService {
 
     private Long insertCourseSection(OshCourseSection section) {
         int rows = oshCourseMapper.insertCourseSection(section);
+        if (rows > 0 && section.getCourseId() != null) {
+            refreshCourseSectionStats(section.getCourseId());
+            scheduleSectionDrivenEsRefreshAfterCommit(section.getCourseId());
+            return section.getId();
+        }
         return rows > 0 ? section.getId() : null;
+    }
+
+    private void refreshCourseSectionStats(Long courseId) {
+        if (courseId == null) {
+            return;
+        }
+        int subCount = oshCourseSectionMapper.countSectionsByCourseId(courseId);
+        int videoCount = oshCourseSectionMapper.countVideoSectionsByCourseId(courseId);
+        Map<String, Object> params = new HashMap<>();
+        params.put("courseId", courseId);
+        params.put("subCount", subCount);
+        params.put("videoCount", videoCount);
+        oshCourseMapper.updateCourseSubCount(params);
+    }
+
+    private void scheduleSectionDrivenEsRefreshAfterCommit(Long courseId) {
+        if (courseId == null || !searchEsProperties.isEnabled()) {
+            return;
+        }
+        OshCourse latestCourse = ensureCourseExists(courseId);
+        Runnable refreshTask = () -> {
+            try {
+                if (shouldDirectSyncCourseToEs(latestCourse.getStatus())) {
+                    oshCourseEsService.upsertCourseById(courseId);
+                }
+            } catch (Exception e) {
+                log.warn("[course-section-sync] refresh course es failed, courseId={}, error={}",
+                        courseId, e.getMessage(), e);
+            }
+            try {
+                oshHomePageCourseService.syncHotCoursesToEs();
+            } catch (Exception e) {
+                log.warn("[course-section-sync] refresh homepage hot course es failed, courseId={}, error={}",
+                        courseId, e.getMessage(), e);
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    refreshTask.run();
+                }
+            });
+        } else {
+            refreshTask.run();
+        }
     }
 
     private void validateTextDocPayload(CourseTextSectionCreateRequest request) {

@@ -51,14 +51,4 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where no = #{no}
     </update>
 
-    <delete id="deleteWxPayById" parameterType="Long">
-        delete from osh_wxpay where no = #{no}
-    </delete>
-
-    <delete id="deleteWxPayByIds" parameterType="String">
-        delete from osh_wxpay where no in
-        <foreach item="id" collection="array" open="(" separator="," close=")">
-            #{no}
-        </foreach>
-    </delete>
 </mapper>

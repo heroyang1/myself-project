@@ -1,0 +1,20 @@
+{
+  "settings": { "number_of_shards": 1, "number_of_replicas": 0 },
+  "mappings": {
+    "properties": {
+      "id": { "type": "long" },
+      "content": { "type": "text" },
+      "resourceType": { "type": "keyword" },
+      "status": { "type": "integer" },
+      "viewCount": { "type": "integer" },
+      "followCount": { "type": "integer" },
+      "answerCount": { "type": "integer" },
+      "user": { "type": "keyword" },
+      "time": { "type": "keyword" },
+      "detailUrl": { "type": "keyword" },
+      "sortNo": { "type": "integer" },
+      "sourceLimit": { "type": "integer" },
+      "syncTime": { "type": "date", "format": "yyyy-MM-dd HH:mm:ss||strict_date_optional_time||epoch_millis" }
+    }
+  }
+}

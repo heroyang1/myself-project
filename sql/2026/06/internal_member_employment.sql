@@ -1,0 +1,42 @@
+CREATE TABLE IF NOT EXISTS `osh_internal_member_employment_profile` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `user_id` bigint(20) NOT NULL COMMENT '付费成员用户ID',
+  `job_status` tinyint(2) DEFAULT NULL COMMENT '就业状态：0未就业 1求职中 2已就业',
+  `job_status_name` varchar(64) DEFAULT NULL COMMENT '就业状态名称',
+  `company_name` varchar(128) DEFAULT NULL COMMENT '公司名称',
+  `position_name` varchar(128) DEFAULT NULL COMMENT '岗位名称',
+  `city` varchar(64) DEFAULT NULL COMMENT '所在城市',
+  `salary_before` decimal(10,2) DEFAULT NULL COMMENT '学习前薪资',
+  `salary_after` decimal(10,2) DEFAULT NULL COMMENT '当前薪资',
+  `target_salary` decimal(10,2) DEFAULT NULL COMMENT '目标薪资',
+  `entry_time` datetime DEFAULT NULL COMMENT '入职时间',
+  `case_eligible` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否适合做案例：0否 1是',
+  `remark` varchar(1000) DEFAULT NULL COMMENT '备注',
+  `create_by` bigint(20) DEFAULT NULL COMMENT '创建人',
+  `create_time` datetime DEFAULT NULL COMMENT '创建时间',
+  `update_by` bigint(20) DEFAULT NULL COMMENT '更新人',
+  `update_time` datetime DEFAULT NULL COMMENT '更新时间',
+  `delete_flag` tinyint(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1删除',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_internal_member_profile_user` (`user_id`),
+  KEY `idx_internal_member_profile_status` (`job_status`),
+  KEY `idx_internal_member_profile_case` (`case_eligible`),
+  KEY `idx_internal_member_profile_delete` (`delete_flag`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='内部成员就业档案表';
+
+CREATE TABLE IF NOT EXISTS `osh_internal_member_follow_record` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `user_id` bigint(20) NOT NULL COMMENT '付费成员用户ID',
+  `follow_type` varchar(64) DEFAULT NULL COMMENT '跟进类型',
+  `content` varchar(2000) NOT NULL COMMENT '跟进内容',
+  `next_follow_time` datetime DEFAULT NULL COMMENT '下次跟进时间',
+  `operator_id` bigint(20) DEFAULT NULL COMMENT '跟进人ID',
+  `create_time` datetime DEFAULT NULL COMMENT '创建时间',
+  `update_time` datetime DEFAULT NULL COMMENT '更新时间',
+  `delete_flag` tinyint(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1删除',
+  PRIMARY KEY (`id`),
+  KEY `idx_internal_member_follow_user` (`user_id`),
+  KEY `idx_internal_member_follow_operator` (`operator_id`),
+  KEY `idx_internal_member_follow_next` (`next_follow_time`),
+  KEY `idx_internal_member_follow_delete` (`delete_flag`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='内部成员跟进记录表';

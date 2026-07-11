@@ -82,7 +82,7 @@ public class CoursePaidHandler implements OrderPaidHandler {
                 return channel.getValue();
             }
         }
-        return PayChannelEnum.WXPAY.getValue();
+        return PayChannelEnum.ALIPAY.getValue();
     }
 
     private BigDecimal safeAmount(BigDecimal amount) {

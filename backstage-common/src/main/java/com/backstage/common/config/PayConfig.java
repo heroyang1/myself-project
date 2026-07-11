@@ -12,6 +12,12 @@ import org.springframework.stereotype.Component;
 public class PayConfig {
 
     /**
+     * 当前新订单使用的支付提供方。legacy 保留旧链路，huifu 启用汇付斗拱。
+     */
+    @Value("${pay.provider:legacy}")
+    public String PROVIDER;
+
+    /**
      * 商户ID
      */
     @Value("${pay.merchant-id}")
