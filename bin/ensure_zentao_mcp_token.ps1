@@ -390,7 +390,15 @@ function Invoke-ZentaoLogin {
 }
 
 if (-not (Test-Path -LiteralPath $ConfigPath)) {
-    throw "MCP config not found: $ConfigPath"
+    # 自愈：本地 mcp.json 已被 .gitignore 屏蔽，首次 clone 从 example 复制一份再继续。
+    $examplePath = Join-Path (Split-Path -Parent $PSScriptRoot) 'mcp.json.example'
+    if (Test-Path -LiteralPath $examplePath) {
+        Copy-Item -LiteralPath $examplePath -Destination $ConfigPath
+        Write-Host "Local MCP config not found; bootstrapped from $examplePath -> $ConfigPath" -ForegroundColor Yellow
+        Write-Host "Please fill real zentao url/apiBaseUrl or proceed with interactive login to refresh token." -ForegroundColor Yellow
+    } else {
+        throw "MCP config not found: $ConfigPath (and no mcp.json.example available for bootstrap)"
+    }
 }
 
 $config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json

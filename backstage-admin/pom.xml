@@ -87,6 +87,13 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- ArchUnit 架构分层测试（版本由父 pom dependencyManagement 统一管理）-->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- Nacos 配置中心 -->
         <dependency>
             <groupId>com.alibaba.cloud</groupId>

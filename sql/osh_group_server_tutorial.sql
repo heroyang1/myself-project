@@ -59,11 +59,13 @@ CREATE TABLE `osh_group_activity` (
     `cover`               VARCHAR(500)    DEFAULT NULL                         COMMENT '封面图片路径（OSS相对路径）',
     `create_time`         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP   COMMENT '创建时间',
     `update_time`         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `delete_flag`         TINYINT(1)      NOT NULL DEFAULT 0                   COMMENT '逻辑删除：0-正常 1-删除',
     PRIMARY KEY (`id`),
     KEY `idx_type`          (`type`),
     KEY `idx_status`        (`status`),
     KEY `idx_sort_order`    (`sort_order`),
-    KEY `idx_create_time`   (`create_time`)
+    KEY `idx_create_time`   (`create_time`),
+    KEY `idx_delete_flag`   (`delete_flag`)
 ) ENGINE=InnoDB AUTO_INCREMENT=100
   CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='服务器拼团活动表';

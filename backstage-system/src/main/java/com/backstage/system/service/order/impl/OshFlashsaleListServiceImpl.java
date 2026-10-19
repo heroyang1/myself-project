@@ -1,10 +1,10 @@
 package com.backstage.system.service.order.impl;
 
 import java.math.BigDecimal;
-import java.text.SimpleDateFormat;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.List;
-import java.util.TimeZone;
 
 import com.backstage.common.utils.DateUtils;
 import com.backstage.common.utils.uuid.UUID;
@@ -28,6 +28,10 @@ import com.backstage.system.service.order.IOshFlashsaleListService;
 @Service
 public class OshFlashsaleListServiceImpl implements IOshFlashsaleListService 
 {
+    /** UTC ISO 时间格式（线程安全，可全局共享） */
+    private static final DateTimeFormatter ISO_UTC_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
+
     @Autowired
     private OshFlashsaleListMapper oshFlashsaleListMapper;
 
@@ -83,13 +87,8 @@ public class OshFlashsaleListServiceImpl implements IOshFlashsaleListService
         a.setType("flashsale");
         a.setFlashsaleId(flashId);
         Date date = new Date();
-        // 创建格式化对象
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
-        sdf.setTimeZone(TimeZone.getTimeZone("UTC"));  // 设置为 UTC 时区
-
-        // 格式化
-        String isoString = sdf.format(date);
-        System.out.println(isoString);  // 输出：2021-06-20T09:41:21.245Z
+        // 格式化为 UTC ISO 时间（如 2021-06-20T09:41:21.245Z）
+        String isoString = ISO_UTC_FORMATTER.format(date.toInstant());
         a.setUpdatedTime(isoString);
         a.setCreatedTime(isoString);
 

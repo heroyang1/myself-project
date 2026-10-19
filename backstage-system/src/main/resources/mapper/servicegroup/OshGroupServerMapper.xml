@@ -85,8 +85,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
 
 
-    <!-- 查询拼团活动列表 -->
-    <select id="selectGroupActivityList" parameterType="java.lang.Integer" resultMap="GroupActivityListVOResult">
+    <!-- 查询拼团活动列表（支持多维度筛选） -->
+    <select id="selectGroupActivityList" resultMap="GroupActivityListVOResult">
         SELECT 
             ga.id,
             ga.title,
@@ -113,6 +113,27 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             </if>
             <if test="status == null">
                 AND ga.status IN (1, 2)
+            </if>
+            <!-- 关键词模糊匹配标题 -->
+            <if test="keyword != null and keyword != ''">
+                AND ga.title LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+            <!-- 价格区间筛选 -->
+            <if test="minPrice != null">
+                AND ga.base_price &gt;= #{minPrice}
+            </if>
+            <if test="maxPrice != null">
+                AND ga.base_price &lt;= #{maxPrice}
+            </if>
+            <!-- 配置精确匹配 -->
+            <if test="cpu != null and cpu != ''">
+                AND ga.cpu = #{cpu}
+            </if>
+            <if test="memory != null and memory != ''">
+                AND ga.memory = #{memory}
+            </if>
+            <if test="storage != null and storage != ''">
+                AND ga.storage = #{storage}
             </if>
         </where>
         ORDER BY ga.sort_order DESC, ga.create_time DESC
@@ -788,6 +809,16 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         SET current_num = #{currentNum},
             update_time = NOW()
         WHERE id = #{id}
+    </update>
+
+    <!-- 条件更新 current_num（CAS：仅当 current_num 仍为读取时的旧值才更新，
+         防止对账任务覆盖支付回调并发递增，导致人数回退） -->
+    <update id="updateActivityCurrentNumIfMatch">
+        UPDATE osh_group_activity
+        SET current_num = #{currentNum},
+            update_time = NOW()
+        WHERE id = #{id}
+          AND current_num = #{expectedNum}
     </update>
 
     <!-- 原子递增活动 current_num（CAS 模式，防超卖） -->

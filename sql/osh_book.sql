@@ -11,14 +11,17 @@ CREATE TABLE `osh_book` (
   `price` decimal(10,2) DEFAULT '0.00' COMMENT '价格',
   `original_price` decimal(10,2) DEFAULT '0.00' COMMENT '原价',
   `sub_count` int(11) DEFAULT '0' COMMENT '订阅数',
+  `level` tinyint(3) DEFAULT NULL COMMENT '图书等级',
   `status` char(1) DEFAULT '0' COMMENT '状态（0正常 1下架）',
   `del_flag` char(1) DEFAULT '0' COMMENT '删除标志（0代表存在 2代表删除）',
+  `delete_flag` tinyint(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除：0-正常 1-删除',
   `create_by` varchar(64) DEFAULT '' COMMENT '创建者',
   `create_time` datetime DEFAULT NULL COMMENT '创建时间',
   `update_by` varchar(64) DEFAULT '' COMMENT '更新者',
   `update_time` datetime DEFAULT NULL COMMENT '更新时间',
   `remark` varchar(500) DEFAULT NULL COMMENT '备注',
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  KEY `idx_delete_flag` (`delete_flag`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COMMENT='电子书表';
 
 -- ----------------------------
@@ -32,14 +35,17 @@ CREATE TABLE `osh_book_chapter` (
   `content` longtext COMMENT '章节内容',
   `orderby` int(11) DEFAULT '0' COMMENT '排序',
   `isfree` tinyint(1) DEFAULT '0' COMMENT '是否免费（0收费 1免费）',
+  `is_free` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否免费章节（0-否 1-是，Mapper引用）',
   `del_flag` char(1) DEFAULT '0' COMMENT '删除标志（0代表存在 2代表删除）',
+  `delete_flag` tinyint(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除：0-正常 1-删除（拦截器引用）',
   `create_by` varchar(64) DEFAULT '' COMMENT '创建者',
   `create_time` datetime DEFAULT NULL COMMENT '创建时间',
   `update_by` varchar(64) DEFAULT '' COMMENT '更新者',
   `update_time` datetime DEFAULT NULL COMMENT '更新时间',
   `remark` varchar(500) DEFAULT NULL COMMENT '备注',
   PRIMARY KEY (`id`),
-  KEY `idx_book_id` (`book_id`)
+  KEY `idx_book_id` (`book_id`),
+  KEY `idx_delete_flag` (`delete_flag`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COMMENT='电子书章节表';
 
 -- ----------------------------

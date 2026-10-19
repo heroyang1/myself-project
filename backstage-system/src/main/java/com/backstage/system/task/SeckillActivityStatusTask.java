@@ -12,10 +12,10 @@ import com.backstage.system.service.seckill.SeckillItemIndexUpsertMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 秒杀活动状态自动流转定时任务
@@ -23,6 +23,11 @@ import java.util.List;
  * 每分钟执行一次：
  * - 未开始(1) → 进行中(2)：start_time <= now，触发 ES upsert（activityStatus=2，Flink 写入 ES）
  * - 进行中(2) → 已结束(3)：end_time <= now，触发 ES delete（从 ES 移除）
+ *
+ * 【已停用】本任务与 backstage-quartz 的 SeckillActivityTask（@XxlJob "seckill-activity-status"）
+ * 对同一状态 UPDATE（updateToOngoing/updateToFinished）存在双调度器竞争：
+ * 先执行的一方会使另一方的副作用（ES 事件 / Redis 缓存预热）永久丢失。
+ * 职责已合并至 SeckillActivityTask（项目规范：定时任务统一归口 backstage-quartz + XXL-Job）。
  */
 @Component
 public class SeckillActivityStatusTask {
@@ -43,8 +48,10 @@ public class SeckillActivityStatusTask {
 
     /**
      * 每分钟执行一次，处理活动状态流转
+     * 【已停用】职责已合并至 backstage-quartz SeckillActivityTask（@XxlJob "seckill-activity-status"），
+     * 双调度器并存会导致 ES 事件或 Redis 缓存预热丢失，禁止恢复此注解。
      */
-    @Scheduled(cron = "0 * * * * ?")
+    // @Scheduled(cron = "0 * * * * ?")
     public void autoTransitionStatus() {
         startActivities();
         endActivities();
@@ -60,7 +67,8 @@ public class SeckillActivityStatusTask {
         if (toStart == null || toStart.isEmpty()) {
             return;
         }
-        int updated = activityMapper.updateToOngoing();
+        List<Long> toStartIds = toStart.stream().map(OshSeckillActivity::getId).collect(Collectors.toList());
+        int updated = activityMapper.updateToOngoing(toStartIds);
         logger.info("【活动状态流转】未开始→进行中，更新数量={}", updated);
 
         for (OshSeckillActivity activity : toStart) {
@@ -88,7 +96,8 @@ public class SeckillActivityStatusTask {
         if (toEnd == null || toEnd.isEmpty()) {
             return;
         }
-        int updated = activityMapper.updateToFinished();
+        List<Long> toEndIds = toEnd.stream().map(OshSeckillActivity::getId).collect(Collectors.toList());
+        int updated = activityMapper.updateToFinished(toEndIds);
         logger.info("【活动状态流转】进行中→已结束，更新数量={}", updated);
 
         for (OshSeckillActivity activity : toEnd) {

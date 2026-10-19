@@ -27,9 +27,11 @@ CREATE TABLE `osh_column_course` (
   `course_id` bigint NOT NULL COMMENT '课程ID',
   `sort` int DEFAULT '0' COMMENT '排序(课程在专栏里的展示顺序)',
   `create_time` datetime DEFAULT CURRENT_TIMESTAMP,
+  `delete_flag` tinyint(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除：0-正常 1-删除',
   PRIMARY KEY (`id`),
   KEY `idx_column` (`column_id`),
-  KEY `idx_course` (`course_id`)
+  KEY `idx_course` (`course_id`),
+  KEY `idx_delete_flag` (`delete_flag`)
 ) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs COMMENT='专栏课程关联表';
 
 SET FOREIGN_KEY_CHECKS = 1;

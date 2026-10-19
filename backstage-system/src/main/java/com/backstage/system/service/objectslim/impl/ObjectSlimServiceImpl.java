@@ -782,6 +782,7 @@ public class ObjectSlimServiceImpl implements ObjectSlimService {
             CommandResult result = runCommand(Arrays.asList("sh", "-c", "command -v " + shellQuote(command)), 0);
             return result.exitCode == 0;
         } catch (Exception e) {
+            // 命令探测失败按不存在处理
             return false;
         }
     }
@@ -793,6 +794,7 @@ public class ObjectSlimServiceImpl implements ObjectSlimService {
                 return result.output.trim();
             }
         } catch (Exception ignored) {
+            // 路径解析失败时退回命令原名，交由 shell 自行查找
         }
         return command;
     }

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.backstage.system.cart.mapper.CartMapper">
+
+    <!-- R1/E6：单条原子 upsert，禁读-改-写；唯一索引 uk_user_sku 保证同用户同 SKU 只有一行。
+         R2：LEAST(quantity + delta, cap) 在 SQL 层截断，不依赖应用层判断。
+         参数一律 #{}，无 ${}（数据权限除外）。 -->
+    <insert id="upsertAdd">
+        INSERT INTO osh_cart (user_id, sku_id, quantity, create_time, delete_flag)
+        VALUES (#{userId}, #{skuId}, LEAST(#{delta}, #{cap}), NOW(), 0)
+        ON DUPLICATE KEY UPDATE
+            quantity = LEAST(quantity + #{delta}, #{cap}),
+            update_time = NOW()
+    </insert>
+
+    <select id="selectQuantity" resultType="java.lang.Integer">
+        SELECT quantity
+        FROM osh_cart
+        WHERE user_id = #{userId}
+          AND sku_id = #{skuId}
+          AND delete_flag = 0
+    </select>
+
+</mapper>

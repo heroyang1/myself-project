@@ -3,7 +3,7 @@ package com.bachstage.seckill.job_stream_from_kafka_to_es.config;
 import com.bachstage.course.job_stream_from_kafka_to_es.config.ApplicationPropertiesConfig;
 
 /**
- * 秒杀商品明细索引同步任务配置
+ * 绉掓潃鍟嗗搧鏄庣粏绱㈠紩鍚屾浠诲姟閰嶇疆
  */
 public class SeckillItemJobConfig {
 
@@ -24,10 +24,10 @@ public class SeckillItemJobConfig {
 
     public static SeckillItemJobConfig fromSystem() {
         return new SeckillItemJobConfig(
-                ApplicationPropertiesConfig.read("kafka.bootstrap-servers", "KAFKA_BOOTSTRAP_SERVERS", "43.242.200.25:9092"),
+                ApplicationPropertiesConfig.read("kafka.bootstrap-servers", "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
                 ApplicationPropertiesConfig.read("seckill.item.index.group-id", "SECKILL_ITEM_INDEX_GROUP_ID", "backstage-seckill-item-index-flink"),
                 ApplicationPropertiesConfig.read("seckill.item.index.topic", "SECKILL_ITEM_INDEX_TOPIC", "osh.seckill.item.index"),
-                ApplicationPropertiesConfig.read("elasticsearch.hosts", "ES_HOSTS", "http://43.242.200.25:9200"),
+                ApplicationPropertiesConfig.read("elasticsearch.hosts", "ES_HOSTS", "http://localhost:9200"),
                 ApplicationPropertiesConfig.read("seckill.item.index.es-index", "SECKILL_ITEM_ES_INDEX", "osh_seckill_item_search"));
     }
 

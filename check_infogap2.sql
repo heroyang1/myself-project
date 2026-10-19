@@ -1,0 +1,2 @@
+USE `ry-vue`;
+SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='ry-vue' AND TABLE_NAME='osh_info_gap' ORDER BY ORDINAL_POSITION;

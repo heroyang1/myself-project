@@ -15,6 +15,7 @@ import com.backstage.system.domain.vo.group.JoinGroupVO;
 import com.backstage.system.domain.vo.group.ServerTutorialVO;
 import com.backstage.system.domain.vo.group.SharePosterVO;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -32,6 +33,22 @@ public interface IOshGroupServerService {
      * @return 拼团活动列表
      */
     List<GroupActivityListVO> selectGroupActivityList(Integer status);
+    
+    /**
+     * 查询拼团活动列表（C端 - 多维度筛选）
+     * 
+     * @param status 状态筛选（可选）
+     * @param keyword 关键词（可选，匹配标题）
+     * @param minPrice 最低价（可选）
+     * @param maxPrice 最高价（可选）
+     * @param cpu CPU配置（可选，精确匹配）
+     * @param memory 内存配置（可选，精确匹配）
+     * @param storage 存储配置（可选，精确匹配）
+     * @return 拼团活动列表
+     */
+    List<GroupActivityListVO> selectGroupActivityList(
+            Integer status, String keyword, BigDecimal minPrice, BigDecimal maxPrice,
+            String cpu, String memory, String storage);
     
     /**
      * 查询用户发起拼团活动列表（C端）

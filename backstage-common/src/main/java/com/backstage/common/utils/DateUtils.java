@@ -73,11 +73,17 @@ public class DateUtils extends org.apache.commons.lang3.time.DateUtils
         return parseDateToStr(YYYY_MM_DD, date);
     }
 
+    /**
+     * 每次新建 SimpleDateFormat 实例以避免共享对象的线程安全问题（性能可接受）。
+     * 注意：新代码请优先使用 java.time.DateTimeFormatter（线程安全、可全局共享），
+     * 本方法为 RuoYi 基础工具，影响面广，暂保留现状。
+     */
     public static final String parseDateToStr(final String format, final Date date)
     {
         return new SimpleDateFormat(format).format(date);
     }
 
+    /** 同上，每次新建实例保证线程安全；新代码请优先使用 DateTimeFormatter。 */
     public static final Date dateTime(final String format, final String ts)
     {
         try

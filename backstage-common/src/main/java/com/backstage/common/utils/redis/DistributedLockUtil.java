@@ -1,4 +1,6 @@
 package com.backstage.common.utils.redis;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -17,6 +19,8 @@ import java.util.concurrent.TimeUnit;
  */
 @Component
 public class DistributedLockUtil {
+    private static final Logger log = LoggerFactory.getLogger(DistributedLockUtil.class);
+
     /** 锁统一前缀，防止key冲突 */
     private static final String LOCK_PREFIX = "lock::website:submit:";
     // 锁的默认过期时间（秒），防止业务异常导致锁永远不释放
@@ -39,8 +43,8 @@ public class DistributedLockUtil {
                     .setIfAbsent(lockKey, value, expireSeconds, TimeUnit.SECONDS);
             return Boolean.TRUE.equals(result);
         }catch (Exception e){
-            // 打印日志，Redis异常不影响业务
-            e.printStackTrace();
+            // Redis异常不影响业务，仅记录日志便于排查
+            log.warn("获取分布式锁异常，lockKey={}", lockKey, e);
             return false;
         }
 
@@ -73,8 +77,8 @@ public class DistributedLockUtil {
             Long result = stringRedisTemplate.execute(redisScript, Collections.singletonList(key), value);
             return Long.valueOf(1).equals(result);
         }catch (Exception e){
-            // 释放锁异常不影响业务
-            e.printStackTrace();
+            // 释放锁异常不影响业务，仅记录日志便于排查
+            log.warn("释放分布式锁异常，lockKey={}", lockKey, e);
             return false;
         }
 

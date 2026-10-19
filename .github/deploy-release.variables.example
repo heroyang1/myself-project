@@ -16,5 +16,8 @@ TEST25_DEPLOY_PORT=58753
 # TEST25_DOCKER_COMPOSE_PROJECT=osh
 # TEST25_BACKEND_SERVICE_NAME=osh-backend
 #
+# 【可选，25 后端访问端口（用于部署成功邮件通知中的访问地址）】
+# TEST25_BACKEND_PORT=8081
+#
 # Secrets（与 149 可共用同一把 SSH 私钥，若 25/149 均授权）
 # DEPLOY_SSH_PRIVATE_KEY — deploy-release.yml 仍读取此 Secret

@@ -205,7 +205,7 @@ public class DatabaseServiceImpl implements IDatabaseService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int saveTableData(String tableName, Map<String, List<Map<String, Object>>> changes) throws Exception {
         // 1. 参数校验
         if (tableName == null || tableName.trim().isEmpty()) {
@@ -332,7 +332,7 @@ public class DatabaseServiceImpl implements IDatabaseService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int batchDelete(String tableName, List<Long> ids) {
         if (ids == null || ids.isEmpty()) {
             return 0;

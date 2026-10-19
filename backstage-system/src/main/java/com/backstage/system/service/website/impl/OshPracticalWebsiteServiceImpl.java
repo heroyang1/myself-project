@@ -6,6 +6,7 @@ import com.alibaba.excel.event.AnalysisEventListener;
 import com.backstage.common.annotation.DistributeLock;
 import com.backstage.common.core.page.TableDataInfo;
 import com.backstage.common.enums.ResourceCodePrefixEnum;
+import com.backstage.common.utils.DateUtils;
 import com.backstage.common.utils.StringUtils;
 import com.backstage.common.utils.email.EmailUtil;
 import com.backstage.common.utils.generate.GenerateUtil;
@@ -43,7 +44,6 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URLEncoder;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -252,7 +252,7 @@ public class OshPracticalWebsiteServiceImpl implements OshPracticalWebsiteServic
                     website.getUrl(),
                     website.getDescription(),
                     website.getCreateBy(),
-                    new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date())
+                    DateUtils.getTime()
             );
         } catch (Exception e) {
             log.error("网站提交邮件发送失败，websiteId={}", website.getId(), e);
@@ -400,7 +400,7 @@ public class OshPracticalWebsiteServiceImpl implements OshPracticalWebsiteServic
                 oshPracticalWebsiteMapper.updateRatingScoreById(websiteId, ratingScore);
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("更新网站评分失败, websiteId={}", websiteId, e);
         }
     }
     /**
@@ -439,12 +439,11 @@ public class OshPracticalWebsiteServiceImpl implements OshPracticalWebsiteServic
                 } catch (Exception e) {
                     failCount++;
                     log.error("更新网站ID={}的评分异常", website.getId(), e);
-                    e.printStackTrace();
                 }
             }
             log.info("批量更新评分完成，共更新 {} 条记录", successCount);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("批量更新网站评分任务异常", e);
         }
     }
 

@@ -2,10 +2,13 @@ package com.backstage.framework.security.filter;
 
 import com.backstage.common.constant.OshUserConstants;
 import com.backstage.common.core.redis.RedisCache;
+import com.backstage.common.core.domain.model.LoginUser;
 import com.backstage.common.core.domain.model.OshUserDetail;
 import com.backstage.common.threadlocal.ThreadLocalUtil;
 import com.backstage.common.utils.jwt.JwtUtil;
+import com.backstage.contract.common.InternalApiConstants;
 import com.backstage.framework.config.properties.PermitAllUrlProperties;
+import com.backstage.framework.web.service.TokenService;
 import com.backstage.system.domain.user.OshPermission;
 import com.backstage.system.domain.user.OshRole;
 import com.backstage.system.domain.user.OshUser;
@@ -54,11 +57,27 @@ public class OshAuthenticationFilter extends OncePerRequestFilter {
     @Autowired
     private PermitAllUrlProperties permitAllUrl;
 
+    @Autowired
+    private TokenService tokenService;
+
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
+
+    /**
+     * 服务间内部接口路径匹配模式（/internal/**），此类请求不解析用户 token，直接放行
+     */
+    private static final String INTERNAL_PATH_PATTERN = InternalApiConstants.BASE_PATH + "/**";
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
         String uri = request.getRequestURI();
+
+        // 服务间内部接口（/internal/**）不解析用户 token，直接放行，避免携带有效 OSH token 时
+        // 覆盖 InternalApiAuthFilter 注入的 INTERNAL_SERVICE 权限，导致 SecurityConfig 的 hasAuthority 校验失败（403）
+        if (pathMatcher.match(INTERNAL_PATH_PATTERN, uri)) {
+            chain.doFilter(request, response);
+            return;
+        }
+
         boolean isAnonymous = isWhiteList(uri);
 
         // WebSocket 握手请求放行（由 WebSocket 拦截器单独处理认证）
@@ -70,6 +89,25 @@ public class OshAuthenticationFilter extends OncePerRequestFilter {
         // 解析 Token（@Anonymous 接口也尝试解析，但失败不拒绝）
         String token = request.getHeader(OshUserConstants.TOKEN);
         Long userId = null;
+
+        // 如果无 OSH token，尝试管理员 JWT（Authorization: Bearer）
+        if ((token == null || token.isEmpty()) && !isAnonymous) {
+            try {
+                LoginUser adminUser = tokenService.getLoginUser(request);
+                if (adminUser != null) {
+                    // 管理员已通过 Spring Security JWT 认证，设置上下文并放行
+                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                            adminUser, null, adminUser.getAuthorities());
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                    chain.doFilter(request, response);
+                    return;
+                }
+            } catch (Exception ignored) {
+                // Admin JWT 解析失败，继续 OSH 认证流程
+            }
+        }
+
         try {
             if (token != null && !token.isEmpty()) {
                 userId = JwtUtil.getUserIdByToken(token);
@@ -196,7 +234,21 @@ public class OshAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private boolean isWhiteList(String uri) {
-        if (pathMatcher.match("/pc/pay/huifu/notify", uri)) {
+        // 服务间内部接口（/internal/**）不携带用户 JWT，由此放行，鉴权改由 InternalApiAuthFilter 共享密钥完成
+        if (pathMatcher.match("/internal/**", uri)) {
+            return true;
+        }
+        // 管理端标准公开端点（与 SecurityConfig permitAll 对齐）
+        if (pathMatcher.match("/login", uri)
+                || pathMatcher.match("/register", uri)
+                || pathMatcher.match("/captchaImage", uri)
+                || pathMatcher.match("/pc/pay/huifu/notify", uri)
+                || pathMatcher.match("/swagger-resources/**", uri)
+                || pathMatcher.match("/swagger-ui.html", uri)
+                || pathMatcher.match("/webjars/**", uri)
+                || pathMatcher.match("/*/api-docs", uri)
+                || pathMatcher.match("/druid/**", uri)
+                || pathMatcher.match("/ws/**", uri)) {
             return true;
         }
         // 匹配 @Anonymous 注解收集的 URL

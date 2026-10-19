@@ -47,12 +47,12 @@ public class ToolIndexJobConfig
     public static ToolIndexJobConfig fromSystem()
     {
         return new ToolIndexJobConfig(
-                ApplicationPropertiesConfig.read("kafka.bootstrap-servers", "KAFKA_BOOTSTRAP_SERVERS", "43.242.200.25:9092"),
+                ApplicationPropertiesConfig.read("kafka.bootstrap-servers", "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
                 ApplicationPropertiesConfig.read("tool.index.group-id", "TOOL_INDEX_GROUP_ID", "backstage-tool-index-flink"),
                 ApplicationPropertiesConfig.read("tool.index.start-mode", "TOOL_INDEX_START_MODE",
                         ApplicationPropertiesConfig.read("kafka.start-mode", "KAFKA_START_MODE", "earliest")),
                 ApplicationPropertiesConfig.read("tool.index.topic", "TOOL_INDEX_TOPIC", "osh.tool.index"),
-                ApplicationPropertiesConfig.read("elasticsearch.hosts", "ES_HOSTS", "http://43.242.200.25:9200"),
+                ApplicationPropertiesConfig.read("elasticsearch.hosts", "ES_HOSTS", "http://localhost:9200"),
                 ApplicationPropertiesConfig.read("tool.index.es-index", "TOOL_ES_INDEX", "osh_tool_search"),
                 ApplicationPropertiesConfig.readInt("flink.parallelism", "FLINK_PARALLELISM", 1),
                 ApplicationPropertiesConfig.readLong("flink.checkpoint.interval-ms", "FLINK_CHECKPOINT_INTERVAL_MS", 60000L),

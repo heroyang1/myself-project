@@ -137,9 +137,8 @@ public class LogAspect
         }
         catch (Exception exp)
         {
-            // 记录本地异常日志
-            log.error("异常信息:{}", exp.getMessage());
-            exp.printStackTrace();
+            // 记录本地异常日志（含堆栈，替代 printStackTrace）
+            log.error("操作日志记录异常:{}", exp.getMessage(), exp);
         }
         finally
         {
@@ -215,6 +214,8 @@ public class LogAspect
                     }
                     catch (Exception e)
                     {
+                        // 单个参数序列化失败不影响其余参数记录
+                        log.warn("操作日志参数序列化失败, type={}", o.getClass().getName(), e);
                     }
                 }
             }

@@ -80,10 +80,11 @@ split-order-service
 
 ## 自动化要求
 
-所有 PR 都会触发 `Spec & Process Guard`：
+所有 PR 都会触发 `Spec & Process Guard`（`scripts/verify-ai-process.sh`）：
 
-- 检查基础规范文件是否存在。
-- 检查 PR 是否包含 OpenSpec change，或在 PR 描述中声明 `OpenSpec-Exempt: true` 和豁免原因。
-- 检查 change 包里是否有 `proposal.md`、`design.md`、`tasks.md`。
+- 检查基础规范文件（含 `AGENTS.md` 与各 harness 镜像指针文件）是否存在且非空。
+- 检查 PR 是否包含 OpenSpec change（四件套 `proposal.md`、`design.md`、`tasks.md`、`specs/**/spec.md` 齐全非空），或在 PR 描述中声明 `OpenSpec-Exempt: true` 和豁免原因。
+- 保护域不可豁免：触碰 `pom.xml`、`sql/`、`application*.yml|properties` 的 PR 必须携带 change。
+- 归档区只读：修改/删除 `openspec/changes/archive/` 下已有内容会被拦截；change 合并后应归档并将规格并入 `specs/baseline/`。
 
 这不是形式主义。它的目标是让新人、老同事和 AI Agent 都围绕同一份事实工作。

@@ -10,7 +10,8 @@ import io.swagger.annotations.ApiParam;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
-import java.text.SimpleDateFormat;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,6 +30,10 @@ import com.backstage.system.service.order.ICouponListService;
 @RestController
 @RequestMapping("/pc/user_coupon")
 public class CouponListController {
+
+    /** 时间格式化（线程安全，可全局共享） */
+    private static final DateTimeFormatter DATE_TIME_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
 
     @Autowired
     private ICouponListService cardService;
@@ -59,14 +64,13 @@ public class CouponListController {
         
         // 转换为前端需要的格式，price 转为字符串，时间格式化为 yyyy-MM-dd HH:mm:ss
         List<Map<String, Object>> formattedList = new ArrayList<>();
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         for (Coupon item : list) {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("id", item.getId());
             map.put("title", item.getTitle());
             map.put("price", item.getPrice() != null ? item.getPrice().toString() : "0.00");
-            map.put("start_time", item.getStartTime() != null ? sdf.format(item.getStartTime()) : "");
-            map.put("end_time", item.getEndTime() != null ? sdf.format(item.getEndTime()) : "");
+            map.put("start_time", item.getStartTime() != null ? DATE_TIME_FORMATTER.format(item.getStartTime().toInstant()) : "");
+            map.put("end_time", item.getEndTime() != null ? DATE_TIME_FORMATTER.format(item.getEndTime().toInstant()) : "");
             map.put("type", item.getType());
             map.put("used", item.getUsed());
             map.put("goods_id", item.getGoodsId());

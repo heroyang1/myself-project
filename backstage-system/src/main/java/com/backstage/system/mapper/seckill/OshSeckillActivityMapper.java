@@ -44,12 +44,17 @@ public interface OshSeckillActivityMapper {
     /**
      * 将"未开始"且开始时间已到的活动改为"进行中"
      * status: 1→2，start_time <= now
+     *
+     * @param ids 本次查询命中的活动 ID 列表（select 与 update 范围对齐，
+     *            防止新到期活动被更新但无对应缓存预热/ES 事件）
      */
-    int updateToOngoing();
+    int updateToOngoing(@Param("ids") List<Long> ids);
 
     /**
      * 将"进行中"且结束时间已过的活动改为"已结束"
      * status: 2→3，end_time <= now
+     *
+     * @param ids 本次查询命中的活动 ID 列表（select 与 update 范围对齐）
      */
-    int updateToFinished();
+    int updateToFinished(@Param("ids") List<Long> ids);
 }

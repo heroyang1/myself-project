@@ -43,7 +43,7 @@ public class OshExamController extends BaseController {
     @Anonymous
     public R<PageResponse<ExamVo>> searchExams(@RequestBody ExamSearchDto dto) {
         Long userId = null;
-        try { userId = UserContextUtil.getCurrentUserId(); } catch (Exception ignored) {}
+        try { userId = UserContextUtil.getCurrentUserId(); } catch (Exception ignored) {} // 尽力获取登录上下文，匿名/无上下文时降级为 null，属预期行为
         return R.ok(examService.searchExams(dto, userId));
     }
 
@@ -60,7 +60,7 @@ public class OshExamController extends BaseController {
         dto.setPageNum(page);
         dto.setPageSize(limit);
         Long userId = null;
-        try { userId = UserContextUtil.getCurrentUserId(); } catch (Exception ignored) {}
+        try { userId = UserContextUtil.getCurrentUserId(); } catch (Exception ignored) {} // 尽力获取登录上下文，匿名/无上下文时降级为 null，属预期行为
         return R.ok(examService.searchExams(dto, userId));
     }
 
@@ -75,7 +75,7 @@ public class OshExamController extends BaseController {
         if (id == null) return R.fail("试卷ID不能为空");
 
         Long userId = null;
-        try { userId = UserContextUtil.getCurrentUserId(); } catch (Exception ignored) {}
+        try { userId = UserContextUtil.getCurrentUserId(); } catch (Exception ignored) {} // 尽力获取登录上下文，匿名/无上下文时降级为 null，属预期行为
 
         if (userId == null) return R.fail("请先登录");
 
@@ -85,7 +85,7 @@ public class OshExamController extends BaseController {
         try {
             Integer lv = UserContextUtil.getCurrentLevel();
             if (lv != null) level = lv;
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {} // 尽力获取登录上下文，匿名/无上下文时降级为 null，属预期行为
 
         if (level < 2) {
             return R.fail("需要 VIP 及以上等级才能参加考试");
@@ -121,7 +121,7 @@ public class OshExamController extends BaseController {
         try {
             com.backstage.system.domain.user.OshUser user = UserContextUtil.getCurrentUser();
             if (user != null) operator = user.getUsername();
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {} // 尽力获取登录上下文，匿名/无上下文时降级为 null，属预期行为
         return examService.saveExam(dto, operator != null ? operator : "system");
     }
 
@@ -136,7 +136,7 @@ public class OshExamController extends BaseController {
         try {
             com.backstage.system.domain.user.OshUser user = UserContextUtil.getCurrentUser();
             if (user != null) operator = user.getUsername();
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {} // 尽力获取登录上下文，匿名/无上下文时降级为 null，属预期行为
         return examService.deleteExam(id, operator != null ? operator : "system");
     }
 
@@ -151,7 +151,7 @@ public class OshExamController extends BaseController {
         try {
             com.backstage.system.domain.user.OshUser user = UserContextUtil.getCurrentUser();
             if (user != null) operator = user.getUsername();
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {} // 尽力获取登录上下文，匿名/无上下文时降级为 null，属预期行为
         return examService.saveExamQuestion(dto, operator != null ? operator : "system");
     }
 
@@ -166,7 +166,7 @@ public class OshExamController extends BaseController {
         try {
             com.backstage.system.domain.user.OshUser user = UserContextUtil.getCurrentUser();
             if (user != null) operator = user.getUsername();
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {} // 尽力获取登录上下文，匿名/无上下文时降级为 null，属预期行为
         return examService.deleteExamQuestion(id, examId, operator != null ? operator : "system");
     }
 
@@ -178,14 +178,14 @@ public class OshExamController extends BaseController {
     @Anonymous
     public R<String> toggleCollect(@RequestParam Long examId) {
         Long userId = null;
-        try { userId = UserContextUtil.getCurrentUserId(); } catch (Exception ignored) {}
+        try { userId = UserContextUtil.getCurrentUserId(); } catch (Exception ignored) {} // 尽力获取登录上下文，匿名/无上下文时降级为 null，属预期行为
         if (userId == null) return R.fail("请先登录");
 
         String operator = null;
         try {
             com.backstage.system.domain.user.OshUser user = UserContextUtil.getCurrentUser();
             if (user != null) operator = user.getUsername();
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {} // 尽力获取登录上下文，匿名/无上下文时降级为 null，属预期行为
 
         return examService.toggleCollect(examId, userId, operator != null ? operator : String.valueOf(userId));
     }

@@ -1,0 +1,205 @@
+# ============================================================
+# application-local.yml —— 本地开发环境最小化配置
+#
+# 用途：在 Nacos 不可用时，提供完整的本地启动配置
+# 启动参数：--spring.profiles.active=local
+#
+# ⚠️  仅用于本地开发调试，禁止在生产/测试环境使用
+# ============================================================
+
+# ===================== 服务端口 =====================
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+# ===================== 若依基础配置 =====================
+ruoyi:
+  name: OSH-Backend
+  version: 3.9.0
+  copyrightYear: 2026
+  profile: C:/osh/upload    # 文件上传本地存储路径（按需修改）
+  addressEnabled: true
+  captchaType: math
+
+# ===================== MySQL 数据源 =====================
+spring:
+  messages:
+    basename: i18n/messages
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    druid:
+      master:
+        url: jdbc:mysql://localhost:3306/ry-vue?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+        username: root
+        password: root         # ⬅ 修改为本地 MySQL 密码
+      slave:
+        enabled: false
+        url: jdbc:mysql://localhost:3306/ry-vue?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+        username: root
+        password: root
+      # Druid 连接池
+      initialSize: 5
+      minIdle: 5
+      maxActive: 20
+      maxWait: 60000
+      connectTimeout: 30000
+      socketTimeout: 60000
+      timeBetweenEvictionRunsMillis: 60000
+      minEvictableIdleTimeMillis: 300000
+      maxEvictableIdleTimeMillis: 900000
+      validationQuery: SELECT 1
+      testWhileIdle: true
+      testOnBorrow: false
+      testOnReturn: false
+      webStatFilter:
+        enabled: true
+      statViewServlet:
+        enabled: true
+        allow:
+        url-pattern: /druid/*
+        login-username: ruoyi
+        login-password: 123456
+      filter:
+        stat:
+          enabled: true
+          log-slow-sql: true
+          slow-sql-millis: 1000
+          merge-sql: true
+        wall:
+          config:
+            multi-statement-allow: true
+
+  # ===================== Redis =====================
+  redis:
+    host: localhost
+    port: 6379
+    # password: 不要设置此字段（本地 Redis 无密码时留空或删除）
+    database: 0
+    timeout: 10000
+    lettuce:
+      pool:
+        max-active: 16
+        max-wait: 10s
+        max-idle: 8
+        min-idle: 0
+
+  # ===================== Kafka（本地无 Kafka 时禁用） =====================
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      group-id: osh-backend-local
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      # ⬇ Kafka 4.x broker 要求 session.timeout.ms >= 45000（默认 45s）
+      #    注意：Spring Boot 2.5.x 不支持 session-timeout/heartbeat-interval 作为顶层属性
+      #    必须通过 properties 映射传递原始 Kafka 属性名
+      properties:
+        session.timeout.ms: 45000         # 45s —— 与 Kafka 4.x broker 最小值对齐
+        heartbeat.interval.ms: 15000      # 15s —— 推荐为 session-timeout 的 1/3
+        max.poll.interval.ms: 300000      # 5min —— 消费逻辑含 DB+ES 写入时防止超时踢出
+        request.timeout.ms: 60000         # 60s —— 网络请求超时
+    listener:
+      ack-mode: manual
+      missing-topics-fatal: false        # Kafka topic 不存在时不阻止启动
+      auto-startup: true                 # Kafka 已本地安装，启用监听器
+
+  # ===================== 邮件（按需配置） =====================
+  mail:
+    host: smtp.qq.com
+    port: 465
+    username: test@qq.com
+    password: test
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+
+  # ===================== Jasypt 加密（本地禁用） =====================
+  jasypt:
+    encryptor:
+      property:
+        prefix: "ENC("
+        suffix: ")"
+
+  # ===================== 文件上传 =====================
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 20MB
+
+# ===================== Elasticsearch =====================
+elasticsearch:
+  host: localhost
+  port: 9200
+  username:
+  password:
+  connect-timeout: 10000    # 10s 建立连接超时（本地环境足够）
+  socket-timeout: 60000     # 60s 数据读写超时（修复前 10s 过短，ES bulk/GC pause 时易超时）
+
+# ===================== XXL-Job 定时任务（本地禁用） =====================
+xxl:
+  job:
+    admin:
+      addresses: http://localhost:8888/xxl-job-admin
+    accessToken: default_token
+    executor:
+      appname: osh-backend
+      address:
+      ip:
+      port: 9999
+      logpath: ./logs/xxl-job
+      logretentiondays: 30
+
+# ===================== MyBatis =====================
+mybatis:
+  typeAliasesPackage: com.backstage.**.domain,com.backstage.**.entity
+  mapperLocations: classpath*:mapper/**/*Mapper.xml
+  configLocation: classpath:mybatis/mybatis-config.xml
+
+# ===================== 日志级别 =====================
+logging:
+  level:
+    com.backstage: debug
+    org.springframework: warn
+    com.alibaba.nacos: warn
+
+# ===================== Swagger =====================
+swagger:
+  enabled: true
+  pathMapping: /
+
+# ===================== Token JWT =====================
+token:
+  header: Authorization
+  secret: abcdefghijklmnopqrstuvwxyz1234567890   # ⬅ 本地开发用秘钥
+  expireTime: 720                                 # 分钟
+
+# ===================== 用户密码策略 =====================
+user:
+  password:
+    maxRetryCount: 5
+    lockTime: 10
+
+# ===================== 支付配置（本地占位） =====================
+pay:
+  provider: legacy
+  merchant-id: local-dev
+  merchant-key: local-dev-key
+  api-url: http://localhost:8080/pay
+  status-url: http://localhost:8080/pay/status
+  expire-minutes: 5
+  notify-url: http://localhost:8080/pay/notify
+  group:
+    admin-manual-join-enabled: false
+
+# ===================== 邮件发送配置 =====================
+email:
+  from: dev@localhost.com

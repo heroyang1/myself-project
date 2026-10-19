@@ -44,13 +44,16 @@ CREATE TABLE `osh_group_activity` (
     `server_tutorial_url`   varchar(500)    DEFAULT NULL                         COMMENT '服务器配置教程URL',
     `admin_contact`         varchar(100)    DEFAULT NULL                         COMMENT '管理员联系方式（微信号）',
     `sort_order`            int             NOT NULL DEFAULT 0                   COMMENT '排序权重，数值越大越靠前',
+    `cover`                 varchar(512)    DEFAULT NULL                         COMMENT '封面图片URL',
     `create_time`           datetime        DEFAULT CURRENT_TIMESTAMP            COMMENT '创建时间',
     `update_time`           datetime        DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `delete_flag`           tinyint(1)      NOT NULL DEFAULT 0                   COMMENT '逻辑删除：0-正常 1-删除',
     PRIMARY KEY (`id`),
     KEY `idx_type`              (`type`),
     KEY `idx_status`            (`status`),
     KEY `idx_start_time`        (`start_time`),
-    KEY `idx_sort_order`        (`sort_order`)
+    KEY `idx_sort_order`        (`sort_order`),
+    KEY `idx_delete_flag`       (`delete_flag`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='服务器拼团活动表';
 
 

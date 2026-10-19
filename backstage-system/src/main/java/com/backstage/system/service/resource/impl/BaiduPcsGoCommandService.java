@@ -29,11 +29,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
@@ -176,7 +177,18 @@ public class BaiduPcsGoCommandService {
         }
 
         Process process = null;
-        ExecutorService executorService = Executors.newFixedThreadPool(PROCESS_STREAM_THREADS);
+        // 显式线程池替代 Executors.newFixedThreadPool：有界队列防 OOM，命名线程便于排查
+        ExecutorService executorService = new ThreadPoolExecutor(
+                PROCESS_STREAM_THREADS, PROCESS_STREAM_THREADS,
+                60L, TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(PROCESS_STREAM_THREADS * 2),
+                runnable -> {
+                    Thread thread = new Thread(runnable, "baidu-pcs-stream");
+                    thread.setDaemon(true);
+                    return thread;
+                },
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
         StreamCapture stdoutCapture = new StreamCapture(maxCaptureChars, maxCaptureLines, request.isStripAnsi());
         StreamCapture stderrCapture = new StreamCapture(maxCaptureChars, maxCaptureLines, request.isStripAnsi());
         Future<StreamCapture> stdoutFuture = null;

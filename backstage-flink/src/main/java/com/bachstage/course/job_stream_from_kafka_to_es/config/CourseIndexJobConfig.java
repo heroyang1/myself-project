@@ -43,10 +43,10 @@ public class CourseIndexJobConfig
     public static CourseIndexJobConfig fromSystem()
     {
         return new CourseIndexJobConfig(
-                ApplicationPropertiesConfig.read("kafka.bootstrap-servers", "KAFKA_BOOTSTRAP_SERVERS", "43.242.200.25:9092"),
+                ApplicationPropertiesConfig.read("kafka.bootstrap-servers", "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
                 ApplicationPropertiesConfig.read("kafka.group-id", "KAFKA_GROUP_ID", "backstage-course-index-flink"),
                 ApplicationPropertiesConfig.read("course.index.topic", "COURSE_INDEX_TOPIC", "osh.course.index"),
-                ApplicationPropertiesConfig.read("elasticsearch.hosts", "ES_HOSTS", "http://43.242.200.25:9200"),
+                ApplicationPropertiesConfig.read("elasticsearch.hosts", "ES_HOSTS", "http://localhost:9200"),
                 ApplicationPropertiesConfig.read("elasticsearch.index", "ES_INDEX", "osh_course_search_read"),
                 ApplicationPropertiesConfig.readInt("flink.parallelism", "FLINK_PARALLELISM", 1),
                 ApplicationPropertiesConfig.readLong("flink.checkpoint.interval-ms", "FLINK_CHECKPOINT_INTERVAL_MS", 60000L),

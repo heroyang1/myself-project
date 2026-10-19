@@ -50,22 +50,36 @@ public class PaymentSuccessConsumer {
     public void consumeUserEvent(String message, Acknowledgment ack) {
         log.info("【Kafka消费者】收到支付成功消息：{}", message);
 
+        // 消息解析失败属于不可恢复的脏数据：ack 丢弃，避免 Kafka 无限重投
+        PaySuccessMessage successMessage;
         try {
-            PaySuccessMessage successMessage = objectMapper.readValue(message, PaySuccessMessage.class);
-            String orderNo = successMessage.getOrderNo();
-            OshOrder order = orderMapper.selectByOrderNo(successMessage.getOrderNo());
-            if (Objects.isNull(order) || Objects.isNull(order.getProductType())) {
-                log.warn("权益发放跳过，订单信息不完整: orderNo={}", orderNo);
-                ack.acknowledge();
-                return;
-            }
+            successMessage = objectMapper.readValue(message, PaySuccessMessage.class);
+        } catch (Exception e) {
+            log.error("【Kafka消费者】支付成功消息解析失败，丢弃，message={}", message, e);
+            ack.acknowledge();
+            return;
+        }
 
-            ProductTypeEnum productTypeEnum = ProductTypeEnum.fromCode(order.getProductType());
-            if (Objects.isNull(productTypeEnum)) {
-                log.warn("权益发放跳过，未知商品类型: orderNo={}, productType={}", orderNo, order.getProductType());
-                return;
-            }
+        String orderNo = successMessage.getOrderNo();
+        OshOrder order = orderMapper.selectByOrderNo(orderNo);
+        if (Objects.isNull(order) || Objects.isNull(order.getProductType())) {
+            log.warn("权益发放跳过，订单信息不完整: orderNo={}", orderNo);
+            ack.acknowledge();
+            return;
+        }
 
+        ProductTypeEnum productTypeEnum = ProductTypeEnum.fromCode(order.getProductType());
+        if (Objects.isNull(productTypeEnum)) {
+            log.warn("权益发放跳过，未知商品类型: orderNo={}, productType={}", orderNo, order.getProductType());
+            // 脏数据（未知商品类型）重试无意义，ack 丢弃（原实现漏 ack 导致无限重投）
+            ack.acknowledge();
+            return;
+        }
+
+        // 权益发放：
+        // - task 模式由任务表 + 定时兜底接管重试（processOrderSafely 内部吞异常）；
+        // - 旧 Kafka 行为（非 task 模式）发放失败抛异常时不 ack，利用消息重投实现重试语义。
+        try {
             if (entitlementTaskService.isTaskMode()) {
                 // task 模式可接住升级前的 Kafka 积压：先补建唯一任务，再由 CAS 任务处理。
                 entitlementTaskService.ensureTask(orderNo);
@@ -74,7 +88,13 @@ public class PaymentSuccessConsumer {
                 // 蓝绿兼容阶段保持旧 Kafka 行为，数据库任务只写不执行。
                 paidHandlerRegistry.handle(productTypeEnum.getName(), orderNo);
             }
+        } catch (Exception e) {
+            log.error("【Kafka消费者】权益发放失败，等待重投重试，orderNo={}", orderNo, e);
+            return;
+        }
 
+        // 通知失败与权益发放隔离：通知异常不应触发重投，避免权益被重复处理
+        try {
             // 调用 websocket 让前端发送通知告知用户支付已完成。
             WsNotifyMessage msg = new WsNotifyMessage();
             msg.setType("PAY_SUCCESS_NOTIFY");
@@ -83,10 +103,10 @@ public class PaymentSuccessConsumer {
             msg.setJumpUrl(null);
             msg.setBizId(orderNo);
             webSocketNotifyService.send(order.getUserId(), msg);
-            ack.acknowledge();
-
-        }catch (Exception e){
-            log.error("【Kafka消费者】消息处理异常：", e);
+        } catch (Exception e) {
+            log.warn("【Kafka消费者】支付成功通知发送失败，orderNo={}, error={}", orderNo, e.getMessage());
         }
+
+        ack.acknowledge();
     }
 }

@@ -1,5 +1,7 @@
 # 后端代码风格
 
+> 本文是原则清单；带真实代码示例、AI 新增代码必须遵守的细则与模板见 [conventions/coding-standards.md](conventions/coding-standards.md)（单一事实源）。
+
 ## Java
 
 - 保持现有 Java 8 兼容语法，除非升级 OpenSpec 已批准。

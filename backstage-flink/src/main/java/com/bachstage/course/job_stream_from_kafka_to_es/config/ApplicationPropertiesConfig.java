@@ -68,6 +68,7 @@ public class ApplicationPropertiesConfig
             }
             catch (IOException ignored)
             {
+                // 配置已读取完毕，关闭失败不影响结果
             }
         }
         return properties;

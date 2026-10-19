@@ -1,0 +1,6 @@
+USE `ry-vue`;
+SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='ry-vue' AND TABLE_NAME='osh_course' ORDER BY ORDINAL_POSITION;
+SELECT '---' AS sep;
+SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='ry-vue' AND TABLE_NAME='osh_group_activity' ORDER BY ORDINAL_POSITION;
+SELECT '---' AS sep;
+SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='ry-vue' AND TABLE_NAME='osh_book_tag';

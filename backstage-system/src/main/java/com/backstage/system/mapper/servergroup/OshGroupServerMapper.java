@@ -29,9 +29,22 @@ public interface OshGroupServerMapper {
      * 查询拼团活动列表（C端展示用）
      * 
      * @param status 状态筛选（可选）
+     * @param keyword 关键词筛选（可选，匹配标题）
+     * @param minPrice 最低价筛选（可选）
+     * @param maxPrice 最高价筛选（可选）
+     * @param cpu CPU筛选（可选，精确匹配）
+     * @param memory 内存筛选（可选，精确匹配）
+     * @param storage 存储筛选（可选，精确匹配）
      * @return 拼团活动列表
      */
-    List<GroupActivityListVO> selectGroupActivityList(@Param("status") Integer status);
+    List<GroupActivityListVO> selectGroupActivityList(
+            @Param("status") Integer status,
+            @Param("keyword") String keyword,
+            @Param("minPrice") BigDecimal minPrice,
+            @Param("maxPrice") BigDecimal maxPrice,
+            @Param("cpu") String cpu,
+            @Param("memory") String memory,
+            @Param("storage") String storage);
     
     /**
      * 根据ID查询拼团活动详情
@@ -352,6 +365,19 @@ public interface OshGroupServerMapper {
      * @return 影响行数
      */
     int updateActivityCurrentNum(@Param("id") Long id, @Param("currentNum") int currentNum);
+
+    /**
+     * 条件更新活动的 current_num（CAS 模式：仅当当前值等于 expectedNum 时才更新）。
+     * 对账任务使用，防止覆盖支付回调并发递增导致的人数回退。
+     *
+     * @param id           活动ID
+     * @param currentNum   对账统计出的实际人数
+     * @param expectedNum  读取时的旧值（乐观锁基线）
+     * @return 影响行数（0 表示期间有并发变更，本次跳过）
+     */
+    int updateActivityCurrentNumIfMatch(@Param("id") Long id,
+                                        @Param("currentNum") int currentNum,
+                                        @Param("expectedNum") int expectedNum);
 
     /**
      * 原子递增活动 current_num（CAS 模式，防超卖）

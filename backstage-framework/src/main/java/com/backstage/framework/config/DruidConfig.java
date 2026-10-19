@@ -9,6 +9,9 @@ import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 import javax.sql.DataSource;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -32,6 +35,8 @@ import com.backstage.framework.datasource.DynamicDataSource;
 @Configuration
 public class DruidConfig
 {
+    private static final Logger log = LoggerFactory.getLogger(DruidConfig.class);
+
     @Bean
     @ConfigurationProperties("spring.datasource.druid.master")
     public DataSource masterDataSource(DruidProperties druidProperties)
@@ -75,6 +80,8 @@ public class DruidConfig
         }
         catch (Exception e)
         {
+            // 数据源 Bean 不存在时跳过注册，但必须可见，否则运行时切库会静默失败
+            log.warn("动态数据源注册失败, sourceName={}, beanName={}", sourceName, beanName, e);
         }
     }
 

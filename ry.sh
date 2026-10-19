@@ -1,5 +1,14 @@
 #!/bin/sh
-# ./ry.sh start 启动 stop 停止 restart 重启 status 状态
+# ============================================================
+# ry.sh — 若依框架原生服务管理脚本（本地开发/调试专用）
+#
+# ⚠️  警告：本脚本仅用于本地开发环境，禁止在生产/测试服务器使用。
+#    生产环境统一使用 Docker 容器管理，由 CI/CD 流水线
+#    (deploy-qa.yml / deploy-prod.yml) 通过 SSH 远程执行
+#    docker compose / docker 命令。
+#
+# 用法: ./ry.sh {start|stop|restart|status}
+# ============================================================
 AppName=backstage-admin.jar
 
 # JVM参数

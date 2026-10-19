@@ -6,6 +6,14 @@ Codex 是执行者、分析者和 Reviewer 辅助者，不是需求源头。需�
 
 ## 每次开发前
 
+先跑机械自检（只读，不做任何破坏性操作）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\preflight.ps1
+```
+
+它会输出：当前分支、未提交改动、与基线的落后/领先、本分支携带的 change 及四件套完整性、保护域触碰提醒。
+
 Codex 必须确认：
 
 - 当前分支。
@@ -13,6 +21,8 @@ Codex 必须确认：
 - 是否需要保护本地改动。
 - 是否存在对应 OpenSpec change。
 - 任务是否涉及接口、权限、数据、中间件、部署。
+- 任务是否触碰保护域（`pom.xml` / `sql/` / `application*.yml`）：触碰则豁免无效，必须建 change。
+- PR 标题须满足 Conventional Commits（CI 强制校验）。
 
 ## 推荐提示词
 
@@ -29,7 +39,8 @@ Codex 必须确认：
 - 禁止没有说明就改公共接口。
 - 禁止没有说明就改权限判断。
 - 禁止没有说明就改数据库字段含义。
-- 禁止把 token、密码、私钥写入仓库。
+- 禁止把 token、密码、私钥写入仓库（CI gitleaks 扫描会拦截）。
+- 禁止修改或删除 `openspec/changes/archive/` 下的已归档内容（CI 归档守卫会拦截，修正历史请新建 change）。
 - 禁止用 `git reset --hard`、`git checkout -- .` 清理别人改动。
 - 禁止为了让 CI 过而删除测试。
 

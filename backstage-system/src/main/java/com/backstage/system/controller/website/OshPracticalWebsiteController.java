@@ -22,6 +22,8 @@ import com.backstage.system.service.website.OshWebsiteTagService;
 import com.backstage.system.service.website.OshWebsiteUserRatingService;
 import com.github.pagehelper.PageInfo;
 import io.swagger.annotations.ApiOperation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -41,6 +43,8 @@ import static com.backstage.system.utils.UserContextUtil.getCurrentUser;
 @RestController
 @RequestMapping("/pc/website")
 public class OshPracticalWebsiteController extends BaseController {
+
+    private static final Logger log = LoggerFactory.getLogger(OshPracticalWebsiteController.class);
 
     @Autowired
     private OshPracticalWebsiteService oshPracticalWebsiteService;
@@ -142,7 +146,7 @@ public class OshPracticalWebsiteController extends BaseController {
         } catch (IllegalArgumentException e) {
             return R.fail(e.getMessage());
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("提交网站异常, name={}", submitDto == null ? null : submitDto.getName(), e);
             return R.fail("网络开小差");
         }
     }
@@ -165,7 +169,7 @@ public class OshPracticalWebsiteController extends BaseController {
         } catch (IllegalArgumentException e) {
             return R.fail(e.getMessage());
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("收藏网站异常, websiteId={}", websiteId, e);
             return R.fail("网络开小差");
         }
     }
@@ -188,7 +192,7 @@ public class OshPracticalWebsiteController extends BaseController {
         } catch (IllegalArgumentException e) {
             return R.fail(e.getMessage());
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("取消收藏网站异常, websiteId={}", websiteId, e);
             return R.fail("网络开小差");
         }
     }
@@ -211,7 +215,7 @@ public class OshPracticalWebsiteController extends BaseController {
             data.put("rows", result.getRows());
             return R.ok(data);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("查询用户收藏网站列表异常, pageNum={}, pageSize={}", pageNum, pageSize, e);
             return R.fail("网络开小差");
         }
     }
@@ -237,7 +241,9 @@ public class OshPracticalWebsiteController extends BaseController {
         } catch (IllegalArgumentException e) {
             return R.fail(e.getMessage());
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("审核网站异常, websiteId={}, status={}",
+                    auditDto == null ? null : auditDto.getWebsiteId(),
+                    auditDto == null ? null : auditDto.getStatus(), e);
             return R.fail("审核失败");
         }
     }
@@ -256,7 +262,7 @@ public class OshPracticalWebsiteController extends BaseController {
             TableDataInfo result = oshPracticalWebsiteService.selectAuditList(pageNum, pageSize);
             return R.ok(result);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("查询待审核网站列表异常, pageNum={}, pageSize={}", pageNum, pageSize, e);
             return R.fail("查询失败");
         }
     }
@@ -279,7 +285,7 @@ public class OshPracticalWebsiteController extends BaseController {
             }
             return R.ok(website);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("查询待审核网站详情异常, websiteId={}", websiteId, e);
             return R.fail("查询失败");
         }
     }
@@ -298,7 +304,7 @@ public class OshPracticalWebsiteController extends BaseController {
         } catch (ServiceException e) {
             return R.fail(e.getMessage());
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("批量删除网站异常, websiteIds={}", websiteIds, e);
             return R.fail("删除失败");
         }
     }
@@ -321,7 +327,7 @@ public class OshPracticalWebsiteController extends BaseController {
         } catch (IllegalArgumentException e) {
             return R.fail(e.getMessage());
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("提交网站评价异常, websiteId={}", ratingDTO == null ? null : ratingDTO.getWebsiteId(), e);
             return R.fail("评价失败，请稍后重试");
         }
     }
@@ -354,7 +360,7 @@ public class OshPracticalWebsiteController extends BaseController {
         } catch (IllegalArgumentException e) {
             return R.fail(e.getMessage());
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("普通用户批量导入网站异常", e);
             return R.fail("导入失败，请稍后重试");
         }
     }
@@ -375,7 +381,7 @@ public class OshPracticalWebsiteController extends BaseController {
         } catch (IllegalArgumentException e) {
             return R.fail(e.getMessage());
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("管理员批量导入网站异常", e);
             return R.fail("导入失败，请稍后重试");
         }
     }

@@ -57,7 +57,9 @@ public class OshWebSocketHandler extends TextWebSocketHandler {
         if ("ping".equals(message.getPayload())) {
             try {
                 session.sendMessage(new TextMessage("pong"));
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+                // 心跳回复失败通常是连接已断开，忽略即可，后续读操作会触发 onClose
+            }
         }
     }
 
@@ -132,6 +134,7 @@ public class OshWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void close(WebSocketSession session) {
-        try { session.close(CloseStatus.NOT_ACCEPTABLE); } catch (Exception ignored) {}
+        // 会话可能已关闭，重复关闭抛异常属预期，忽略
+        try { session.close(CloseStatus.NOT_ACCEPTABLE); } catch (Exception ignored) { }
     }
 }

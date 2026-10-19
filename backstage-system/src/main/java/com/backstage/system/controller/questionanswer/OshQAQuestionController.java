@@ -169,6 +169,7 @@ public class OshQAQuestionController {
         try {
             hasPermission = UserContextUtil.getCurrentLevel() >= 2;
         } catch (Exception ignored) {
+            // 无登录上下文时等级判断抛异常，按无权限处理（fail-closed）
         }
         Long sectionId = addQuestionDTO == null ? null : addQuestionDTO.getResourceNo();
         if (sectionId == null || hasPermission) {
@@ -182,6 +183,7 @@ public class OshQAQuestionController {
             Long courseId = Long.parseLong(section.get("course_id").toString());
             return oshCourseService.hasUserBoughtCourse(courseId, userId);
         } catch (Exception ignored) {
+            // 查询购买关系失败时拒绝放行（fail-closed），避免越权提问
             return false;
         }
     }

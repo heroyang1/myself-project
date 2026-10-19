@@ -1414,8 +1414,9 @@ public class ExcelUtil<T>
             {
                 temp = Double.valueOf(text);
             }
-            catch (NumberFormatException e)
+            catch (NumberFormatException ignored)
             {
+                // 单元格非数字时按 0 参与统计，属预期行为
             }
             statistics.put(index, statistics.get(index) + temp);
         }

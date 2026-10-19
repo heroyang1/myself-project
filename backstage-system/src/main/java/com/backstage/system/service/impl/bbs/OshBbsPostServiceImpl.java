@@ -23,11 +23,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.text.SimpleDateFormat;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @Service
 public class OshBbsPostServiceImpl implements IOshBbsPostService {
+
+    /** UTC ISO 时间格式（线程安全，可全局共享） */
+    private static final DateTimeFormatter ISO_UTC_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
 
     @Autowired
     private OshBbsPostMapper postMapper;
@@ -112,7 +117,9 @@ public class OshBbsPostServiceImpl implements IOshBbsPostService {
         Long loginUserId = null;
         try {
             loginUserId = SecurityUtils.getUserId();
-        } catch (Exception e) {}
+        } catch (Exception e) {
+            // 游客访问，保持 null 即可
+        }
 
         // 2. 查询单条数据
         OshBbsPost query = new OshBbsPost();
@@ -221,7 +228,7 @@ public class OshBbsPostServiceImpl implements IOshBbsPostService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public R unsupportPost(Long postId, Long userId) {
         // 1. 先查出这条帖子，看是否存在，以及是谁发的
         OshBbsPost post = postMapper.selectPostById(postId);
@@ -246,7 +253,7 @@ public class OshBbsPostServiceImpl implements IOshBbsPostService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public R replyPost(Map<String, Object> params) {
         // 1. 解析 post_id (基础校验)
         Object postIdObj = params.get("post_id");
@@ -288,7 +295,7 @@ public class OshBbsPostServiceImpl implements IOshBbsPostService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public R deletePostById(Long id, Long loginUserId) {
         // 1. 基础校验
         if (id == null) return R.fail("帖子ID不能为空");
@@ -390,7 +397,7 @@ public class OshBbsPostServiceImpl implements IOshBbsPostService {
     private ObjectMapper objectMapper; // Spring自带，用于对象转JSON字符串
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public R savePost(Map<String, Object> params, Long userId) {
         // 1. 解析参数
         Object bbsIdObj = params.get("bbs_id");
@@ -455,9 +462,7 @@ public class OshBbsPostServiceImpl implements IOshBbsPostService {
             data.put("school_id", 11);
 
             // 格式化时间为：2021-05-29T09:24:54.074Z
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
-            sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
-            String timeStr = sdf.format(post.getCreateTime());
+            String timeStr = ISO_UTC_FORMATTER.format(post.getCreateTime().toInstant());
 
             data.put("created_time", timeStr);
             data.put("updated_time", timeStr);

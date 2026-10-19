@@ -81,6 +81,12 @@
             <groupId>com.backstage</groupId>
             <artifactId>backstage-system</artifactId>
         </dependency>
+
+        <!-- 服务间共享契约模块（内部接口路径/头部/鉴权标识常量，InternalApiAuthFilter 依赖）-->
+        <dependency>
+            <groupId>com.backstage</groupId>
+            <artifactId>backstage-service-contract</artifactId>
+        </dependency>
         
         <!-- websocket -->
         <dependency>

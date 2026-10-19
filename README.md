@@ -74,6 +74,33 @@ Auto trigger rule:
 
 - admin/admin123
 
+## 快速启动
+
+### 开发环境启动
+
+本地开发使用以下方式启动后端服务（仅用于开发和调试）：
+
+| 平台 | 启动方式 |
+|------|----------|
+| Windows | 运行 `bin\run.bat`，或直接在 IDE 中启动 `RuoYiApplication` 主类 |
+| Linux/macOS | 运行 `./ry.sh start`，停止用 `./ry.sh stop` |
+
+> **注意**：`ry.sh` 和 `bin/run.bat` 使用裸进程管理（`nohup java -jar`），**仅适用于本地开发**。
+> 不要在生产或测试服务器上使用这些脚本。
+
+### 生产环境部署
+
+生产和测试环境统一通过 **GitHub Actions** CI/CD 流水线部署：
+
+| 环境 | 触发方式 | 说明 |
+|------|----------|------|
+| QA 测试机（25） | Push 到 `qa/**` 分支自动触发 | `deploy-qa.yml` 自动构建并部署 |
+| 生产机（149） | 手动审批触发（workflow_dispatch） | `deploy-prod.yml` 支持绿/蓝槽位部署 |
+
+生产环境使用 Docker 容器管理，禁止使用 `ry.sh` 或 `run.bat` 启动服务。
+
+详细 CI/CD 配置文档见：[docs/analysis/CI_CD_Audit_Report.md](docs/analysis/CI_CD_Audit_Report.md) 和 [docs/guides/github-actions-deploy.md](docs/guides/github-actions-deploy.md)。
+
 ## 版本控制
 
 | 组件    | 版本          |

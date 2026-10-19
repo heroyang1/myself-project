@@ -546,7 +546,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void createBookChapter(BookChapterSaveUpdateVO reqVO) {
         requireManageLevel();
         BookDO bookDO = getById(reqVO.getBookId());
@@ -578,7 +578,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void updateBookChapter(BookChapterSaveUpdateVO reqVO) {
         requireManageLevel();
         BookDO bookDO = getById(reqVO.getBookId());
@@ -628,7 +628,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
      * @return 电子书响应VO
      */
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public Long createBook(BookSaveReqVO reqVO) {
         requireManageLevel();
         validateBookAccessLevel(reqVO.getLevel());
@@ -755,7 +755,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
      * @return 电子书响应VO
      */
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void updateBook(BookSaveReqVO reqVO)
     {
         requireManageLevel();
@@ -865,7 +865,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
      * @param id 电子书ID
      */
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void deleteBook(Long id)
     {
         requireManageLevel();
@@ -887,7 +887,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void restoreBook(Long id)
     {
         requireFounderLevel();
@@ -957,7 +957,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void favoriteBook(Long bookId, Integer status) {
         Long userId = UserContextUtil.getCurrentUserId();
         BookDO bookDO = getById(bookId);
@@ -970,7 +970,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void followBook(Long bookId, Integer status) {
         Long userId = ThreadLocalUtil.getCurrentUserId();
         BookDO bookDO = getById(bookId);
@@ -1023,7 +1023,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, BookDO> implements 
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void grantBookAccess(String orderNo) {
         // 查询订单获取 userId 和 productId
         OshOrder order = oshOrderMapper.selectByOrderNo(orderNo);

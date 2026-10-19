@@ -119,22 +119,30 @@
         and end_time &lt;= NOW()
     </select>
 
-    <!-- 未开始 → 进行中：status=1 且 start_time <= now -->
+    <!-- 未开始 → 进行中：status=1 且 start_time <= now，且限定本次查询命中的 id 范围 -->
     <update id="updateToOngoing">
         update osh_seckill_activity
         set status = 2, update_time = CURRENT_TIMESTAMP
         where status = 1
           and start_time &lt;= NOW()
           and (delete_flag = 0 or delete_flag is null)
+          and id in
+          <foreach collection="ids" item="id" open="(" separator="," close=")">
+              #{id}
+          </foreach>
     </update>
 
-    <!-- 进行中 → 已结束：status=2 且 end_time <= now -->
+    <!-- 进行中 → 已结束：status=2 且 end_time <= now，且限定本次查询命中的 id 范围 -->
     <update id="updateToFinished">
         update osh_seckill_activity
         set status = 3, update_time = CURRENT_TIMESTAMP
         where status = 2
           and end_time &lt;= NOW()
           and (delete_flag = 0 or delete_flag is null)
+          and id in
+          <foreach collection="ids" item="id" open="(" separator="," close=")">
+              #{id}
+          </foreach>
     </update>
 
 </mapper>

@@ -91,6 +91,10 @@ yarn.lock
 *.env.local
 *.env.*.local
 
+# MCP 本地凭据（含 zentao token）——仅提交 mcp.json.example；真实 token 写入本地 mcp.json
+# 历史注意：旧 commit 中 mcp.json 内含明文 token，若需清理历史请协调团队强推并刷新禅道口令。
+mcp.json
+
 # Application configuration files (keep local configs untracked)
 backstage-admin/src/main/resources/application.yml
 backstage-admin/src/main/resources/application-druid.yml

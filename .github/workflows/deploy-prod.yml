@@ -86,7 +86,7 @@ jobs:
           sha256sum backstage-admin/target/backstage-admin.jar
 
       - name: Patch jar bootstrap for 149 slot
-        run: python3 .github/scripts/patch-149-config.py --jar backstage-admin/target/backstage-admin.jar --slot "$SLOT"
+        run: python3 .github/scripts/patch-149-config.py --jar backstage-admin/target/backstage-admin.jar --slot "$SLOT" --src-host "${{ vars.TEST25_DEPLOY_HOST || '43.242.200.25' }}"
 
       - name: Setup SSH agent
         uses: webfactory/ssh-agent@v0.9.0
@@ -148,7 +148,7 @@ jobs:
         run: |
           ssh -o ConnectTimeout=30 -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
             "test -x /opt/osh-green/005-scripts/patch-149-config.py && \
-             python3 /opt/osh-green/005-scripts/patch-149-config.py --jar '$BACKEND_DIR/$BACKEND_JAR_NAME' --slot '$SLOT' || \
+             python3 /opt/osh-green/005-scripts/patch-149-config.py --jar '$BACKEND_DIR/$BACKEND_JAR_NAME' --slot '$SLOT' --src-host '${{ vars.TEST25_DEPLOY_HOST || '43.242.200.25' }}' || \
              echo 'skip remote patch (script missing)'"
 
       - name: Restart backend container
@@ -177,3 +177,54 @@ jobs:
         run: |
           ssh -o ConnectTimeout=30 -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
             "docker logs --tail 80 '$CONTAINER' 2>&1 || true" || true
+
+      - name: Notify on success
+        if: success()
+        continue-on-error: true
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ env.MAIL_SERVER }}
+          server_port: ${{ env.MAIL_PORT }}
+          secure: true
+          username: ${{ env.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "✅ 生产后端部署成功 - ${{ github.repository }} [${{ env.SLOT }}]"
+          to: ${{ env.NOTIFY_EMAIL }}
+          from: GitHub Actions <${{ env.MAIL_USERNAME }}>
+          body: |
+            生产后端部署成功！
+
+            仓库：${{ github.repository }}
+            Git Ref：${{ env.GIT_REF }}
+            槽位：${{ env.SLOT }}
+            Release ID：${{ env.RELEASE_ID || 'N/A' }}
+            提交：${{ github.sha }}
+            触发人：${{ github.actor }}
+            Nginx 端口：${{ steps.target.outputs.nginx_port }}
+
+            访问地址：http://${{ env.DEPLOY_HOST }}:${{ steps.target.outputs.nginx_port }}/
+
+      - name: Notify on failure
+        if: failure()
+        continue-on-error: true
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ env.MAIL_SERVER }}
+          server_port: ${{ env.MAIL_PORT }}
+          secure: true
+          username: ${{ env.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "❌ 生产后端部署失败 - ${{ github.repository }} [${{ env.SLOT }}]"
+          to: ${{ env.NOTIFY_EMAIL }}
+          from: GitHub Actions <${{ env.MAIL_USERNAME }}>
+          body: |
+            生产后端部署失败！请检查 Actions 日志。
+
+            仓库：${{ github.repository }}
+            Git Ref：${{ env.GIT_REF }}
+            槽位：${{ env.SLOT }}
+            Release ID：${{ env.RELEASE_ID || 'N/A' }}
+            提交：${{ github.sha }}
+            触发人：${{ github.actor }}
+
+            查看详情：https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}

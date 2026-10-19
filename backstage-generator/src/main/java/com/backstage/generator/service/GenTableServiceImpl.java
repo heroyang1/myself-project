@@ -275,10 +275,9 @@ public class GenTableServiceImpl implements IGenTableService
                 // 写入文件
                 try (FileWriter writer = new FileWriter(targetFile)) {
                     writer.write(content);
-                    System.out.println("文件已保存到: " + filePath);
+                    log.info("文件已保存到: {}", filePath);
                 } catch (IOException e) {
-                    System.err.println("保存文件失败: " + filePath);
-                    e.printStackTrace();
+                    log.error("保存文件失败: {}", filePath, e);
                 }
             }
         }
@@ -303,10 +302,9 @@ public class GenTableServiceImpl implements IGenTableService
                     new ByteArrayResource(sql.getBytes(StandardCharsets.UTF_8)),
                     "UTF-8"));
 
-            System.out.println("SQL执行成功");
+            log.info("SQL执行成功");
         } catch (Exception e) {
-            System.err.println("SQL执行失败");
-            e.printStackTrace();
+            log.error("SQL执行失败", e);
         }
     }
 

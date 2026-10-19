@@ -32,7 +32,7 @@ public class OshUserExamRecordController extends BaseController {
     @Anonymous
     public R list(Integer page) {
         Long userId = null;
-        try { userId = UserContextUtil.getCurrentUserId(); } catch (Exception ignored) {}
+        try { userId = UserContextUtil.getCurrentUserId(); } catch (Exception ignored) {} // 尽力获取登录上下文，匿名/无上下文时降级为 null，属预期行为
         if (userId == null) return R.fail("请先登录");
 
         if (page == null) page = 1;
@@ -51,7 +51,7 @@ public class OshUserExamRecordController extends BaseController {
     @Anonymous
     public R save(@RequestBody UserExamSaveDto saveDto) {
         Long userId = null;
-        try { userId = UserContextUtil.getCurrentUserId(); } catch (Exception ignored) {}
+        try { userId = UserContextUtil.getCurrentUserId(); } catch (Exception ignored) {} // 尽力获取登录上下文，匿名/无上下文时降级为 null，属预期行为
         if (userId == null) return R.fail("请先登录");
 
         // 将真实 userId 注入 DTO，防止前端伪造
@@ -69,7 +69,7 @@ public class OshUserExamRecordController extends BaseController {
     @Anonymous
     public R detail(Long id) {
         Long userId = null;
-        try { userId = UserContextUtil.getCurrentUserId(); } catch (Exception ignored) {}
+        try { userId = UserContextUtil.getCurrentUserId(); } catch (Exception ignored) {} // 尽力获取登录上下文，匿名/无上下文时降级为 null，属预期行为
         if (userId == null) return R.fail("请先登录");
 
         UserExamResultVo result = userTestService.getUserExamResult(id);

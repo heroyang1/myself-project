@@ -4,6 +4,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.Gson;
 import okhttp3.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.TimeUnit;
@@ -13,6 +15,8 @@ import java.util.concurrent.TimeUnit;
  */
 @Component
 public class AiUtil {
+    private static final Logger log = LoggerFactory.getLogger(AiUtil.class);
+
     private static final Gson gson = new Gson();
 
     // 关键改动：调大 ReadTimeout，防止简答题评分时 SocketTimeout
@@ -75,8 +79,7 @@ public class AiUtil {
                 System.err.println("AI 请求失败，状态码: " + response.code());
             }
         } catch (Exception e) {
-            System.err.println("AI 调用链路发生异常: " + e.getMessage());
-            e.printStackTrace();
+            log.error("AI 调用链路发生异常, model={}, apiUrl={}", model, apiUrl, e);
         }
         return null;
     }

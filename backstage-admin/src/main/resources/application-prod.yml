@@ -1,0 +1,49 @@
+server:
+  # green 槽位实际端口 28081，blue 槽位实际端口 58081，通过环境变量 SERVER_PORT 注入覆盖此默认值
+  port: ${SERVER_PORT:8081}
+  servlet:
+    context-path: /
+
+spring:
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 20MB
+
+ruoyi:
+  name: OSH-Backend
+  version: 3.9.0
+  copyrightYear: 2026
+  # 生产文件上传路径，需与 Docker volume 挂载点保持一致，不敏感，可本地定义
+  profile: /opt/osh/upload
+  addressEnabled: true
+  captchaType: math
+
+mybatis:
+  typeAliasesPackage: com.backstage.**.domain,com.backstage.**.entity
+  mapperLocations: classpath*:mapper/**/*Mapper.xml
+  configLocation: classpath:mybatis/mybatis-config.xml
+
+logging:
+  level:
+    com.backstage: info
+    org.springframework: warn
+    com.alibaba.nacos: warn
+
+swagger:
+  # 生产环境关闭 Swagger，避免暴露接口文档
+  enabled: false
+  pathMapping: /
+
+token:
+  header: Authorization
+  # token.secret 严禁在此文件出现，必须走 Nacos osh-backend-prod.yaml + Jasypt 加密
+  expireTime: 720
+
+user:
+  password:
+    maxRetryCount: 5
+    lockTime: 10
+
+email:
+  from: ${EMAIL_FROM:no-reply@your-domain.com}

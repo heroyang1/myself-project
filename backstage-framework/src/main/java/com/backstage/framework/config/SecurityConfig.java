@@ -1,6 +1,8 @@
 package com.backstage.framework.config;
 
 import com.backstage.framework.security.filter.OshAuthenticationFilter;
+import com.backstage.contract.common.InternalApiConstants;
+import com.backstage.framework.security.filter.InternalApiAuthFilter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -57,6 +59,12 @@ public class SecurityConfig
 
     @Autowired
     private OshAuthenticationFilter oshAuthenticationFilter;
+
+    /**
+     * 内部服务接口鉴权过滤器（/internal/** 共享密钥校验）
+     */
+    @Autowired
+    private InternalApiAuthFilter internalApiAuthFilter;
     
     /**
      * 跨域过滤器
@@ -116,6 +124,8 @@ public class SecurityConfig
                 permitAllUrl.getUrls().forEach(url -> requests.antMatchers(url).permitAll());
                 // 对于登录login 注册register 验证码captchaImage 允许匿名访问
                 requests
+                    // 管理端标准公开端点
+                    .antMatchers("/login", "/register", "/captchaImage").permitAll()
                     // 汇付异步支付通知由上游服务器调用，不能要求前端登录态。
                     .antMatchers(HttpMethod.POST, "/pc/pay/huifu/notify").permitAll()
                     // WebSocket 握手端点，认证在 WebSocketAuthInterceptor 中单独处理
@@ -123,6 +133,8 @@ public class SecurityConfig
                     // 静态资源，可匿名访问
                     .antMatchers(HttpMethod.GET, "/", "/*.html", "/**/*.html", "/**/*.css", "/**/*.js", "/profile/**").permitAll()
                     .antMatchers("/swagger-ui.html", "/swagger-resources/**", "/webjars/**", "/*/api-docs", "/druid/**").permitAll()
+                    // 服务间内部接口：仅持有 INTERNAL_SERVICE 权限（经 InternalApiAuthFilter 共享密钥校验）者可访问
+                    .antMatchers(InternalApiConstants.BASE_PATH + "/**").hasAuthority(InternalApiConstants.AUTHORITY_INTERNAL_SERVICE)
                     // 除上面外的所有请求全部需要鉴权认证
                     .anyRequest().authenticated();
             })
@@ -131,6 +143,8 @@ public class SecurityConfig
             // 添加JWT filter
             // .addFilterBefore(authenticationTokenFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(oshAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+            // 内部接口鉴权过滤器需在 OSH 用户认证过滤器之前，先为 /internal/** 注入 INTERNAL_SERVICE 权限
+            .addFilterBefore(internalApiAuthFilter, OshAuthenticationFilter.class)
             // 添加CORS filter
             .addFilterBefore(corsFilter, OshAuthenticationFilter.class)
             .addFilterBefore(corsFilter, LogoutFilter.class)

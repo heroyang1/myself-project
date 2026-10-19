@@ -1,6 +1,6 @@
 # 首页卡片 ES + MySQL 兜底统一改造方案（xxl-job 版）
 
-> 在 [home_page_card_es_refactor_design.md](./home_page_card_es_refactor_design.md) 的基础上，把"Spring `@Scheduled` 定时任务"替换为 xxl-job 集群调度。
+> 在首页卡片 ES + MySQL 兜底统一改造方案（初版）的基础上，把"Spring `@Scheduled` 定时任务"替换为 xxl-job 集群调度。
 > 参考实现：`backstage-quartz/src/main/java/com/backstage/quartz/task/HomepageAnnouncementRefreshTask.java`。
 
 ---

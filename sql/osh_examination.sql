@@ -1,21 +1,26 @@
-表不是我建的
-数据插入如下
-INSERT INTO `osh_examination`
-(`title`, `total_score`, `pass_score`, `expire`, `question_count`, `status`, `is_delete`)
-VALUES
-('2026年上半年入职安全生产考试', 100, 60, 60, 50, 1, 0),
-('Java后端核心技术能力评估（高级）', 120, 72, 90, 40, 1, 0),
-('企业文化与员工手册合规测试', 100, 80, 45, 20, 1, 0);
-INSERT INTO `osh_examination`
-(`id`, `title`, `total_score`, `pass_score`, `expire`, `question_count`, `start_time`, `end_time`, `status`, `create_by`, `create_time`, `is_delet`)
-VALUES
-(246, 'hu-20', 100, 60, 60, 10, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1, 'admin', NOW(), 0),
-(245, 'hu-19', 100, 60, 60, 10, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1, 'admin', NOW(), 0),
-(244, 'hu-18', 100, 60, 60, 10, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1, 'admin', NOW(), 0),
-(243, 'hu-17', 100, 60, 60, 10, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1, 'admin', NOW(), 0),
-(242, 'hu-16', 100, 60, 60, 10, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1, 'admin', NOW(), 0),
-(241, 'hu-15', 100, 60, 60, 10, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1, 'admin', NOW(), 0),
-(240, 'hu-14', 100, 60, 60, 10, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1, 'admin', NOW(), 0),
-(239, 'hu-13', 100, 60, 60, 10, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1, 'admin', NOW(), 0),
-(238, 'hu-12', 100, 60, 60, 10, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1, 'admin', NOW(), 0),
-(237, 'hu-11', 100, 60, 60, 10, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1, 'admin', NOW(), 0);
+-- ============================================================
+-- 考试表
+-- 用于课程服务人员申请审核、用户在线考试等场景
+-- ============================================================
+
+DROP TABLE IF EXISTS `osh_examination`;
+CREATE TABLE `osh_examination` (
+    `id`              bigint(20)    NOT NULL AUTO_INCREMENT               COMMENT '考试ID',
+    `title`           varchar(255)  NOT NULL DEFAULT ''                   COMMENT '考试标题',
+    `cover`           varchar(512)  DEFAULT ''                            COMMENT '封面图片URL',
+    `description`     text          DEFAULT NULL                          COMMENT '考试描述',
+    `total_score`     int(11)       NOT NULL DEFAULT 0                    COMMENT '总分',
+    `pass_score`      int(11)       NOT NULL DEFAULT 0                    COMMENT '及格分数',
+    `expire`          int(11)       NOT NULL DEFAULT 0                    COMMENT '答题时限（分钟）',
+    `question_count`  int(11)       NOT NULL DEFAULT 0                    COMMENT '题目数量',
+    `collect_count`   int(11)       NOT NULL DEFAULT 0                    COMMENT '收藏数量',
+    `status`          tinyint(3)    NOT NULL DEFAULT 1                    COMMENT '状态：0-草稿 1-已发布',
+    `delete_flag`     tinyint(1)    NOT NULL DEFAULT 0                    COMMENT '逻辑删除：0-正常 1-删除',
+    `create_by`       varchar(64)   DEFAULT ''                            COMMENT '创建者',
+    `create_time`     datetime      DEFAULT CURRENT_TIMESTAMP             COMMENT '创建时间',
+    `update_by`       varchar(64)   DEFAULT ''                            COMMENT '更新者',
+    `update_time`     datetime      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_status`      (`status`),
+    KEY `idx_delete_flag` (`delete_flag`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='考试表';

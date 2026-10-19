@@ -9,7 +9,7 @@ import sys
 import tempfile
 import zipfile
 
-SRC_HOST = "43.242.200.25"
+SRC_HOST = "43.242.200.25"  # Default, overridable via --src-host
 
 SLOTS = {
     "green": {
@@ -147,10 +147,19 @@ def verify_no_src_host(target, kind):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--slot", choices=SLOTS.keys(), required=True)
+    parser.add_argument(
+        "--src-host",
+        default="43.242.200.25",
+        help="Source host IP to replace in artifacts (default: 43.242.200.25)",
+    )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--frontend", help="frontend static output directory")
     group.add_argument("--jar", help="backstage-admin.jar path")
     args = parser.parse_args()
+
+    # Allow overriding source host without changing function signatures
+    global SRC_HOST
+    SRC_HOST = args.src_host
 
     if args.frontend:
         n = patch_frontend_dir(args.frontend, args.slot)

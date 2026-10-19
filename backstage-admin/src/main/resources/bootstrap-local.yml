@@ -1,0 +1,49 @@
+# ============================================================
+# bootstrap-local.yml —— 本地开发环境专用 Nacos 配置
+#
+# 使用方式：启动时指定 --spring.profiles.active=local
+#
+# 方案 A（推荐快速启动）：完全绕过 Nacos
+#   → 注释掉下方 spring.cloud.nacos.config 整个块即可
+#   → 所有配置由 application-local.yml 提供
+#
+# 方案 B（完整本地 Nacos）：
+#   → 先按 docs/local-dev-setup-guide.md 安装本地 Nacos
+#   → 取消注释下方 nacos config 块，将远程配置导入本地 Nacos
+# ============================================================
+
+spring:
+  application:
+    name: osh-backend
+  cloud:
+    nacos:
+      username: nacos
+      password: nacos
+      # ---- 服务发现（本地开发可禁用，减少连接超时等待） ----
+      discovery:
+        enabled: false
+        # server-addr: 127.0.0.1:8848
+        # namespace: local-dev
+      # ---- 配置中心 ----
+      # 方案 A：注释掉整个 config 块，绕过 Nacos 配置中心
+      config:
+        enabled: false
+        # server-addr: 127.0.0.1:8848
+        # namespace: local-dev
+        # file-extension: yaml
+        # shared-configs:
+        #   - data-id: osh-backend-mysql-dev.yaml
+        #     group: DEFAULT_GROUP
+        #     refresh: true
+        #   - data-id: osh-backend-redis-dev.yaml
+        #     refresh: true
+        #   - data-id: osh-backend-kafka-dev.yaml
+        #     refresh: true
+        #   - data-id: osh-backend-mail-dev.yaml
+        #     refresh: true
+        #   - data-id: osh-backend-elasticsearch-dev.yaml
+        #     refresh: true
+        #   - data-id: osh-backend-jasypt-dev.yaml
+        #     refresh: true
+        #   - data-id: osh-backend-xxljob-dev.yaml
+        #     refresh: true

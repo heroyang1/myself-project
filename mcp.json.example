@@ -1,0 +1,16 @@
+{
+    "mcpServers":  {
+                       "zentao":  {
+                                      "disabled":  false,
+                                      "type":  "mcp",
+                                      "url":  "http://<your-zentao-host>:<port>/zentao/mcp",
+                                      "timeout":  60000,
+                                      "headers":  {
+                                                      "token":  "",
+                                                      "Authorization":  ""
+                                                  },
+                                      "apiBaseUrl":  "http://<your-zentao-host>:<api-port>"
+                                  }
+                   },
+                   "_comment":  "本文件是占位模板。首次 clone 后由 bin/ensure_zentao_mcp_token.ps1 自动复制到仓库根 mcp.json（已被 .gitignore 屏蔽），并按提示登录刷新 token。切勿把真实 token 提交入仓。"
+}

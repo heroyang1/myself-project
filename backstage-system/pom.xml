@@ -41,6 +41,41 @@
                     </annotationProcessorPaths>
                 </configuration>
             </plugin>
+            <!-- Pitest 变异测试：验证测试有效性（发现"测试通过但断言无意义"的伪覆盖）
+                 运行：mvn pitest:mutationCoverage -pl backstage-system
+                 报告：target/pit-reports/index.html -->
+            <plugin>
+                <groupId>org.pitest</groupId>
+                <artifactId>pitest-maven</artifactId>
+                <version>1.15.0</version>
+                <dependencies>
+                    <!-- JUnit 5 支持 -->
+                    <dependency>
+                        <groupId>org.pitest</groupId>
+                        <artifactId>pitest-junit5-plugin</artifactId>
+                        <version>1.2.1</version>
+                    </dependency>
+                </dependencies>
+                <configuration>
+                    <!-- 只对支付/拼团核心 Service 做变异（控制运行时长） -->
+                    <targetClasses>
+                        <param>com.backstage.system.service.order.*</param>
+                        <param>com.backstage.system.service.servergroup.impl.*</param>
+                    </targetClasses>
+                    <targetTests>
+                        <param>com.backstage.system.service.order.*Test</param>
+                        <param>com.backstage.system.service.servergroup.*Test</param>
+                    </targetTests>
+                    <mutators>
+                        <mutator>STRONGER</mutator>
+                    </mutators>
+                    <outputFormats>
+                        <outputFormat>HTML</outputFormat>
+                        <outputFormat>XML</outputFormat>
+                    </outputFormats>
+                    <timestampedReports>false</timestampedReports>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
     <modelVersion>4.0.0</modelVersion>
@@ -63,6 +98,12 @@
         <dependency>
             <groupId>com.backstage</groupId>
             <artifactId>backstage-common</artifactId>
+        </dependency>
+
+        <!-- 微服务间共享契约（/internal 端点 DTO 与常量）-->
+        <dependency>
+            <groupId>com.backstage</groupId>
+            <artifactId>backstage-service-contract</artifactId>
         </dependency>
 
 
@@ -138,6 +179,14 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- JUnit Vintage Engine: 让 JUnit Platform 能发现并运行 JUnit 4 测试 -->
+        <dependency>
+            <groupId>org.junit.vintage</groupId>
+            <artifactId>junit-vintage-engine</artifactId>
+            <version>5.7.2</version>
+            <scope>test</scope>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -147,6 +196,12 @@
         <dependency>
             <groupId>org.apache.pdfbox</groupId>
             <artifactId>pdfbox</artifactId>
+        </dependency>
+
+        <!-- OSHI 服务器硬件监控 -->
+        <dependency>
+            <groupId>com.github.oshi</groupId>
+            <artifactId>oshi-core</artifactId>
         </dependency>
     </dependencies>
 

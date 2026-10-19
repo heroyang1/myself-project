@@ -7,6 +7,7 @@ import com.backstage.system.domain.order.enums.PaymentStatusEnum;
 import com.backstage.system.mapper.order.OshPaymentMapper;
 import com.backstage.system.mapper.servergroup.OshGroupServerMapper;
 import com.backstage.system.service.order.OrderService;
+import com.backstage.system.service.servergroup.event.GroupEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,6 +48,9 @@ public class GroupOrderTimeoutCancelTask {
 
     @Autowired
     private OrderService orderService;
+
+    @Autowired
+    private GroupEventPublisher groupEventPublisher;
 
     /**
      * 取消超时未支付的拼团订单
@@ -142,6 +146,15 @@ public class GroupOrderTimeoutCancelTask {
         
         // 注意：不再释放拼团活动人数（currentNum），因为 join 时未递增 currentNum，
         // currentNum 仅在支付成功回调中递增，取消未支付订单无需回退。
+        
+        // 3. 发布订单取消事件（Kafka → Flink 异常检测 CEP + WebSocket 推送）
+        try {
+            groupEventPublisher.publishOrderCancelled(
+                    order.getOrderNo(), order.getGroupActivityId(),
+                    order.getUserId(), order.getSourceType());
+        } catch (Exception e) {
+            log.warn("【拼团取消事件】Kafka 事件发布失败, orderNo={}", order.getOrderNo(), e);
+        }
         
         log.info("订单取消成功: {}", order.getOrderNo());
     }

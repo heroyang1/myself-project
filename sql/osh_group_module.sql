@@ -45,9 +45,11 @@ CREATE TABLE `osh_group_activity` (
     `wechat_group_qr`   varchar(500)    DEFAULT NULL                         COMMENT '成团后的微信群二维码URL',
     `admin_contact`     varchar(200)    DEFAULT NULL                         COMMENT '管理员联系方式',
     `sort_order`        int             NOT NULL DEFAULT 0                   COMMENT '排序权重（值越大越靠前）',
+    `cover`             varchar(512)    DEFAULT NULL                         COMMENT '封面图片URL',
     `created_by`        bigint          DEFAULT NULL                         COMMENT '创建人用户ID',
     `created_time`      datetime        NOT NULL DEFAULT CURRENT_TIMESTAMP   COMMENT '创建时间',
     `updated_time`      datetime        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `delete_flag`       tinyint(1)      NOT NULL DEFAULT 0                   COMMENT '逻辑删除：0-正常 1-删除',
     PRIMARY KEY (`id`),
     KEY `idx_school_id`     (`school_id`),
     KEY `idx_type`          (`type`),
@@ -55,7 +57,8 @@ CREATE TABLE `osh_group_activity` (
     KEY `idx_status`        (`status`),
     KEY `idx_start_time`    (`start_time`),
     KEY `idx_end_time`      (`end_time`),
-    KEY `idx_sort_order`    (`sort_order`)
+    KEY `idx_sort_order`    (`sort_order`),
+    KEY `idx_delete_flag`   (`delete_flag`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1
   CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='拼团活动表';

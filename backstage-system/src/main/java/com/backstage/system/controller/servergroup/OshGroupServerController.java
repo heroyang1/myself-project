@@ -1,7 +1,9 @@
 package com.backstage.system.controller.servergroup;
 
 import com.backstage.common.annotation.Anonymous;
+import com.backstage.common.annotation.OshUserEvent;
 import com.backstage.common.annotation.RateLimiter;
+import com.backstage.common.constant.KafkaConstants;
 import com.backstage.common.constant.OshUserConstants;
 import com.backstage.common.core.controller.BaseController;
 import com.backstage.common.core.domain.R;
@@ -30,10 +32,12 @@ import com.backstage.system.domain.vo.group.AddUserToGroupVO;
 import com.backstage.system.domain.vo.group.GroupOrderStatusVO;
 import com.backstage.system.domain.vo.order.PayResponse;
 import com.backstage.system.service.servergroup.IOshGroupServerService;
+import com.backstage.system.service.servergroup.monitor.GroupServerMonitorService;
 import com.backstage.system.service.order.OrderService;
 import com.backstage.system.service.order.PayService;
 import com.backstage.system.utils.UserContextUtil;
 import com.backstage.system.utils.IpUtils;
+import eu.bitwalker.useragentutils.UserAgent;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
@@ -49,6 +53,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import javax.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 服务器拼团C端Controller
@@ -74,6 +79,9 @@ public class OshGroupServerController extends BaseController {
 
     @Autowired
     private OshOrderMapper oshOrderMapper;
+
+    @Autowired
+    private GroupServerMonitorService groupServerMonitorService;
     
     /**
      * 查询拼团列表
@@ -81,6 +89,12 @@ public class OshGroupServerController extends BaseController {
      * GET /pc/group/activity/list
      * 
      * @param status 状态筛选（可选）
+     * @param keyword 关键词搜索（可选，匹配标题）
+     * @param minPrice 最低价筛选（可选）
+     * @param maxPrice 最高价筛选（可选）
+     * @param cpu CPU配置筛选（可选）
+     * @param memory 内存配置筛选（可选）
+     * @param storage 存储配置筛选（可选）
      * @return 拼团活动列表
      */
     @Anonymous
@@ -88,9 +102,22 @@ public class OshGroupServerController extends BaseController {
     @GetMapping("/activity/list")
     public TableDataInfo list(
             @ApiParam("状态筛选：1-进行中 2-拼团成功 3-已结束") 
-            @RequestParam(value = "status", required = false) Integer status) {
+            @RequestParam(value = "status", required = false) Integer status,
+            @ApiParam("关键词搜索（匹配标题）")
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @ApiParam("最低价")
+            @RequestParam(value = "minPrice", required = false) java.math.BigDecimal minPrice,
+            @ApiParam("最高价")
+            @RequestParam(value = "maxPrice", required = false) java.math.BigDecimal maxPrice,
+            @ApiParam("CPU配置")
+            @RequestParam(value = "cpu", required = false) String cpu,
+            @ApiParam("内存配置")
+            @RequestParam(value = "memory", required = false) String memory,
+            @ApiParam("存储配置")
+            @RequestParam(value = "storage", required = false) String storage) {
         startPage();
-        List<GroupActivityListVO> list = groupServerService.selectGroupActivityList(status);
+        List<GroupActivityListVO> list = groupServerService.selectGroupActivityList(
+                status, keyword, minPrice, maxPrice, cpu, memory, storage);
         return getDataTable(list);
     }
     
@@ -196,12 +223,21 @@ public class OshGroupServerController extends BaseController {
             @ApiParam("拼团记录ID或活动模板ID") @RequestParam(value = "activityId") Long activityId,
             @ApiParam("支付方式：当前统一为支付宝") 
             @RequestParam(value = "payMethod", defaultValue = GroupConstants.PAY_METHOD_ALIPAY) String payMethod,
-            @ApiParam("来源：system/initiated") @RequestParam(value = "sourceType") String sourceType) {
+            @ApiParam("来源：system/initiated") @RequestParam(value = "sourceType") String sourceType,
+            HttpServletRequest request) {
         // 从 ThreadLocal 获取网校用户ID（OshAuthenticationFilter 已写入）
         Long userId = ThreadLocalUtil.get(OshUserConstants.USER_ID, Long.class);
         if (userId == null) {
             return R.fail("请先登录");
         }
+        
+        // 解析客户端信息（UserAgentUtils P1 风控/BI 增强）
+        UserAgent userAgent = UserAgent.parseUserAgentString(request.getHeader("User-Agent"));
+        logger.info("【拼团参团】userId={}, activityId={}, browser={}, os={}, isMobile={}",
+                userId, activityId,
+                userAgent.getBrowser() != null ? userAgent.getBrowser().getName() : "unknown",
+                userAgent.getOperatingSystem() != null ? userAgent.getOperatingSystem().getName() : "unknown",
+                userAgent.getOperatingSystem() != null && userAgent.getOperatingSystem().isMobileDevice());
         
         try {
             // 参与拼团无需额外权限检查，登录用户均可参与
@@ -397,8 +433,14 @@ public class OshGroupServerController extends BaseController {
                 return R.fail("该旧拼团订单缺少来源信息，请重新发起拼团后支付");
             }
             
-            // 4. 获取客户端IP
+            // 4. 获取客户端IP + UserAgent（风控/BI 增强）
             String clientIp = IpUtils.getClientIp(request);
+            UserAgent userAgent = UserAgent.parseUserAgentString(request.getHeader("User-Agent"));
+            logger.info("【拼团支付】orderNo={}, userId={}, browser={}, os={}, isMobile={}",
+                    orderNo, userId,
+                    userAgent.getBrowser() != null ? userAgent.getBrowser().getName() : "unknown",
+                    userAgent.getOperatingSystem() != null ? userAgent.getOperatingSystem().getName() : "unknown",
+                    userAgent.getOperatingSystem() != null && userAgent.getOperatingSystem().isMobileDevice());
             
             // 5. 获取实际支付金额
             String money = order.getPrice() != null ? order.getPrice().toString() : "0";
@@ -586,5 +628,23 @@ public class OshGroupServerController extends BaseController {
             logger.error("获取分享海报数据失败, initiatedId={}", initiatedId, e);
             return R.fail("获取分享海报数据失败");
         }
+    }
+
+    /**
+     * 查询拼团服务器资源监控指标（管理端看板）
+     *
+     * GET /pc/group/monitor/server
+     *
+     * @return CPU/内存/磁盘/JVM 等实时指标
+     */
+    @PreAuthorize("@ss.hasPermi('group:monitor:server')")
+    @ApiOperation("拼团服务器资源监控")
+    @GetMapping("/monitor/server")
+    public R<Map<String, Object>> serverMonitor() {
+        Map<String, Object> metrics = groupServerMonitorService.getLatestMetrics();
+        if (metrics == null || metrics.isEmpty()) {
+            return R.fail("暂无监控数据，请等待首次采集完成");
+        }
+        return R.ok(metrics);
     }
 }

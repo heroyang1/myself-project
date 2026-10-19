@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: osh-backend
+  profiles:
+    active: prod
+  cloud:
+    nacos:
+      # 生产环境凭证不得复用 dev/test 的 nacos/g5t52By7，必须通过环境变量注入独立强密码
+      username: ${NACOS_USERNAME:nacos}
+      password: ${NACOS_PASSWORD}
+      discovery:
+        # green/blue 槽位使用各自独立的 namespace UUID，由运维在对应 Nacos 实例中创建后通过环境变量注入
+        namespace: ${NACOS_NAMESPACE}
+        server-addr: ${NACOS_SERVER_ADDR}
+      config:
+        namespace: ${NACOS_NAMESPACE}
+        server-addr: ${NACOS_SERVER_ADDR}
+        file-extension: yaml
+        shared-configs:
+          - data-id: osh-backend-mysql-prod.yaml
+            group: DEFAULT_GROUP
+            refresh: true
+          - data-id: osh-backend-redis-prod.yaml
+            refresh: true
+          - data-id: osh-backend-kafka-prod.yaml
+            refresh: true
+          - data-id: osh-backend-mail-prod.yaml
+            refresh: true
+          - data-id: osh-backend-elasticsearch-prod.yaml
+            refresh: true
+          - data-id: osh-backend-jasypt-prod.yaml
+            refresh: true
+          - data-id: osh-backend-xxljob-prod.yaml
+            refresh: true
+
+# osh-secret 客户端配置
+# 注意：仓库中未找到对应的 Java 客户端实现代码，接入方式需向平台团队确认后再启用；
+# 当前默认 enabled=false，避免在组件未确认接入方式前误触发未定义行为。
+osh:
+  secret:
+    enabled: ${OSH_SECRET_ENABLED:false}
+    server-url: ${OSH_SECRET_SERVER_URL}
+    access-token: ${OSH_SECRET_ACCESS_TOKEN}
+    app-id: osh-backend
+    env: prod

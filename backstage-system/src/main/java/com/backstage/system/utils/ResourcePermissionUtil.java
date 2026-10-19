@@ -2,6 +2,8 @@ package com.backstage.system.utils;
 
 import com.backstage.common.enums.ResourceTypeEnum;
 import com.backstage.common.utils.spring.SpringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
@@ -12,6 +14,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Time: 18:48
  */
 public class ResourcePermissionUtil {
+    private static final Logger log = LoggerFactory.getLogger(ResourcePermissionUtil.class);
+
     private static JdbcTemplate getJdbcTemplate() {
         return SpringUtils.getBean(JdbcTemplate.class);
     }
@@ -40,7 +44,8 @@ public class ResourcePermissionUtil {
         try {
             return getJdbcTemplate().queryForObject(sql, Integer.class, resourceId);
         } catch (Exception e) {
-            e.printStackTrace();
+            // 查询失败返回 null，上层按"无权限配置"处理，记录日志便于排查
+            log.warn("查询资源 required_level 失败, tableName={}, resourceId={}", tableName, resourceId, e);
         }
         return null;
     }

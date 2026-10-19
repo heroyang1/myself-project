@@ -20,6 +20,8 @@ import com.backstage.system.exception.UpLoadException;
 import com.backstage.system.mapper.common.OssMapper;
 import com.backstage.system.service.common.OssService;
 import eu.bitwalker.useragentutils.UserAgent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
@@ -38,6 +40,8 @@ import java.util.UUID;
 
 @Component
 public class OssUtil {
+
+    private static final Logger log = LoggerFactory.getLogger(OssUtil.class);
 
     @Autowired
     private OssMapper ossMapper;
@@ -219,7 +223,7 @@ public class OssUtil {
             s3.deleteObject(ossProperties.getBucketName(), fileName);
             return true;
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("OSS删除文件失败, fileName={}", fileName, e);
             return false;
         }
     }
@@ -245,8 +249,9 @@ public class OssUtil {
 
             s3.deleteObject(ossProperties.getBucketName(), oldFileName);
         } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("重命名失败：" + e.getMessage());
+            log.error("OSS重命名文件失败, oldFileName={}, newFileName={}", oldFileName, newFileName, e);
+            // 转抛时携带原始异常作为 cause，保留完整堆栈
+            throw new RuntimeException("重命名失败：" + e.getMessage(), e);
         }
     }
 

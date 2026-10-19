@@ -8,11 +8,12 @@
 2. [AI 开发工作流](02-workflow.md)
 3. [Codex Harness 使用规范](03-codex-harness.md)
 4. [架构说明](04-architecture.md)
-5. [代码风格](05-code-style.md)
+5. [代码风格](05-code-style.md) → 写代码前必读带真实示例的细则：[conventions/coding-standards.md](conventions/coding-standards.md)（AI 新增代码必须遵守）
 6. [测试规范](06-testing.md)
 7. [代码审核标准](07-review-rubric.md)
 8. [发布流程](08-release-flow.md)
 9. [升级策略](09-upgrade-strategy.md)
+10. [后台清理 Agent 定时任务模板](10-cleanup-agent.md)
 
 ## 核心约束
 

@@ -3,6 +3,10 @@ package com.backstage.common.utils.ip;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import javax.servlet.http.HttpServletRequest;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.backstage.common.utils.ServletUtils;
 import com.backstage.common.utils.StringUtils;
 
@@ -13,6 +17,8 @@ import com.backstage.common.utils.StringUtils;
  */
 public class IpUtils
 {
+    private static final Logger log = LoggerFactory.getLogger(IpUtils.class);
+
     public final static String REGX_0_255 = "(25[0-5]|2[0-4]\\d|1\\d{2}|[1-9]\\d|\\d)";
     // 匹配 ip
     public final static String REGX_IP = "((" + REGX_0_255 + "\\.){3}" + REGX_0_255 + ")";
@@ -224,6 +230,8 @@ public class IpUtils
         }
         catch (UnknownHostException e)
         {
+            // 无法解析本机地址时降级返回回环地址，debug 级别避免刷屏
+            log.debug("获取本机IP失败，降级返回127.0.0.1", e);
         }
         return "127.0.0.1";
     }
@@ -241,6 +249,8 @@ public class IpUtils
         }
         catch (UnknownHostException e)
         {
+            // 无法解析本机主机名时降级返回"未知"，debug 级别避免刷屏
+            log.debug("获取本机主机名失败，降级返回未知", e);
         }
         return "未知";
     }

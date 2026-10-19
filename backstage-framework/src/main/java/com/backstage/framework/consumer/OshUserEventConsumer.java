@@ -32,17 +32,29 @@ public class OshUserEventConsumer {
     private static final Logger logger = LoggerFactory.getLogger(OshUserEventConsumer.class);
     @KafkaListener(topics = KafkaConstants.USER_ACTION_TOPIC, groupId = "${spring.kafka.consumer.group-id}")
     public void consumeUserEvent(String message, Acknowledgment ack) {
-        try {
-            logger.info("【Kafka消费者】收到用户行为事件：{}", message);
+        logger.info("【Kafka消费者】收到用户行为事件：{}", message);
 
-            OshUserEvent event = objectMapper.readValue(message, OshUserEvent.class);
+        // 消息解析失败属于不可恢复的脏数据：ack 丢弃，避免无限重投
+        OshUserEvent event;
+        try {
+            event = objectMapper.readValue(message, OshUserEvent.class);
+        } catch (Exception e) {
+            logger.error("【Kafka消费者】用户行为事件解析失败，丢弃，message={}", message, e);
+            ack.acknowledge();
+            return;
+        }
+
+        try {
             fillResourceNo(event);
             oshUserEventMapper.insert(event);
             logger.info("event落库:{}", event.toString());
-            ack.acknowledge();
         } catch (Exception e) {
-            logger.error("【Kafka消费者】消息处理异常：", e);
+            // 落库失败属于可恢复异常：不 ack，等待 Kafka 重投重试
+            logger.error("【Kafka消费者】用户行为事件落库失败，等待重投，message={}", message, e);
+            return;
         }
+
+        ack.acknowledge();
     }
 
     private void fillResourceNo(OshUserEvent event) {

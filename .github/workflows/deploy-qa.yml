@@ -151,7 +151,7 @@ jobs:
             触发人：${{ github.actor }}
             时间：${{ github.event.head_commit.timestamp }}
 
-            访问地址：http://43.242.200.25:8081/
+            访问地址：http://${{ env.DEPLOY_HOST }}:${{ vars.TEST25_BACKEND_PORT || '8081' }}/
 
       - name: Notify on failure
         if: failure() && (github.event_name != 'push' || github.ref_name == steps.latest_qa.outputs.latest_branch)

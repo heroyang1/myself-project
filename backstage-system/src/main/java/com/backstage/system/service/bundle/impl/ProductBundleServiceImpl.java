@@ -38,6 +38,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -60,6 +62,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class ProductBundleServiceImpl implements ProductBundleService {
+    private static final Logger log = LoggerFactory.getLogger(ProductBundleServiceImpl.class);
+
     public static final String SALE_MODE_PRIMARY_GIFT = "PRIMARY_GIFT";
     public static final String SALE_MODE_FLAT_BUNDLE = "FLAT_BUNDLE";
 
@@ -407,12 +411,24 @@ public class ProductBundleServiceImpl implements ProductBundleService {
         if (items.isEmpty()) {
             throw new ServiceException("套餐内容为空: " + order.getProductId());
         }
+        // 子项异常隔离：单项发放失败不中断其他子项，失败明细汇总后统一抛出触发重投重试
+        // （各子项发放本身幂等：课程按 countPaid 短路、电子书按 purchased 短路，重试不会重复发放）
+        List<String> failedItems = new ArrayList<>();
         for (OshBundleItem item : items) {
-            if ("course".equals(item.getResourceType())) {
-                grantCourseItem(order, item);
-            } else if ("book".equals(item.getResourceType())) {
-                grantBookItem(order, item);
+            try {
+                if ("course".equals(item.getResourceType())) {
+                    grantCourseItem(order, item);
+                } else if ("book".equals(item.getResourceType())) {
+                    grantBookItem(order, item);
+                }
+            } catch (Exception e) {
+                log.error("套餐子项发放失败，orderNo={}, resourceType={}, resourceId={}",
+                        orderNo, item.getResourceType(), item.getResourceId(), e);
+                failedItems.add(item.getResourceType() + ":" + item.getResourceId());
             }
+        }
+        if (!failedItems.isEmpty()) {
+            throw new ServiceException("套餐部分子项发放失败，等待重试: " + String.join(", ", failedItems));
         }
     }
 
