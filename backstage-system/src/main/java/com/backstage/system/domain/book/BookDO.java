@@ -1,31 +1,27 @@
 package com.backstage.system.domain.book;
 
-import com.baomidou.mybatisplus.annotation.FieldFill;
+import com.backstage.common.core.domain.entity.OSHBaseEntity;
 import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 /**
- * 电子书对象 book
- *
- * @author backstage
+ * 电子书对象，对应表 osh_book。
  */
-
 @TableName("osh_book")
-public class BookDO implements Serializable {
+public class BookDO extends OSHBaseEntity implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /** 电子书ID */
     @TableId(type = IdType.AUTO)
     private Long id;
+
+    /** 资源编号 */
+    private String no;
 
     /** 标题 */
     private String title;
@@ -52,31 +48,14 @@ public class BookDO implements Serializable {
     @JsonProperty("sub_count")
     private Integer subCount;
 
-    /** 权限等级 */
+    /** 访问等级：1免费，2VIP，3小班，4内部成员，6创始人 */
     private Integer level;
 
-    /** 状态（0正常 1下架） */
+    /** Book media type: 1 ebook, 2 comic. */
+    private Integer mediaType;
+
+    /** 状态：0正常，1下架 */
     private String status;
-
-    /** 删除标志（0代表存在 1代表删除） */
-    @TableLogic
-    private String delFlag;
-
-    /** 创建者 */
-    private String createBy;
-
-    /** 创建时间 */
-    @TableField(fill = FieldFill.INSERT)
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
-    private LocalDateTime createTime;
-
-    /** 更新时间 */
-    @TableField(fill = FieldFill.INSERT_UPDATE)
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
-    private LocalDateTime updateTime;
-
-    /** 更新者 */
-    private String updateBy;
 
     /** 备注 */
     private String remark;
@@ -87,6 +66,14 @@ public class BookDO implements Serializable {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getNo() {
+        return no;
+    }
+
+    public void setNo(String no) {
+        this.no = no;
     }
 
     public String getTitle() {
@@ -145,14 +132,6 @@ public class BookDO implements Serializable {
         this.subCount = subCount;
     }
 
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
-    }
-
     public Integer getLevel() {
         return level;
     }
@@ -161,44 +140,20 @@ public class BookDO implements Serializable {
         this.level = level;
     }
 
-    public String getDelFlag() {
-        return delFlag;
+    public Integer getMediaType() {
+        return mediaType;
     }
 
-    public void setDelFlag(String delFlag) {
-        this.delFlag = delFlag;
+    public void setMediaType(Integer mediaType) {
+        this.mediaType = mediaType;
     }
 
-    public String getCreateBy() {
-        return createBy;
+    public String getStatus() {
+        return status;
     }
 
-    public void setCreateBy(String createBy) {
-        this.createBy = createBy;
-    }
-
-    public String getUpdateBy() {
-        return updateBy;
-    }
-
-    public void setUpdateBy(String updateBy) {
-        this.updateBy = updateBy;
-    }
-
-    public LocalDateTime getCreateTime() {
-        return createTime;
-    }
-
-    public void setCreateTime(LocalDateTime createTime) {
-        this.createTime = createTime;
-    }
-
-    public LocalDateTime getUpdateTime() {
-        return updateTime;
-    }
-
-    public void setUpdateTime(LocalDateTime updateTime) {
-        this.updateTime = updateTime;
+    public void setStatus(String status) {
+        this.status = status;
     }
 
     public String getRemark() {

@@ -2,12 +2,12 @@ package com.backstage.system.controller.user;
 
 import com.backstage.common.annotation.Anonymous;
 import com.backstage.common.annotation.OshUserEvent;
+import com.backstage.common.annotation.OshUserLevel;
 import com.backstage.common.core.controller.BaseController;
 import com.backstage.common.core.domain.R;
 import com.backstage.system.domain.user.OshUser;
 import com.backstage.system.domain.user.dto.*;
 import com.backstage.system.domain.user.vo.OshUserLoginVO;
-import com.backstage.system.request.UserListRequest;
 import com.backstage.system.service.user.IOshUserService;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.mail.MessagingException;
-import java.util.List;
 
 /**
  * Created with IntelliJ IDEA.
@@ -39,7 +38,7 @@ public class OshUserController extends BaseController {
 
     @ApiOperation("账号登录")
     @PostMapping("/login")
-    @OshUserEvent(module = "用户模块", actionType = "登录", description = "用户登录")
+    @OshUserEvent(module = "用户模块", actionType = "登录", description = "用户登录", recordAnonymous = true, successOnly = true)
     @Anonymous
     public R<OshUserLoginVO> login(
             @ApiParam("网校 appid") @RequestHeader(value = "appid", required = false) String appid,
@@ -54,7 +53,8 @@ public class OshUserController extends BaseController {
     public R<String> registerSubmit(
             @ApiParam("网校 appid") @RequestHeader(value = "appid", required = false) String appid,
             @RequestBody UserRegisterDTO userRegisterDTO) throws MessagingException {
-        return userService.registerSubmit(userRegisterDTO.getUsername(),userRegisterDTO.getPassword(),userRegisterDTO.getRepassword(),userRegisterDTO.getEmail(),userRegisterDTO.getInviteCode());
+        return userService.registerSubmit(userRegisterDTO.getUsername(), userRegisterDTO.getPassword(), userRegisterDTO.getRepassword(),
+                userRegisterDTO.getEmail(), userRegisterDTO.getInviteCode(), userRegisterDTO.getRedeemInviteToken());
     }
 
     @ApiOperation("账号注册")
@@ -113,7 +113,9 @@ public class OshUserController extends BaseController {
     public R<String> updateInfo(
             @ApiParam("网校 appid") @RequestHeader(value = "appid", required = false) String appid,
             @RequestBody UserUpdateInfoDTO userUpdateInfoDTO) {
-        return userService.updateInfo(userUpdateInfoDTO.getUsername(),userUpdateInfoDTO.getSex(),userUpdateInfoDTO.getIntroduction());
+        return userService.updateInfo(userUpdateInfoDTO.getUsername(), userUpdateInfoDTO.getSex(),
+                userUpdateInfoDTO.getIntroduction(), userUpdateInfoDTO.getGithubAccount(),
+                userUpdateInfoDTO.getWechatName());
     }
 
     @ApiOperation("上传头像")
@@ -143,6 +145,16 @@ public class OshUserController extends BaseController {
         return userService.getUserInfo();
     }
 
+    @ApiOperation("获取用户名片")
+    @GetMapping("/card")
+    @OshUserLevel(value = 4)
+    public R<?> getUserCard(
+            @ApiParam("网校 appid") @RequestHeader(value = "appid", required = false) String appid,
+            @RequestParam(value = "userId", required = false) Long userId,
+            @RequestParam(value = "githubAccount", required = false) String githubAccount) {
+        return userService.getUserCard(userId, githubAccount);
+    }
+
     @ApiOperation("获取当前用户角色列表（含有效期）")
     @GetMapping("/roles")
     public R<?> getUserRoles(
@@ -166,13 +178,5 @@ public class OshUserController extends BaseController {
             @ApiParam("网校 appid") @RequestHeader(value = "appid", required = false) String appid,
             @RequestBody UserAssetDTO userAssetDTO) {
         return userService.updateAsset(userAssetDTO.getChangeType(), userAssetDTO.getChangeSource(), userAssetDTO.getChangeAmount(), userAssetDTO.getRemark());
-    }
-
-    /**
-     * 查询用户列表
-     */
-    @GetMapping("/all")
-    public R<List<OshUser>> list(UserListRequest req) {
-        return R.ok(userService.selectUserList(req));
     }
 }

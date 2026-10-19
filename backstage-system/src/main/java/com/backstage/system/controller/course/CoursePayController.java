@@ -5,10 +5,15 @@ import java.util.Map;
 import javax.servlet.http.HttpServletRequest;
 
 import com.backstage.common.annotation.Anonymous;
+import com.backstage.common.annotation.OshUserEvent;
+import com.backstage.common.constant.ResourceType;
 import com.backstage.common.core.domain.R;
 import com.backstage.common.exception.ServiceException;
-import com.backstage.system.domain.vo.order.PayResponse;
+import com.backstage.system.domain.order.OrderPaymentInfo;
+import com.backstage.system.domain.vo.pay.OrderCheckoutRespVO;
+import com.backstage.system.mapper.course.CourseBuyMapper;
 import com.backstage.system.service.course.ICoursePayService;
+import com.backstage.system.utils.IpUtils;
 import com.backstage.system.utils.UserContextUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,14 +23,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * Course payment HTTP entry.
- *
- * Endpoints are intentionally namespaced under /pc/course/pay so they live next to other course
- * endpoints (e.g. OshCourseController @ /pc/course/*) without colliding with any existing
- * method-level path. The shared payment controllers (PayController / WxPayController /
- * IsWxPayController) are left untouched and continue to serve any other module that relies on them.
- */
 @RestController
 @RequestMapping("/pc/course/pay")
 public class CoursePayController {
@@ -33,44 +30,26 @@ public class CoursePayController {
     @Autowired
     private ICoursePayService coursePayService;
 
-    /**
-     * Create a course payment order and return a QR code string (wxpay or alipay).
-     *
-     * Request body example:
-     *   { "course_id": 1000, "pay_type": "wxpay" }
-     *
-     * Response data example:
-     *   { "qrcode": "weixin://wxpay/bizpayurl?pr=xxx",
-     *     "payurl": "",
-     *     "out_trade_no": "abc123",
-     *     "pay_type": "wxpay" }
-     */
+    @Autowired
+    private CourseBuyMapper courseBuyMapper;
+
     @Anonymous
     @PostMapping("/create")
+    @OshUserEvent(module = "支付模块", actionType = "支付", resourceType = ResourceType.COURSE_TYPE,
+            resourceIdExpression = "#p0['course_id']", description = "创建课程支付订单",
+            recordAnonymous = true, successOnly = true)
     public R<Map<String, Object>> create(@RequestBody Map<String, Object> body, HttpServletRequest request) {
         Long userId = UserContextUtil.getCurrentUserIdSafely();
         if (userId == null) {
             return R.fail("请先登录后再支付");
         }
         Long courseId = parseCourseId(body.get("course_id"));
-        String payType = body.get("pay_type") == null ? "wxpay" : body.get("pay_type").toString();
+        String payType = body.get("pay_type") == null ? "alipay" : body.get("pay_type").toString();
         String clientIp = resolveClientIp(request);
 
         try {
-            PayResponse gatewayResp = coursePayService.createCoursePay(courseId, payType, clientIp, userId);
-
-            // Gateway uses code=1 for success; surface the failure to the client verbatim.
-            if (gatewayResp.getCode() != 1) {
-                String msg = gatewayResp.getMsg() == null ? "支付网关返回失败" : gatewayResp.getMsg();
-                return R.fail(msg);
-            }
-
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("qrcode", gatewayResp.getQrcode());
-            data.put("payurl", gatewayResp.getPayUrl());
-            data.put("out_trade_no", gatewayResp.getOutTradeNo());
-            data.put("pay_type", payType);
-            return R.ok(data);
+            OrderCheckoutRespVO checkoutResp = coursePayService.createCoursePay(courseId, payType, clientIp, userId);
+            return R.ok(toCreateResponse(checkoutResp, payType, courseId));
         } catch (ServiceException e) {
             return R.fail(e.getMessage());
         } catch (Exception e) {
@@ -78,23 +57,79 @@ public class CoursePayController {
         }
     }
 
-    /**
-     * Poll the gateway for the latest status of a previously created order.
-     *
-     * Query example: /pc/course/pay/status?out_trade_no=abc123
-     * Response data: { "paid": true }
-     */
     @Anonymous
     @GetMapping("/status")
-    public R<Map<String, Object>> status(@RequestParam("out_trade_no") String outTradeNo) {
+    @OshUserEvent(module = "支付模块", actionType = "消费", resourceType = ResourceType.COURSE_TYPE,
+            resourceIdExpression = "#result.data['course_id']",
+            resourceNameExpression = "#result.data['order_no']",
+            recordConditionExpression = "#result.data['consume_recorded'] == true",
+            description = "课程支付成功消费", recordAnonymous = true, successOnly = true)
+    public R<Map<String, Object>> status(@RequestParam(value = "out_trade_no", required = false) String outTradeNo,
+                                         @RequestParam(value = "orderNo", required = false) String orderNo) {
         Long userId = UserContextUtil.getCurrentUserIdSafely();
         if (userId == null) {
             return R.fail("请先登录后再查询支付状态");
         }
-        boolean paid = coursePayService.isCoursePaid(outTradeNo, userId);
+        String queryOrderNo = orderNo == null || orderNo.trim().isEmpty() ? outTradeNo : orderNo;
+        if (queryOrderNo == null || queryOrderNo.trim().isEmpty()) {
+            return R.fail("订单号不能为空");
+        }
+
+        Map<String, Object> before = courseBuyMapper.selectByOrderNoAndUserId(queryOrderNo, userId);
+        boolean wasPaid = isPaid(before);
+        boolean paid = coursePayService.isCoursePaid(queryOrderNo, userId);
+        Map<String, Object> latest = courseBuyMapper.selectByOrderNoAndUserId(queryOrderNo, userId);
+        boolean changedToPaid = paid && !wasPaid && isPaid(latest);
+
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("paid", paid);
+        data.put("consume_recorded", changedToPaid);
+        data.put("order_no", queryOrderNo);
+        data.put("orderNo", queryOrderNo);
+        putIfNotNull(data, "course_id", latest == null ? null : latest.get("courseId"));
+        putIfNotNull(data, "pay_price", latest == null ? null : latest.get("payPrice"));
         return R.ok(data);
+    }
+
+    private Map<String, Object> toCreateResponse(OrderCheckoutRespVO checkoutResp, String payType, Long courseId) {
+        OrderPaymentInfo payment = checkoutResp.getPayment();
+        String qrcode = payment == null ? null : firstNonBlank(payment.getQrcode(), payment.getPayUrl());
+        String payUrl = payment == null ? null : payment.getPayUrl();
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("needPay", checkoutResp.isNeedPay());
+        data.put("qrcode", qrcode);
+        data.put("payurl", payUrl);
+        data.put("payUrl", payUrl);
+        data.put("out_trade_no", checkoutResp.getOrderNo());
+        data.put("orderNo", checkoutResp.getOrderNo());
+        data.put("paymentNo", checkoutResp.getPaymentNo());
+        data.put("pay_type", payment == null ? payType : payment.getChannel());
+        data.put("course_id", courseId);
+        data.put("price", checkoutResp.getPrice());
+        data.put("pointsUsed", checkoutResp.getPointsUsed());
+        data.put("pointsDeductAmount", checkoutResp.getPointsDeductAmount());
+        data.put("remainingPoints", checkoutResp.getRemainingPoints());
+        data.put("expireTime", checkoutResp.getExpireTime());
+        data.put("closeExpireMinutes", checkoutResp.getCloseExpireMinutes());
+        return data;
+    }
+
+    private String firstNonBlank(String first, String second) {
+        if (first != null && !first.trim().isEmpty()) {
+            return first;
+        }
+        return second;
+    }
+
+    private boolean isPaid(Map<String, Object> courseBuy) {
+        return courseBuy != null && "paid".equals(String.valueOf(courseBuy.get("payStatus")));
+    }
+
+    private void putIfNotNull(Map<String, Object> data, String key, Object value) {
+        if (value != null) {
+            data.put(key, value);
+        }
     }
 
     private Long parseCourseId(Object raw) {
@@ -109,10 +144,10 @@ public class CoursePayController {
     }
 
     private String resolveClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty()) {
-            ip = request.getRemoteAddr();
+        String cfIp = request.getHeader("CF-Connecting-IP");
+        if (cfIp != null && !cfIp.isEmpty() && !"unknown".equalsIgnoreCase(cfIp.trim())) {
+            return cfIp.trim();
         }
-        return ip;
+        return IpUtils.getClientIp(request);
     }
 }

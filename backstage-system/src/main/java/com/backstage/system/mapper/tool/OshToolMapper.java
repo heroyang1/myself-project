@@ -22,9 +22,13 @@ public interface OshToolMapper {
 
     OshTool selectToolById(@Param("id") Long id);
 
-    Integer selectUserRemainingCount(@Param("toolId") Long toolId, @Param("userId") Long userId);
+    OshTool selectToolByNo(@Param("no") String no);
 
-    int consumeUserToolQuota(@Param("toolId") Long toolId, @Param("userId") Long userId, @Param("operator") String operator);
+    Integer selectUserRemainingCount(@Param("userId") Long userId);
+
+    int consumeUserQuota(@Param("userId") Long userId,
+                         @Param("quotaCost") Integer quotaCost,
+                         @Param("operator") String operator);
 
     int increaseTotalUsage(@Param("toolId") Long toolId);
 
@@ -45,6 +49,9 @@ public interface OshToolMapper {
     int updateToolNoById(@Param("id") Long id, @Param("no") String no);
 
     int countByNo(@Param("no") String no);
+
+    int countActiveByToolName(@Param("toolName") String toolName,
+                              @Param("excludeId") Long excludeId);
 
     int deleteToolsByIds(@Param("ids") List<Long> ids, @Param("operator") String operator);
 

@@ -22,7 +22,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         c.total_duration,
         c.free_lesson_count,
         c.video_count,
-        c.sales_count,
+        (
+            select count(distinct cb.user_id)
+            from osh_course_buy cb
+            where cb.course_id = c.id
+              and cb.pay_status = 'paid'
+              and cb.delete_flag = 0
+        ) as sales_count,
         c.view_count,
         c.like_count,
         c.comment_count,
@@ -33,6 +39,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         c.after_service_days,
         c.resource_type,
         c.level,
+        c.difficulty,
         c.status,
         c.delete_flag,
         c.exam_id,
@@ -56,7 +63,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         c.price,
         c.t_price,
         c.sub_count,
-        c.buy_count,
+        (
+            select count(distinct cb.user_id)
+            from osh_course_buy cb
+            where cb.course_id = c.id
+              and cb.pay_status = 'paid'
+              and cb.delete_flag = 0
+        ) as buy_count,
         c.remark,
         c.total_duration,
         c.video_count,
@@ -73,6 +86,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         c.resource_type,
         c.service_period,
         c.level,
+        c.difficulty,
         c.status,
         c.exam_id,
         c.create_by,
@@ -110,6 +124,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="afterServiceDays"   column="after_service_days"    />
         <result property="resourceType" column="resource_type" />
         <result property="level" column="level" />
+        <result property="difficulty" column="difficulty" />
         <result property="status"   column="status"    />
         <result property="examId" column="exam_id"/>
         <result property="deleteFlag" column="delete_flag"/>
@@ -143,6 +158,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="afterServiceDays" column="after_service_days"/>
         <result property="resourceType" column="resource_type"/>
         <result property="level" column="level"/>
+        <result property="difficulty" column="difficulty"/>
         <result property="status" column="status"/>
         <result property="deleteFlag" column="delete_flag"/>
         <result property="examId" column="exam_id"/>
@@ -178,6 +194,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="resourceType" column="resource_type"/>
         <result property="servicePeriod" column="service_period"/>
         <result property="level" column="level"/>
+        <result property="difficulty" column="difficulty"/>
         <result property="status" column="status"/>
         <result property="examId" column="exam_id"/>
         <result property="createBy" column="create_by"/>
@@ -214,6 +231,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="fileSize" column="file_size"/>
         <result property="subtitleUrl" column="subtitle_url"/>
         <result property="type" column="type"/>
+        <result property="linkedCourseId" column="linked_course_id"/>
         <result property="status" column="status"/>
         <result property="examId" column="exam_id"/>
         <result property="deleteFlag" column="delete_flag"/>
@@ -241,6 +259,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="fileSize" column="file_size"/>
         <result property="subtitleUrl" column="subtitle_url"/>
         <result property="type" column="type"/>
+        <result property="linkedCourseId" column="linked_course_id"/>
         <result property="status" column="status"/>
         <result property="examId" column="exam_id"/>
         <result property="deleteFlag" column="delete_flag"/>
@@ -297,6 +316,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                after_service_days,
                resource_type,
                level,
+               difficulty,
                status,
                exam_id
         from osh_course
@@ -324,6 +344,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where id = #{id}
     </select>
 
+    <select id="selectCourseByNo" resultMap="OshCouresResult">
+        <include refid="selectCourseVo"/>
+        where no = #{no}
+          and delete_flag = 0
+        limit 1
+    </select>
+
     <!-- 根据条件查询课程列表 -->
     <select id="selectCourseList" resultMap="OshCouresResult">
         <include refid="selectCourseVo"/>
@@ -340,11 +367,25 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="textContent != null and textContent != ''">text_content = #{textContent},</if>
             <if test="fileSize != null">file_size = #{fileSize},</if>
             <if test="sort != null">sort = #{sort},</if>
+            <if test="type != null and type != ''">type = #{type},</if>
+            <if test="linkedCourseId != null">linked_course_id = #{linkedCourseId},</if>
             <if test="updateBy != null and updateBy != ''">update_by = #{updateBy},</if>
             update_time = now(),
         </trim>
         where id = #{id}
         and delete_flag = 0
+    </update>
+
+    <!-- 拖拽排序专用：只更新 parent_id 与 sort，不动其它字段 -->
+    <update id="updateSectionOrder">
+        update osh_course_section
+        set parent_id = #{parentId},
+            sort = #{sort},
+            <if test="updateBy != null and updateBy != ''">update_by = #{updateBy},</if>
+            update_time = now()
+        where id = #{id}
+          and course_id = #{courseId}
+          and delete_flag = 0
     </update>
 
     <update id="deleteSectionsByCourseId">
@@ -373,7 +414,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         AND occ.delete_flag = 0
         ) THEN 1 ELSE 0 END AS collection_flag,
         0 as buy_flag,
-        (ifnull(c.sales_count, 0) * 2 + ifnull(c.collection_count, 0)) as sort_score
+        ((
+            select count(distinct cb.user_id)
+            from osh_course_buy cb
+            where cb.course_id = c.id
+              and cb.pay_status = 'paid'
+              and cb.delete_flag = 0
+        ) * 2 + ifnull(c.collection_count, 0)) as sort_score
         from osh_course c
         left join osh_course_tag_rel ctr on ctr.course_id = c.id
             and ctr.delete_flag = 0
@@ -402,6 +449,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             </if>
             <if test="request.resourceType != null and request.resourceType != ''">
                 and c.resource_type = #{request.resourceType}
+            </if>
+            <if test="request.difficulty != null">
+                and c.difficulty = #{request.difficulty}
             </if>
             <if test="request.courseIdFilter != null">
                 and c.id = #{request.courseIdFilter}
@@ -467,6 +517,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="request.resourceType != null and request.resourceType != ''">
                 and c.resource_type = #{request.resourceType}
             </if>
+            <if test="request.difficulty != null">
+                and c.difficulty = #{request.difficulty}
+            </if>
             <if test="request.courseIdFilter != null">
                 and c.id = #{request.courseIdFilter}
             </if>
@@ -509,6 +562,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             </if>
             <if test="request.resourceType != null and request.resourceType != ''">
                 and c.resource_type = #{request.resourceType}
+            </if>
+            <if test="request.difficulty != null">
+                and c.difficulty = #{request.difficulty}
             </if>
             <if test="request.courseIdFilter != null">
                 and c.id = #{request.courseIdFilter}
@@ -567,6 +623,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                s.file_size,
                s.subtitle_url,
                s.type,
+               s.linked_course_id,
                s.status,
                s.exam_id,
                s.delete_flag,
@@ -638,6 +695,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                s.file_size,
                s.subtitle_url,
                s.type,
+               s.linked_course_id,
                s.status,
                s.exam_id,
                s.delete_flag,
@@ -663,8 +721,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <select id="getCourseSectionContent" resultType="java.lang.String">
         select case
-                   when s.type = 'text' then ifnull(d.content, '')
-                   when s.type = 'video' then s.media_url
+                   when d.content is not null and d.content != '' then d.content
+                   when s.type = 'text' then ifnull(s.text_content, '')
+                   when s.type = 'video' then ifnull(nullif(d.content, ''), nullif(s.text_content, ''), ifnull(s.media_url, ''))
                    else ''
                    end as content
         from osh_course_section s
@@ -801,6 +860,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <insert id="insertCourse" parameterType="com.backstage.system.domain.course.OshCourse" useGeneratedKeys="true" keyProperty="id">
         insert into osh_course
         <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="no != null and no != ''">no,</if>
             <if test="title != null and title != ''">title,</if>
             <if test="cover != null and cover != ''">cover,</if>
             <if test="intro != null and intro != ''">intro,</if>
@@ -824,12 +884,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="resourceType != null">resource_type,</if>
             <if test="servicePeriod != null">service_period,</if>
             <if test="level != null">level,</if>
+            <if test="difficulty != null">difficulty,</if>
             status,
             <if test="examId != null">exam_id,</if>
             <if test="createBy != null and createBy != ''">create_by,</if>
             <if test="updateBy != null and updateBy != ''">update_by,</if>
         </trim>
         <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="no != null and no != ''">#{no},</if>
             <if test="title != null and title != ''">#{title},</if>
             <if test="cover != null and cover != ''">#{cover},</if>
             <if test="intro != null and intro != ''">#{intro},</if>
@@ -853,6 +915,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="resourceType != null">#{resourceType},</if>
             <if test="servicePeriod != null">#{servicePeriod},</if>
             <if test="level != null">#{level},</if>
+            <if test="difficulty != null">#{difficulty},</if>
             #{status},
             <if test="examId != null">#{examId},</if>
             <if test="createBy != null and createBy != ''">#{createBy},</if>
@@ -878,6 +941,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="videoResolution != null and videoResolution != ''">video_resolution,</if>
             <if test="fileSize != null">file_size,</if>
             <if test="type != null and type != ''">type,</if>
+            <if test="linkedCourseId != null">linked_course_id,</if>
             <if test="status != null">status,</if>
             <if test="examId != null">exam_id,</if>
             <if test="deleteFlag != null">delete_flag,</if>
@@ -902,6 +966,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="videoResolution != null and videoResolution != ''">#{videoResolution},</if>
             <if test="fileSize != null">#{fileSize},</if>
             <if test="type != null and type != ''">#{type},</if>
+            <if test="linkedCourseId != null">#{linkedCourseId},</if>
             <if test="status != null">#{status},</if>
             <if test="examId != null">#{examId},</if>
             <if test="deleteFlag != null">#{deleteFlag},</if>
@@ -938,6 +1003,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="resourceType != null">resource_type = #{resourceType},</if>
             <if test="servicePeriod != null">service_period = #{servicePeriod},</if>
             <if test="level != null">level = #{level},</if>
+            <if test="difficulty != null">difficulty = #{difficulty},</if>
             <if test="status != null">status = #{status},</if>
             <if test="examId != null">exam_id = #{examId},</if>
             <if test="updateBy != null and updateBy != ''">update_by = #{updateBy},</if>

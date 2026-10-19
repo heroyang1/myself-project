@@ -4,9 +4,11 @@ import com.backstage.common.response.PageResponse;
 import com.backstage.common.utils.StringUtils;
 import com.backstage.system.domain.course.es.OshCourseEsDocument;
 import com.backstage.system.domain.course.vo.CourseSearchLoginVo;
+import com.backstage.system.domain.course.vo.CourseSearchUserStateVo;
 import com.backstage.system.domain.user.CurrentUser;
 import com.backstage.system.enums.CourseResourceEnum;
 import com.backstage.system.mapper.course.OshCourseEsMapper;
+import com.backstage.system.mapper.course.OshCourseEsSearchMapper;
 import com.backstage.system.mapper.course.OshCourseCollectionMapper;
 import com.backstage.system.mapper.course.OshCourseMapper;
 import com.backstage.system.mapper.course.OshCourseTagMapper;
@@ -40,6 +42,9 @@ public class OshCourseEsServiceImpl implements IOshCourseEsService {
     private OshCourseMapper oshCourseMapper;
 
     @Autowired
+    private OshCourseEsSearchMapper oshCourseEsSearchMapper;
+
+    @Autowired
     private OshCourseCollectionMapper oshCourseCollectionMapper;
 
     @Autowired
@@ -69,6 +74,7 @@ public class OshCourseEsServiceImpl implements IOshCourseEsService {
 
         fillCollectionFlag(rows, userId);
         fillBuyFlag(rows, userId);
+        fillSalesCount(rows);
         fillResourceTypeDesc(rows, userId);
         convertToExpiryUrls(rows);
         return pageResponse;
@@ -211,6 +217,33 @@ public class OshCourseEsServiceImpl implements IOshCourseEsService {
         }
     }
 
+    private void fillSalesCount(List<CourseSearchLoginVo> rows) {
+        if (StringUtils.isEmpty(rows)) {
+            return;
+        }
+        List<Long> courseIds = rows.stream()
+                .map(CourseSearchLoginVo::getId)
+                .collect(Collectors.toList());
+        if (StringUtils.isEmpty(courseIds)) {
+            return;
+        }
+
+        List<CourseSearchUserStateVo> paidCounts = oshCourseEsSearchMapper.selectCoursePaidCounts(courseIds);
+        if (StringUtils.isEmpty(paidCounts)) {
+            return;
+        }
+        Map<Long, Integer> paidCountMap = paidCounts.stream()
+                .collect(Collectors.toMap(
+                        CourseSearchUserStateVo::getCourseId,
+                        item -> item.getSalesCount() == null ? 0 : item.getSalesCount(),
+                        (left, right) -> left
+                ));
+
+        for (CourseSearchLoginVo row : rows) {
+            row.setSalesCount(paidCountMap.getOrDefault(row.getId(), 0));
+        }
+    }
+
     private List<CourseSearchLoginVo> convertToExpiryUrls(List<CourseSearchLoginVo> rows) {
         if (StringUtils.isEmpty(rows)) {
             return rows;
@@ -249,6 +282,7 @@ public class OshCourseEsServiceImpl implements IOshCourseEsService {
         collectionSearchRequest.setTags(request.getTags());
         collectionSearchRequest.setKeyword(request.getKeyword());
         collectionSearchRequest.setResourceType(request.getResourceType());
+        collectionSearchRequest.setDifficulty(request.getDifficulty());
         collectionSearchRequest.setCollectionFlag(request.getCollectionFlag());
         collectionSearchRequest.setCourseNo(request.getCourseNo());
         collectionSearchRequest.setIncludeUnpublished(request.getIncludeUnpublished());
@@ -327,6 +361,7 @@ public class OshCourseEsServiceImpl implements IOshCourseEsService {
         document.setAfterServiceDays(row.getAfterServiceDays());
         document.setResourceType(row.getResourceType());
         document.setLevel(row.getLevel());
+        document.setDifficulty(row.getDifficulty());
         document.setStatus(row.getStatus());
         document.setExamId(row.getExamId());
         document.setDeleteFlag(row.getDeleteFlag() == null ? 0 : row.getDeleteFlag());

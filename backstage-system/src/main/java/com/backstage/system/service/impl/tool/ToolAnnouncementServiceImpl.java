@@ -17,13 +17,23 @@ public class ToolAnnouncementServiceImpl implements IToolAnnouncementService {
     private OshToolAnnouncementMapper oshToolAnnouncementMapper;
 
     @Override
-    public List<ToolAnnouncementVO> listLatestSystemNotices() {
+    public List<ToolAnnouncementVO> listNoticeAnnouncements() {
         return listByChannel(AnnouncementChannelEnum.SYSTEM_NOTICE);
     }
 
     @Override
-    public List<ToolAnnouncementVO> listLatestUserNotices() {
+    public List<ToolAnnouncementVO> listDynamicAnnouncements() {
         return listByChannel(AnnouncementChannelEnum.USER_NOTICE);
+    }
+
+    @Override
+    public List<ToolAnnouncementVO> listLatestSystemNotices() {
+        return listNoticeAnnouncements();
+    }
+
+    @Override
+    public List<ToolAnnouncementVO> listLatestUserNotices() {
+        return listDynamicAnnouncements();
     }
 
     private List<ToolAnnouncementVO> listByChannel(AnnouncementChannelEnum channel) {

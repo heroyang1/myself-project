@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
  * @author system
  * @date 2026-04-18
  */
-public class GroupActivityListVO {
+public class GroupActivityListVO implements GroupPriceCalculable {
     
     /** 拼团ID */
     private Long id;
@@ -58,6 +58,12 @@ public class GroupActivityListVO {
     
     /** 拼团人数上限 */
     private Integer groupMaxNum;
+    
+    /** 还差几人成团 */
+    private Integer remainNum;
+    
+    /** 招募截止时间（未成团时有效） */
+    private LocalDateTime expireTime;
     
     /** 是否已成团（current_num >= group_min_num） */
     private Boolean isSuccess;
@@ -199,6 +205,22 @@ public class GroupActivityListVO {
     
     public void setGroupMaxNum(Integer groupMaxNum) {
         this.groupMaxNum = groupMaxNum;
+    }
+    
+    public Integer getRemainNum() {
+        return remainNum;
+    }
+    
+    public void setRemainNum(Integer remainNum) {
+        this.remainNum = remainNum;
+    }
+    
+    public LocalDateTime getExpireTime() {
+        return expireTime;
+    }
+    
+    public void setExpireTime(LocalDateTime expireTime) {
+        this.expireTime = expireTime;
     }
     
     public Boolean getIsSuccess() {

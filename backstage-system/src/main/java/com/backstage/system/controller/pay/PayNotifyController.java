@@ -29,7 +29,8 @@ public class PayNotifyController {
             for (String key : req.keySet()) {
                 params.put(key, req.get(key)[0]);
             }
-            log.info("【支付模块】支付回调，参数如下：{}", params);
+            log.info("收到旧支付平台回调, paymentNo={}, tradeStatus={}",
+                    params.get("out_trade_no"), params.get("trade_status"));
             return orderService.handlePayNotify(params) ? "success" : "FAIL";
         } catch (Exception e) {
             return "FAIL";

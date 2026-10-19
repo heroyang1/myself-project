@@ -13,6 +13,12 @@ public class MyGroupListVO {
     
     /** 参团记录ID */
     private Long groupWorkId;
+
+    /** 拼团来源：system/initiated */
+    private String sourceType;
+
+    /** 来源表中的稳定ID：系统活动ID或用户发起记录ID */
+    private Long sourceId;
     
     /** 拼团活动ID */
     private Long activityId;
@@ -62,6 +68,9 @@ public class MyGroupListVO {
     /** 订单状态文字描述 */
     private String orderStatusText;
     
+    /** 支付截止时间（待支付订单有效，创建后30分钟） */
+    private LocalDateTime payExpireTime;
+    
     /** 参团时间 */
     private LocalDateTime joinTime;
     
@@ -79,6 +88,22 @@ public class MyGroupListVO {
     
     public void setGroupWorkId(Long groupWorkId) {
         this.groupWorkId = groupWorkId;
+    }
+
+    public String getSourceType() {
+        return sourceType;
+    }
+
+    public void setSourceType(String sourceType) {
+        this.sourceType = sourceType;
+    }
+
+    public Long getSourceId() {
+        return sourceId;
+    }
+
+    public void setSourceId(Long sourceId) {
+        this.sourceId = sourceId;
     }
     
     public Long getActivityId() {
@@ -207,6 +232,14 @@ public class MyGroupListVO {
     
     public void setOrderStatusText(String orderStatusText) {
         this.orderStatusText = orderStatusText;
+    }
+    
+    public LocalDateTime getPayExpireTime() {
+        return payExpireTime;
+    }
+    
+    public void setPayExpireTime(LocalDateTime payExpireTime) {
+        this.payExpireTime = payExpireTime;
     }
     
     public LocalDateTime getJoinTime() {

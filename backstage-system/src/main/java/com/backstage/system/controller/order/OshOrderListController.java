@@ -108,14 +108,4 @@ public class OshOrderListController extends BaseController
         return toAjax(oshOrderListService.updateOshOrderList(oshOrderList));
     }
 
-    /**
-     * 删除我的订单列
-     */
-    @PreAuthorize("@ss.hasPermi('system:list:remove')")
-    @Log(title = "我的订单列", businessType = BusinessType.DELETE)
-	@DeleteMapping("/{ids}")
-    public AjaxResult remove(@PathVariable Long[] ids)
-    {
-        return toAjax(oshOrderListService.deleteOshOrderListByIds(ids));
-    }
 }

@@ -78,31 +78,6 @@ public class OshGroupOrderServiceImpl implements IOshGroupOrderService
         return oshGroupOrderMapper.updateOshGroupOrder(oshGroupOrder);
     }
 
-    /**
-     * 批量删除订单
-     * 
-     * @param ids 需要删除的订单主键
-     * @return 结果
-     */
-    @Override
-    public int deleteOshGroupOrderByIds(Long[] ids)
-    {
-        return oshGroupOrderMapper.deleteOshGroupOrderByIds(ids);
-    }
-
-    /**
-     * 删除订单信息
-     * 
-     * @param id 订单主键
-     * @return 结果
-     */
-    @Override
-    public int deleteOshGroupOrderById(Long id)
-    {
-        return oshGroupOrderMapper.deleteOshGroupOrderById(id);
-    }
-
-
     public OshGroupOrder CreateGroupList(GroupActivity ga){
 
         OshGroupOrder a = new OshGroupOrder();

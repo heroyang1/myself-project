@@ -2,7 +2,6 @@ package com.backstage.system.service.tool;
 
 import com.alibaba.fastjson2.annotation.JSONField;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -14,19 +13,19 @@ public class ToolIndexMessage {
     private String no;
     private String description;
     private String searchText;
+    private Integer accessType;
     private String routePath;
+    private String iframeUrl;
     private String githubUrl;
+    private String backgroundImage;
     private String resourceType;
+    private Integer quotaCost;
     private Integer level;
     private Integer status;
     private Integer deleteFlag;
     private List<Long> tagIds;
     private List<String> tagNames;
     private String tagNamesText;
-    private BigDecimal minPackagePrice;
-    private Integer minPackageUseCount;
-    private Integer packageCount;
-    private List<ToolIndexPackageMessage> packages;
     private Long viewCount;
     private Long totalUsage;
     private Integer collectionCount;
@@ -88,6 +87,14 @@ public class ToolIndexMessage {
         this.searchText = searchText;
     }
 
+    public Integer getAccessType() {
+        return accessType;
+    }
+
+    public void setAccessType(Integer accessType) {
+        this.accessType = accessType;
+    }
+
     public String getRoutePath() {
         return routePath;
     }
@@ -96,12 +103,28 @@ public class ToolIndexMessage {
         this.routePath = routePath;
     }
 
+    public String getIframeUrl() {
+        return iframeUrl;
+    }
+
+    public void setIframeUrl(String iframeUrl) {
+        this.iframeUrl = iframeUrl;
+    }
+
     public String getGithubUrl() {
         return githubUrl;
     }
 
     public void setGithubUrl(String githubUrl) {
         this.githubUrl = githubUrl;
+    }
+
+    public String getBackgroundImage() {
+        return backgroundImage;
+    }
+
+    public void setBackgroundImage(String backgroundImage) {
+        this.backgroundImage = backgroundImage;
     }
 
     public String getResourceType() {
@@ -160,36 +183,12 @@ public class ToolIndexMessage {
         this.tagNamesText = tagNamesText;
     }
 
-    public BigDecimal getMinPackagePrice() {
-        return minPackagePrice;
+    public Integer getQuotaCost() {
+        return quotaCost;
     }
 
-    public void setMinPackagePrice(BigDecimal minPackagePrice) {
-        this.minPackagePrice = minPackagePrice;
-    }
-
-    public Integer getMinPackageUseCount() {
-        return minPackageUseCount;
-    }
-
-    public void setMinPackageUseCount(Integer minPackageUseCount) {
-        this.minPackageUseCount = minPackageUseCount;
-    }
-
-    public Integer getPackageCount() {
-        return packageCount;
-    }
-
-    public void setPackageCount(Integer packageCount) {
-        this.packageCount = packageCount;
-    }
-
-    public List<ToolIndexPackageMessage> getPackages() {
-        return packages;
-    }
-
-    public void setPackages(List<ToolIndexPackageMessage> packages) {
-        this.packages = packages;
+    public void setQuotaCost(Integer quotaCost) {
+        this.quotaCost = quotaCost;
     }
 
     public Long getViewCount() {

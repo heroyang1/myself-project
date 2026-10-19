@@ -1,5 +1,6 @@
 package com.backstage.system.request.tool;
 
+import com.backstage.common.annotation.OshResourceId;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 import org.apache.commons.lang3.StringUtils;
@@ -14,6 +15,7 @@ import java.util.List;
 public class ToolSaveRequest {
 
     @ApiModelProperty(value = "工具ID，新增不传，修改必传", example = "10001")
+    @OshResourceId
     private Long id;
 
     @ApiModelProperty(value = "工具名称", required = true, example = "图片转PDF")
@@ -22,14 +24,20 @@ public class ToolSaveRequest {
     @ApiModelProperty(value = "工具描述", example = "支持多张图片合成为PDF文件")
     private String description;
 
-    @ApiModelProperty(value = "工具图标相对路径", example = "common/image/tool/202605/logo.png")
-    private String logoUrl;
+    @ApiModelProperty(value = "访问类型：1-站内工具，2-iframe第三方工具", example = "1")
+    private Integer accessType;
 
     @ApiModelProperty(value = "站内工具前端路由", example = "/tool/image-to-pdf")
     private String routePath;
 
+    @ApiModelProperty(value = "第三方iframe地址", example = "https://example.com/tool")
+    private String iframeUrl;
+
     @ApiModelProperty(value = "GitHub地址", example = "https://github.com/example/tool")
     private String githubUrl;
+
+    @ApiModelProperty(value = "工具展开背景图OSS相对路径", example = "common/image/toolCover/temp/202606/bg.png")
+    private String backgroundImage;
 
     @ApiModelProperty(value = "状态：2-待审核，4-上架，6-下架", example = "2")
     private Integer status;
@@ -37,14 +45,14 @@ public class ToolSaveRequest {
     @ApiModelProperty(value = "备注", example = "首批上线工具")
     private String remark;
 
-    @ApiModelProperty(value = "资源类型：FREE,CASH_ONLY,CASH_POINT,VIP,SMALL_CLASS,INTERNAL", example = "FREE")
+    @ApiModelProperty(value = "资源类型：FREE,CASH_POINT,VIP,SMALL_CLASS,INTERNAL", example = "FREE")
     private String resourceType;
+
+    @ApiModelProperty(value = "单次消耗工具点数，仅按次数消费的工具生效", example = "1")
+    private Integer quotaCost;
 
     @ApiModelProperty(value = "标签名称列表，不存在的标签会自动创建", example = "[\"PDF工具\",\"图片工具\"]")
     private List<String> tags;
-
-    @ApiModelProperty(value = "工具售卖套餐列表", example = "[{\"packageName\":\"10次包\",\"useCount\":10,\"price\":9.90}]")
-    private List<ToolPackageSaveRequest> packages;
 
     public Long getId() {
         return id;
@@ -70,20 +78,28 @@ public class ToolSaveRequest {
         this.description = StringUtils.trimToNull(description);
     }
 
-    public String getLogoUrl() {
-        return logoUrl;
-    }
-
-    public void setLogoUrl(String logoUrl) {
-        this.logoUrl = StringUtils.trimToNull(logoUrl);
-    }
-
     public String getRoutePath() {
         return routePath;
     }
 
+    public Integer getAccessType() {
+        return accessType;
+    }
+
+    public void setAccessType(Integer accessType) {
+        this.accessType = accessType;
+    }
+
     public void setRoutePath(String routePath) {
         this.routePath = StringUtils.trimToNull(routePath);
+    }
+
+    public String getIframeUrl() {
+        return iframeUrl;
+    }
+
+    public void setIframeUrl(String iframeUrl) {
+        this.iframeUrl = StringUtils.trimToNull(iframeUrl);
     }
 
     public String getGithubUrl() {
@@ -92,6 +108,14 @@ public class ToolSaveRequest {
 
     public void setGithubUrl(String githubUrl) {
         this.githubUrl = StringUtils.trimToNull(githubUrl);
+    }
+
+    public String getBackgroundImage() {
+        return backgroundImage;
+    }
+
+    public void setBackgroundImage(String backgroundImage) {
+        this.backgroundImage = StringUtils.trimToNull(backgroundImage);
     }
 
     public Integer getStatus() {
@@ -137,11 +161,11 @@ public class ToolSaveRequest {
         this.tags = normalized;
     }
 
-    public List<ToolPackageSaveRequest> getPackages() {
-        return packages;
+    public Integer getQuotaCost() {
+        return quotaCost;
     }
 
-    public void setPackages(List<ToolPackageSaveRequest> packages) {
-        this.packages = packages;
+    public void setQuotaCost(Integer quotaCost) {
+        this.quotaCost = quotaCost;
     }
 }

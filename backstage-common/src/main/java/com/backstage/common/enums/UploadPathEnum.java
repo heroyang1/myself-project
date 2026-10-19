@@ -14,6 +14,8 @@ public enum UploadPathEnum {
 
        TOOL_COVER("common/image/toolCover/"),
 
+        CONTENT_BACKGROUND("common/image/contentBackground/"),
+
         AUDIO("common/audio/"),
 
         IMAGE("common/image/"),

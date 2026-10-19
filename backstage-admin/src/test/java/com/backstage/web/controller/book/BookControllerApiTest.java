@@ -13,45 +13,47 @@ import com.backstage.system.mapper.book.BookMapper;
 import com.backstage.system.mapper.book.BookTagDOMapper;
 import com.backstage.system.mapper.questionanswer.OshQAQuestionMapper;
 import com.backstage.system.service.ISysConfigService;
-import com.backstage.system.service.ISysDictTypeService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.http.MediaType;
-import org.springframework.test.context.junit.jupiter.SpringExtension;
+import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.RequestBuilder;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@ExtendWith(SpringExtension.class)
+@RunWith(SpringRunner.class)
 @SpringBootTest(classes = RuoYiApplication.class)
 @AutoConfigureMockMvc(addFilters = false)
 public class BookControllerApiTest {
@@ -78,18 +80,20 @@ public class BookControllerApiTest {
     private ISysConfigService sysConfigService;
 
     @MockBean
-    private ISysDictTypeService sysDictTypeService;
-
-    @MockBean
     private KafkaTemplate<String, String> kafkaTemplate;
 
-    @BeforeEach
-    void setUp() {
+    private final List<Long> createdBookIds = new ArrayList<>();
+
+    private final List<Long> createdQuestionIds = new ArrayList<>();
+
+    @Before
+    public void setUp() {
         Mockito.when(sysConfigService.selectCaptchaEnabled()).thenReturn(false);
     }
 
-    @AfterEach
-    void tearDown() {
+    @After
+    public void tearDown() {
+        cleanupGeneratedData();
         ThreadLocalUtil.remove();
         SecurityContextHolder.clearContext();
     }
@@ -97,86 +101,104 @@ public class BookControllerApiTest {
     @Test
     public void shouldCreateUpdateAndDeleteBookWithLevelTagsAndChapters() throws Exception {
         String suffix = String.valueOf(System.currentTimeMillis());
-        String createPayload = "{"
-                + "\"title\":\"自动化电子书-" + suffix + "\","
-                + "\"cover\":\"common/image/book/test-cover-" + suffix + ".png\","
-                + "\"desc\":\"创建电子书接口测试\","
-                + "\"price\":29.90,"
-                + "\"t_price\":59.90,"
-                + "\"level\":4,"
-                + "\"tags\":[\"自动化\",\"电子书\"],"
-                + "\"chapters\":["
-                + "{\"title\":\"第一章-" + suffix + "\",\"content\":\"<h2>第一章</h2><p>测试内容</p>\",\"chapterNo\":1,\"sortOrder\":1,\"isFree\":1},"
-                + "{\"title\":\"第二章-" + suffix + "\",\"content\":\"<h2>第二章</h2><p>更多内容</p>\",\"chapterNo\":2,\"sortOrder\":2,\"isFree\":0}"
-                + "]"
-                + "}";
+        ObjectNode createPayload = objectMapper.createObjectNode();
+        createPayload.put("title", "api-book-" + suffix);
+        createPayload.put("cover", "common/image/book/test-cover-" + suffix + ".png");
+        createPayload.put("desc", "create book api test");
+        createPayload.put("price", 29.90);
+        createPayload.put("t_price", 59.90);
+        createPayload.put("level", 4);
+        createPayload.putArray("tags").add("api").add("ebook");
+        ArrayNode createChapters = createPayload.putArray("chapters");
+        createChapters.addObject()
+                .put("title", "chapter-one-" + suffix)
+                .put("content", "<h2>Chapter One</h2><p>test content</p>")
+                .put("chapterNo", 1)
+                .put("sortOrder", 1)
+                .put("isFree", 1);
+        createChapters.addObject()
+                .put("title", "chapter-two-" + suffix)
+                .put("content", "<h2>Chapter Two</h2><p>more content</p>")
+                .put("chapterNo", 2)
+                .put("sortOrder", 2)
+                .put("isFree", 0);
 
         MvcResult createResult = performAsUser(buildCurrentUser(), post("/pc/book/create")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(createPayload))
+                .content(createPayload.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andReturn();
 
         Long bookId = extractDataId(createResult);
+        createdBookIds.add(bookId);
         BookDO created = bookMapper.selectById(bookId);
         assertNotNull(created);
-        assertEquals("自动化电子书-" + suffix, created.getTitle());
+        assertEquals("api-book-" + suffix, created.getTitle());
         assertEquals(Integer.valueOf(4), created.getLevel());
-        assertEquals(new BigDecimal("59.90"), created.getOriginalPrice());
+        assertEquals(new BigDecimal("0.00"), created.getOriginalPrice());
 
         List<BookChapterVO> createdChapters = bookChapterMapper.selectBookChapterListByBookId(bookId);
         assertEquals(2, createdChapters.size());
-        assertEquals("第一章-" + suffix, createdChapters.get(0).getTitle());
+        assertEquals("chapter-one-" + suffix, createdChapters.get(0).getTitle());
 
         List<BookTagDO> createdTags = bookTagDOMapper.selectList(new LambdaQueryWrapper<BookTagDO>()
                 .eq(BookTagDO::getBookId, bookId));
         assertEquals(2, createdTags.size());
 
         Long firstChapterId = createdChapters.get(0).getId();
-        String updatePayload = "{"
-                + "\"id\":" + bookId + ","
-                + "\"title\":\"自动化电子书-更新-" + suffix + "\","
-                + "\"cover\":\"common/image/book/test-cover-" + suffix + ".png\","
-                + "\"desc\":\"更新电子书接口测试\","
-                + "\"price\":19.90,"
-                + "\"t_price\":39.90,"
-                + "\"level\":5,"
-                + "\"tags\":[\"更新后标签\"],"
-                + "\"chapters\":["
-                + "{\"id\":" + firstChapterId + ",\"title\":\"重写第一章-" + suffix + "\",\"content\":\"<h2>重写第一章</h2><p>更新内容</p>\",\"chapterNo\":1,\"sortOrder\":1,\"isFree\":1},"
-                + "{\"title\":\"新增第三章-" + suffix + "\",\"content\":\"<h2>新增第三章</h2><p>全新内容</p>\",\"chapterNo\":2,\"sortOrder\":2,\"isFree\":0}"
-                + "]"
-                + "}";
+        ObjectNode updatePayload = objectMapper.createObjectNode();
+        updatePayload.put("id", bookId);
+        updatePayload.put("title", "api-book-updated-" + suffix);
+        updatePayload.put("cover", "common/image/book/test-cover-" + suffix + ".png");
+        updatePayload.put("desc", "update book api test");
+        updatePayload.put("price", 19.90);
+        updatePayload.put("t_price", 39.90);
+        updatePayload.put("level", 6);
+        updatePayload.putArray("tags").add("updated-tag");
+        ArrayNode updateChapters = updatePayload.putArray("chapters");
+        updateChapters.addObject()
+                .put("id", firstChapterId)
+                .put("title", "rewritten-chapter-one-" + suffix)
+                .put("content", "<h2>Rewritten Chapter One</h2><p>updated content</p>")
+                .put("chapterNo", 1)
+                .put("sortOrder", 1)
+                .put("isFree", 1);
+        updateChapters.addObject()
+                .put("title", "new-chapter-three-" + suffix)
+                .put("content", "<h2>New Chapter Three</h2><p>new content</p>")
+                .put("chapterNo", 2)
+                .put("sortOrder", 2)
+                .put("isFree", 0);
 
         performAsUser(buildCurrentUser(), post("/pc/book/update")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(updatePayload))
+                .content(updatePayload.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
         BookDO updated = bookMapper.selectById(bookId);
         assertNotNull(updated);
-        assertEquals("自动化电子书-更新-" + suffix, updated.getTitle());
-        assertEquals(Integer.valueOf(5), updated.getLevel());
-        assertEquals(new BigDecimal("39.90"), updated.getOriginalPrice());
+        assertEquals("api-book-updated-" + suffix, updated.getTitle());
+        assertEquals(Integer.valueOf(6), updated.getLevel());
+        assertEquals(new BigDecimal("0.00"), updated.getOriginalPrice());
 
         List<BookChapterVO> updatedChapters = bookChapterMapper.selectBookChapterListByBookId(bookId);
         assertEquals(2, updatedChapters.size());
-        assertTrue(updatedChapters.stream().anyMatch(item -> ("重写第一章-" + suffix).equals(item.getTitle())));
-        assertTrue(updatedChapters.stream().anyMatch(item -> ("新增第三章-" + suffix).equals(item.getTitle())));
+        assertTrue(updatedChapters.stream().anyMatch(item -> ("rewritten-chapter-one-" + suffix).equals(item.getTitle())));
+        assertTrue(updatedChapters.stream().anyMatch(item -> ("new-chapter-three-" + suffix).equals(item.getTitle())));
 
         List<BookTagDO> updatedTags = bookTagDOMapper.selectList(new LambdaQueryWrapper<BookTagDO>()
                 .eq(BookTagDO::getBookId, bookId));
         assertEquals(1, updatedTags.size());
-        assertEquals("更新后标签", updatedTags.get(0).getTagName());
+        assertEquals("updated-tag", updatedTags.get(0).getTagName());
 
         performAsUser(buildCurrentUser(), get("/pc/book/getById")
                 .param("id", String.valueOf(bookId))
                 .param("forEdit", "true"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data.level").value(5))
+                .andExpect(jsonPath("$.data.level").value(6))
                 .andExpect(jsonPath("$.data.book_details.length()").value(2));
 
         performAsUser(buildCurrentUser(), delete("/pc/book/delete")
@@ -191,29 +213,49 @@ public class BookControllerApiTest {
     public void shouldCreateAndListQuestionsByBookResource() throws Exception {
         Long bookId = createStandaloneBook();
         String suffix = String.valueOf(System.currentTimeMillis());
-        String questionContent = "这是电子书自动化提问内容-" + suffix;
+        String questionContent = "ebook qna question content-" + suffix;
+        ObjectNode questionPayload = objectMapper.createObjectNode();
+        questionPayload.put("resourceType", "book");
+        questionPayload.put("resourceNo", bookId);
+        questionPayload.put("content", questionContent);
+        questionPayload.put("isPaidOnly", 0);
 
         performAsUser(buildCurrentUser(), post("/pc/qna/question/create")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"resourceType\":\"电子书\",\"resourceNo\":" + bookId + ",\"content\":\"" + questionContent + "\",\"isPaidOnly\":0}"))
+                .content(questionPayload.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
         Question question = oshQaQuestionMapper.selectOne(new LambdaQueryWrapper<Question>()
-                .eq(Question::getResourceType, "电子书")
+                .eq(Question::getResourceType, "book")
                 .eq(Question::getResourceNo, bookId)
                 .eq(Question::getContent, questionContent)
                 .orderByDesc(Question::getId)
                 .last("limit 1"));
         assertNotNull(question);
+        createdQuestionIds.add(question.getId());
         assertEquals(Long.valueOf(1L), question.getUserId());
+        ObjectNode publishPayload = objectMapper.createObjectNode();
+        publishPayload.put("questionId", question.getId());
+        performAsUser(buildCurrentUser(), post("/pc/qna/question/publish")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(publishPayload.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        ObjectNode listPayload = objectMapper.createObjectNode();
+        listPayload.put("resourceType", "book");
+        listPayload.put("resourceNo", bookId);
+        listPayload.put("type", "all");
+        listPayload.put("pageNum", 1);
+        listPayload.put("pageSize", 10);
 
         performAsUser(buildCurrentUser(), post("/pc/qna/question/list")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"resourceType\":\"电子书\",\"resourceNo\":" + bookId + ",\"type\":\"all\",\"pageNum\":1,\"pageSize\":10}"))
+                .content(listPayload.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.total").value(1))
-                .andExpect(jsonPath("$.rows[0].resourceType").value("电子书"))
+                .andExpect(jsonPath("$.rows[0].resourceType").value("book"))
                 .andExpect(jsonPath("$.rows[0].resourceNo").value(bookId))
                 .andExpect(jsonPath("$.rows[0].content").value(questionContent));
     }
@@ -237,17 +279,33 @@ public class BookControllerApiTest {
     private Long createStandaloneBook() {
         String suffix = String.valueOf(System.currentTimeMillis());
         BookDO book = new BookDO();
-        book.setTitle("问答测试电子书-" + suffix);
+        book.setTitle("qna-test-book-" + suffix);
         book.setCover("common/image/book/question-" + suffix + ".png");
-        book.setDescription("问答测试电子书简介");
+        book.setDescription("qna test book description");
         book.setPrice(new BigDecimal("9.90"));
         book.setOriginalPrice(new BigDecimal("19.90"));
         book.setStatus("0");
         book.setLevel(3);
-        book.setCreateBy("integration_test_user");
-        book.setUpdateBy("integration_test_user");
+        book.setCreateBy(1L);
+        book.setUpdateBy(1L);
         bookMapper.insert(book);
+        createdBookIds.add(book.getId());
         return book.getId();
+    }
+
+    private void cleanupGeneratedData() {
+        for (Long questionId : createdQuestionIds) {
+            if (questionId != null) {
+                oshQaQuestionMapper.deleteById(questionId);
+            }
+        }
+        for (Long bookId : createdBookIds) {
+            if (bookId != null) {
+                bookMapper.deleteById(bookId);
+            }
+        }
+        createdQuestionIds.clear();
+        createdBookIds.clear();
     }
 
     private Long extractDataId(MvcResult mvcResult) throws Exception {
@@ -265,7 +323,7 @@ public class BookControllerApiTest {
     private ResultActions performAsUser(OshUser oshUser, RequestBuilder requestBuilder) throws Exception {
         ThreadLocalUtil.set(OshUserConstants.USER_ID, oshUser.getId());
         ThreadLocalUtil.set(OshUserConstants.USER_INFO, oshUser);
-        ThreadLocalUtil.set(OshUserConstants.LEVEL, "5");
+        ThreadLocalUtil.set(OshUserConstants.LEVEL, "6");
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(
                         oshUser.getUsername(),
@@ -275,7 +333,9 @@ public class BookControllerApiTest {
                                 new SimpleGrantedAuthority("book:update"),
                                 new SimpleGrantedAuthority("book:detail"),
                                 new SimpleGrantedAuthority("book:delete"),
+                                new SimpleGrantedAuthority("book:restore"),
                                 new SimpleGrantedAuthority("qna:question:create"),
+                                new SimpleGrantedAuthority("qna:question:publish"),
                                 new SimpleGrantedAuthority("qna:question:list")
                         )
                 )

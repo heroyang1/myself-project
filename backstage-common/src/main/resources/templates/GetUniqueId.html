@@ -94,6 +94,81 @@
             color: #999;
             margin-top: 6px;
         }
+        .action-card {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 14px;
+            margin: 15px 0;
+            font-size: 13px;
+            color: #475569;
+        }
+        .action-card h3 {
+            margin: 0 0 10px;
+            color: #333;
+            font-size: 15px;
+        }
+        .redeem-code {
+            background-color: #eff6ff;
+            border: 1px dashed #2563eb;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 15px 0;
+            text-align: center;
+        }
+        .redeem-code .label {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        .redeem-code .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1d4ed8;
+            letter-spacing: 2px;
+            font-family: 'Courier New', monospace;
+            word-break: break-all;
+        }
+        .redeem-code .note {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 6px;
+        }
+        .resource-info {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 6px;
+            background: #ffffff;
+            color: #0f172a;
+        }
+        .invite-button {
+            display: inline-block;
+            margin: 8px 0;
+            padding: 9px 16px;
+            border-radius: 18px;
+            background-color: #4CAF50;
+            color: #ffffff !important;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .invite-link {
+            display: block;
+            margin-top: 8px;
+            padding: 8px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: #ffffff;
+            color: #2563eb;
+            word-break: break-all;
+            font-size: 12px;
+        }
+        .steps {
+            margin: 8px 0 0;
+            padding-left: 20px;
+            color: #475569;
+        }
+        .steps li {
+            margin: 4px 0;
+        }
         .login-methods {
             background-color: #f8f9fa;
             border-radius: 8px;
@@ -189,7 +264,7 @@
 
                 <div class="welcome-text">
                     <h1 th:text="'尊敬的 ' + ${username} + '，您好！'"></h1>
-                    <p>感谢您注册开源助手 · 开启开源之旅</p>
+                    <p th:text="${subtitle} ?: '感谢您注册开源助手 · 开启开源之旅'">感谢您注册开源助手 · 开启开源之旅</p>
                 </div>
             </div>
             <div style="width: 10px;"></div>
@@ -198,14 +273,58 @@
         <!-- 内容区域 Content -->
         <div class="content">
 
-            <div class="unique-id">
+            <div class="unique-id" th:if="${uniqueId != null}">
                 <div class="label">您的唯一标识（第二密码）</div>
                 <div class="value" th:text="${uniqueId} ?: 'xxx'">xxx</div>
-                <div class="note">请妥善保管，登录时可用作第二密码</div>
+                <div class="note" th:text="${redeemCode != null ? '请妥善保管，注册验证和登录时均可使用' : '请妥善保管，登录时可用作第二密码'}">请妥善保管，登录时可用作第二密码</div>
+            </div>
+
+            <div class="action-card" th:if="${adminInviteSuccess != null}">
+                <h3>🎉 注册成功</h3>
+                <p style="margin: 0;">
+                    您已成功注册为平台「<strong th:text="${roleName} ?: '用户'">用户</strong>」，现在可以使用用户名和密码登录平台。
+                </p>
+            </div>
+
+            <div class="redeem-code" th:if="${redeemCode != null}">
+                <div class="label">您的核销码</div>
+                <div class="value" th:text="${redeemCode}">HX000000</div>
+                <div class="note">该核销码不会自动使用，请登录后进入用户中心核销</div>
+                <div class="resource-info">
+                    <strong>对应资源：</strong>
+                    <span th:text="${productName} ?: '已购买资源'">已购买资源</span>
+                </div>
+            </div>
+
+            <div class="action-card" th:if="${redeemCode != null}">
+                <h3>核销步骤</h3>
+                <ol class="steps">
+                    <li>在注册页填写上方唯一标识完成注册。</li>
+                    <li>登录平台后进入用户中心的“核销码”。</li>
+                    <li>输入邮件中的核销码，点击“核销”确认发放资源。</li>
+                </ol>
+                <p style="margin: 10px 0 0;">如果您已经拥有账号，可直接登录平台，在用户中心手动输入上方核销码完成核销。</p>
+            </div>
+
+            <div class="action-card" th:if="${inviteLink != null}">
+                <h3>邀请注册信息</h3>
+                <p style="margin: 0 0 6px;">
+                    您已被邀请注册为平台「<strong th:text="${roleName} ?: '用户'">用户</strong>」。
+                </p>
+                <p style="margin: 0 0 6px;" th:if="${initialPoints != null}">
+                    初始积分：<strong th:text="${initialPoints}">188</strong>
+                </p>
+                <p style="margin: 0 0 6px;">
+                    邀请链接有效期：<strong th:text="${expireDays} ?: '7'">7</strong> 天
+                    <span th:if="${expireTime != null}">，角色有效期至 <strong th:text="${expireTime}">2099-12-31 23:59:59</strong></span>
+                </p>
+                <a class="invite-button" th:href="${inviteLink}" href="#">完成注册</a>
+                <span class="invite-link" th:text="${inviteLink}">https://example.com/admin-register?token=xxx</span>
+                <p style="margin: 10px 0 0;">如非本人操作，请忽略此邮件。</p>
             </div>
 
             <!-- 登录方式 -->
-            <div class="login-methods">
+            <div class="login-methods" th:if="${uniqueId != null}">
                 <h3>🔐 支持的登录方式：</h3>
                 <div class="method-tags">
                     <span class="method-tag">用户名 + 密码</span>

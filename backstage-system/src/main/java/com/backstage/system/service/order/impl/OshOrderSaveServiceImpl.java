@@ -98,30 +98,6 @@ public class OshOrderSaveServiceImpl implements IOshOrderSaveService
     }
 
     /**
-     * 批量删除创建订单
-     * 
-     * @param ids 需要删除的创建订单主键
-     * @return 结果
-     */
-    @Override
-    public int deleteOshOrderSaveByIds(Long[] ids)
-    {
-        return oshOrderSaveMapper.deleteOshOrderSaveByIds(ids);
-    }
-
-    /**
-     * 删除创建订单信息
-     * 
-     * @param id 创建订单主键
-     * @return 结果
-     */
-    @Override
-    public int deleteOshOrderSaveById(Long id)
-    {
-        return oshOrderSaveMapper.deleteOshOrderSaveById(id);
-    }
-
-    /**
      * 创建订单
      * 
      * @param request 订单创建请求参数

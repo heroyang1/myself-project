@@ -9,6 +9,7 @@ import com.backstage.system.domain.course.OshCourseSection;
 import com.backstage.system.domain.user.OshUser;
 import com.backstage.system.mapper.course.OshCourseMapper;
 import com.backstage.system.mapper.course.OshCourseQuestionMapper;
+import com.backstage.system.mapper.document.OshDocMapper;
 import com.backstage.system.request.CourseChapterCreateRequest;
 import com.backstage.system.request.CourseCreateRequest;
 import com.backstage.system.request.CourseQuestionAnswerRequest;
@@ -26,6 +27,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -33,6 +37,7 @@ import org.springframework.test.web.servlet.RequestBuilder;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -58,6 +63,75 @@ public class OshCourseControllerSectionApiTest {
 
     @Autowired
     private OshCourseQuestionMapper oshCourseQuestionMapper;
+
+    @Autowired
+    private OshDocMapper oshDocMapper;
+
+    @Test
+    public void shouldPersistAndReloadVideoSectionDocContentForEditPage() throws Exception {
+        Long courseId = createTestCourse();
+        Long parentId = createParentChapter(courseId);
+
+        CourseVideoSectionCreateRequest createRequest = new CourseVideoSectionCreateRequest();
+        createRequest.setCourseId(courseId);
+        createRequest.setParentId(parentId);
+        createRequest.setTitle("集成测试视频文档小节");
+        createRequest.setSort(2);
+        createRequest.setFreeFlag(1);
+        createRequest.setDuration(600);
+        createRequest.setMediaUrl("https://oss.example.com/integration-video.mp4");
+        createRequest.setTextContent("<!--OSH_DOC_FORMAT:MARKDOWN--># 集成测试标题\n\n保存后应能重新加载。");
+        createRequest.setFileSize(654321L);
+        createRequest.setDocMode("CREATE");
+        createRequest.setDocTitle("集成测试视频文档小节");
+
+        MvcResult createResult = performAsUser(buildCurrentUser(), post("/pc/course/section/video/save")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andReturn();
+
+        Long sectionId = extractDataId(createResult);
+        String expectedContent = createRequest.getTextContent();
+
+        performAsUser(buildCurrentUser(), get("/pc/course/section/editContent/" + courseId + "/" + sectionId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data").value(expectedContent));
+
+        performAsUser(buildCurrentUser(), get("/pc/course/section/content/" + courseId + "/" + sectionId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data").value(expectedContent));
+
+        String docContent = oshDocMapper.selectPrimaryDocContentBySectionId(sectionId);
+        assertEquals(expectedContent, docContent);
+
+        CourseVideoSectionCreateRequest updateRequest = new CourseVideoSectionCreateRequest();
+        updateRequest.setId(sectionId);
+        updateRequest.setCourseId(courseId);
+        updateRequest.setParentId(parentId);
+        updateRequest.setTitle("集成测试视频文档小节-更新");
+        updateRequest.setSort(2);
+        updateRequest.setFreeFlag(0);
+        updateRequest.setDuration(610);
+        updateRequest.setTextContent("<!--OSH_DOC_FORMAT:MARKDOWN--># 更新后的标题\n\n第二次保存。");
+        updateRequest.setFileSize(654321L);
+        updateRequest.setDocMode("CREATE");
+        updateRequest.setDocTitle("集成测试视频文档小节-更新");
+
+        performAsUser(buildCurrentUser(), post("/pc/course/section/video/save")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(updateRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        performAsUser(buildCurrentUser(), get("/pc/course/section/editContent/" + courseId + "/" + sectionId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data").value(updateRequest.getTextContent()));
+    }
 
     @Test
     public void shouldInsertChapterSectionIntoDatabase() throws Exception {
@@ -587,6 +661,17 @@ public class OshCourseControllerSectionApiTest {
     private ResultActions performAsUser(OshUser oshUser, RequestBuilder requestBuilder) throws Exception {
         ThreadLocalUtil.set(OshUserConstants.USER_ID, oshUser.getId());
         ThreadLocalUtil.set(OshUserConstants.USER_INFO, oshUser);
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                oshUser.getUsername(),
+                null,
+                Arrays.asList(
+                        new SimpleGrantedAuthority("course:section:video"),
+                        new SimpleGrantedAuthority("course:section:text"),
+                        new SimpleGrantedAuthority("course:update"),
+                        new SimpleGrantedAuthority("course:create")
+                )
+        );
+        SecurityContextHolder.getContext().setAuthentication(authentication);
         return mockMvc.perform(requestBuilder);
     }
 }

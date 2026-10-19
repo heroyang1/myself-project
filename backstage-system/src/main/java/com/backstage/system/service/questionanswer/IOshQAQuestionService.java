@@ -18,6 +18,8 @@ public interface IOshQAQuestionService {
 
     R<String> addQuestion(Long userId, Long resourceNo, String resourceType, String content, Byte isPaidOnly, List<String> tags);
 
+    R<String> addToolQuestion(Long userId, Long toolId, String content, List<String> tags);
+
     R<String> publishQuestion(Long userId, Long questionId);
 
     R<List<QueryQuestionListVO>> myDraft(Long currentUserId);
@@ -37,8 +39,4 @@ public interface IOshQAQuestionService {
     R<String> cancelSolve(Long userId, Long questionId, Long answerId);
 
     R<QueryQuestionDetailVO> detail(Long id, Long questionId);
-
-    R<String> vote(Long userId, Long answerId);
-
-    R<String> cancelVote(Long userId, Long answerId);
 }

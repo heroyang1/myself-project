@@ -8,6 +8,8 @@ import com.backstage.system.domain.course.OshCourse;
 import com.backstage.system.domain.user.OshUser;
 import com.backstage.system.request.CourseCreateRequest;
 import com.backstage.system.request.CourseChapterCreateRequest;
+import com.backstage.system.request.CourseLinkSectionCreateRequest;
+import com.backstage.system.request.CourseSectionReorderRequest;
 import com.backstage.system.request.CourseSearchRequest;
 import com.backstage.system.request.CourseTextSectionCreateRequest;
 import com.backstage.system.request.CourseUpdateRequest;
@@ -90,6 +92,11 @@ public interface IOshCourseService {
 
     List<OshCourseSectionVo> getCourseSectionOutline(Long courseId, Long userId);
 
+    /**
+     * 编辑页获取课程大纲（不做试看/购买权限裁剪，保留完整文档内容）
+     */
+    List<OshCourseSectionVo> getCourseSectionOutlineForEdit(Long courseId);
+
     boolean canUserAccessSectionContent(Long courseId, Long sectionId, Long userId);
 
     Integer isUserBuyCourseOrFreeCourse(Long courseId, Long userId);
@@ -100,11 +107,20 @@ public interface IOshCourseService {
 
     String getCourseSectionContent(Long sectionId, Long userId);
 
+    /**
+     * 编辑页获取小节文档内容（不受购买/试看权限限制）
+     */
+    String getCourseSectionEditContent(Long sectionId);
+
     List<OshCourseMaterial> getCourseMaterials(Long courseId);
 
     boolean safeDeleteSection(Long courseId, Long sectionId, OshUser currentOshUser);
 
     void updateCourseChapter(CourseChapterCreateRequest request, OshUser currentOshUser);
+
+    void reorderSections(CourseSectionReorderRequest request, OshUser currentOshUser);
+
+    Long createCourseLinkSection(CourseLinkSectionCreateRequest request, OshUser currentOshUser);
 
     void deleteCoursesByIds(List<Long> ids, OshUser currentOshUser);
 

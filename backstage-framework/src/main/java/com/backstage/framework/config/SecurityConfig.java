@@ -116,6 +116,8 @@ public class SecurityConfig
                 permitAllUrl.getUrls().forEach(url -> requests.antMatchers(url).permitAll());
                 // 对于登录login 注册register 验证码captchaImage 允许匿名访问
                 requests
+                    // 汇付异步支付通知由上游服务器调用，不能要求前端登录态。
+                    .antMatchers(HttpMethod.POST, "/pc/pay/huifu/notify").permitAll()
                     // WebSocket 握手端点，认证在 WebSocketAuthInterceptor 中单独处理
                     .antMatchers("/ws/**").permitAll()
                     // 静态资源，可匿名访问

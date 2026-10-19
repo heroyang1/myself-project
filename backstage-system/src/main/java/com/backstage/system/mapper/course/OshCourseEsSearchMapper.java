@@ -8,4 +8,6 @@ import java.util.List;
 public interface OshCourseEsSearchMapper {
 
     List<CourseSearchUserStateVo> selectUserCourseStates(@Param("userId") Long userId, @Param("courseIds") List<Long> courseIds);
+
+    List<CourseSearchUserStateVo> selectCoursePaidCounts(@Param("courseIds") List<Long> courseIds);
 }

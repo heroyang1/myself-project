@@ -42,6 +42,9 @@ public class BookSaveReqVO implements Serializable
     /** 权限等级 */
     private Integer level;
 
+    /** Book media type: 1 ebook, 2 comic. */
+    private Integer mediaType;
+
     /** 标签列表 */
     private List<String> tags;
 
@@ -130,6 +133,14 @@ public class BookSaveReqVO implements Serializable
 
     public void setLevel(Integer level) {
         this.level = level;
+    }
+
+    public Integer getMediaType() {
+        return mediaType;
+    }
+
+    public void setMediaType(Integer mediaType) {
+        this.mediaType = mediaType;
     }
 
     public List<String> getTags() {

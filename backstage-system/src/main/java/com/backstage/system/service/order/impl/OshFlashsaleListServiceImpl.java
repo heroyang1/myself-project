@@ -156,27 +156,4 @@ public class OshFlashsaleListServiceImpl implements IOshFlashsaleListService
         return oshFlashsaleListMapper.updateOshFlashsaleList(oshFlashsaleList);
     }
 
-    /**
-     * 批量删除创建秒杀订单
-     * 
-     * @param ids 需要删除的创建秒杀订单主键
-     * @return 结果
-     */
-    @Override
-    public int deleteOshFlashsaleListByIds(Long[] ids)
-    {
-        return oshFlashsaleListMapper.deleteOshFlashsaleListByIds(ids);
-    }
-
-    /**
-     * 删除创建秒杀订单信息
-     * 
-     * @param id 创建秒杀订单主键
-     * @return 结果
-     */
-    @Override
-    public int deleteOshFlashsaleListById(Long id)
-    {
-        return oshFlashsaleListMapper.deleteOshFlashsaleListById(id);
-    }
 }

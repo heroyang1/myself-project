@@ -2,6 +2,7 @@ package com.backstage.common.core.domain.entity;
 
 import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableLogic;
 
 import java.time.LocalDateTime;
 
@@ -40,6 +41,7 @@ public class OSHBaseEntity {
     /**
      * 逻辑删除：0=未删除，1=已删除
      */
+    @TableLogic(value = "0", delval = "1")
     private Byte deleteFlag;
 
     public LocalDateTime getCreateTime() {

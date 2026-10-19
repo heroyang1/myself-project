@@ -24,7 +24,8 @@ public interface OshPaymentMapper {
 
     int updatePendingToSuccess(@Param("paymentNo") String paymentNo,
                                @Param("platformTradeNo") String platformTradeNo,
-                               @Param("paidTime") LocalDateTime paidTime);
+                               @Param("paidTime") LocalDateTime paidTime,
+                               @Param("channel") Integer channel);
 
     int updatePendingToFailed(@Param("paymentNo") String paymentNo,
                               @Param("responsePayload") String responsePayload);

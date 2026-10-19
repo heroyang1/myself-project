@@ -7,6 +7,7 @@ import com.backstage.system.domain.order.OshOrder;
 import com.backstage.system.domain.order.enums.ProductTypeEnum;
 import com.backstage.system.domain.websocket.WsNotifyMessage;
 import com.backstage.system.mapper.order.OshOrderMapper;
+import com.backstage.system.service.order.OrderEntitlementTaskService;
 import com.backstage.system.service.order.OrderPaidHandlerRegistry;
 import com.backstage.system.service.websocket.WebSocketNotifyService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,6 +40,9 @@ public class PaymentSuccessConsumer {
     @Resource
     private OrderPaidHandlerRegistry paidHandlerRegistry;
 
+    @Resource
+    private OrderEntitlementTaskService entitlementTaskService;
+
     @KafkaListener(
             topics = KafkaConstants.PAY_SUCCESS_TOPIC,
             groupId = "${spring.kafka.consumer.group-id}"
@@ -52,24 +56,26 @@ public class PaymentSuccessConsumer {
             OshOrder order = orderMapper.selectByOrderNo(successMessage.getOrderNo());
             if (Objects.isNull(order) || Objects.isNull(order.getProductType())) {
                 log.warn("权益发放跳过，订单信息不完整: orderNo={}", orderNo);
+                ack.acknowledge();
                 return;
             }
 
-            // 调用对应业务模块的权益handler
             ProductTypeEnum productTypeEnum = ProductTypeEnum.fromCode(order.getProductType());
             if (Objects.isNull(productTypeEnum)) {
                 log.warn("权益发放跳过，未知商品类型: orderNo={}, productType={}", orderNo, order.getProductType());
                 return;
             }
-            log.info("权益发放命中商品类型, orderNo={}, productType={}, bizType={}",
-                    orderNo, order.getProductType(), productTypeEnum.getName());
-            try {
+
+            if (entitlementTaskService.isTaskMode()) {
+                // task 模式可接住升级前的 Kafka 积压：先补建唯一任务，再由 CAS 任务处理。
+                entitlementTaskService.ensureTask(orderNo);
+                entitlementTaskService.processOrderSafely(orderNo);
+            } else {
+                // 蓝绿兼容阶段保持旧 Kafka 行为，数据库任务只写不执行。
                 paidHandlerRegistry.handle(productTypeEnum.getName(), orderNo);
-            } catch (Exception e) {
-                log.error("权益发放失败, orderNo={}, productType={}", orderNo, order.getProductType(), e);
             }
 
-            // 调用websocket 让前端发送通知告知用户支付已完成
+            // 调用 websocket 让前端发送通知告知用户支付已完成。
             WsNotifyMessage msg = new WsNotifyMessage();
             msg.setType("PAY_SUCCESS_NOTIFY");
             msg.setTitle("您购买的 " + order.getProductName() + "支付成功！");
@@ -77,7 +83,7 @@ public class PaymentSuccessConsumer {
             msg.setJumpUrl(null);
             msg.setBizId(orderNo);
             webSocketNotifyService.send(order.getUserId(), msg);
-
+            ack.acknowledge();
 
         }catch (Exception e){
             log.error("【Kafka消费者】消息处理异常：", e);

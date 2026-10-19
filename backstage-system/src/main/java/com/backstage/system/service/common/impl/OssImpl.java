@@ -97,6 +97,11 @@ public class OssImpl implements OssService {
             if(file.getSize() > 1024 * 1024 * 5){
                 return "封面图片大小不能超过5MB";
             }
+        }else if(UploadPathEnum.CONTENT_BACKGROUND.equals(pathEnum)){
+            customPath = UploadPathEnum.CONTENT_BACKGROUND.getPath()+id+ym+"/";
+            if(file.getSize() > 1024 * 1024 * 5){
+                return "背景图大小不能超过5MB";
+            }
         }else if(UploadPathEnum.COURSE_MATERIAL.equals(pathEnum)){
             customPath = UploadPathEnum.COURSE_MATERIAL.getPath()+id+ym+"/";
             if(file.getSize() > 1024 * 1024 * 100){

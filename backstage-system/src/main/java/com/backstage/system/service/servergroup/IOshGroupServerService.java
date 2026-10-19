@@ -10,12 +10,12 @@ import com.backstage.system.domain.vo.InitiableActivityVO;
 import com.backstage.system.domain.vo.MyGroupListVO;
 import com.backstage.system.domain.vo.UserInitiatedActivityListVO;
 import com.backstage.system.domain.vo.UserSearchVO;
+import com.backstage.system.domain.vo.group.AddUserToGroupVO;
 import com.backstage.system.domain.vo.group.JoinGroupVO;
 import com.backstage.system.domain.vo.group.ServerTutorialVO;
+import com.backstage.system.domain.vo.group.SharePosterVO;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 服务器拼团Service接口
@@ -75,6 +75,16 @@ public interface IOshGroupServerService {
      * @return 拼团详情
      */
     GroupDetailVO selectGroupDetailByInitiatedId(Long initiatedId, Long userId);
+
+    /**
+     * 查询拼团详情（双数据源回退）
+     * 先查 osh_group_user_initiated，未找到则回退到 osh_group_activity
+     *
+     * @param activityId 拼团活动ID或用户发起记录ID
+     * @param userId 当前用户ID（可为null）
+     * @return 拼团详情
+     */
+    GroupDetailVO selectGroupDetailWithFallback(Long activityId, Long userId, String sourceType);
     
     /**
      * 参与拼团
@@ -84,7 +94,7 @@ public interface IOshGroupServerService {
      * @param payMethod 支付方式
      * @return 参团结果（包含订单号、支付状态等）
      */
-    JoinGroupVO joinGroup(Long activityId, Long userId, String payMethod);
+    JoinGroupVO joinGroup(Long activityId, Long userId, String payMethod, String sourceType);
     
     /**
      * 发起拼团（创建组团）
@@ -121,7 +131,7 @@ public interface IOshGroupServerService {
      * @param operatorId 操作人ID（管理员）
      * @return 添加结果
      */
-    Map<String, Object> addUserToGroup(Long activityId, Long userId, String remark, Long operatorId);
+    AddUserToGroupVO addUserToGroup(Long activityId, Long userId, String remark, Long operatorId);
     
     /**
      * 根据订单号查询订单（用于支付接口获取金额）
@@ -137,7 +147,7 @@ public interface IOshGroupServerService {
      * @param activityId 拼团活动ID（osh_group_user_initiated表ID或osh_group_activity表ID）
      * @return 服务器教程VO
      */
-    ServerTutorialVO getServerTutorial(Long activityId);
+    ServerTutorialVO getServerTutorial(Long activityId, String sourceType);
     
     /**
      * 获取服务器SSH连接信息
@@ -146,7 +156,7 @@ public interface IOshGroupServerService {
      * @param userId 用户ID
      * @return 服务器SSH信息VO
      */
-    com.backstage.system.domain.vo.group.ServerSshInfoVO getServerSshInfo(Long activityId, Long userId);
+    com.backstage.system.domain.vo.group.ServerSshInfoVO getServerSshInfo(Long activityId, Long userId, String sourceType);
     
     /**
      * 处理拼团订单支付成功后的业务逻辑
@@ -172,5 +182,102 @@ public interface IOshGroupServerService {
      * @param amount 支付金额
      * @param clientIp 客户端IP
      */
-    void createGroupPayment(String orderNo, Long orderId, String amount, String clientIp);
+    String createGroupPayment(String orderNo,
+                              Long orderId,
+                              String amount,
+                              String clientIp,
+                              String provider,
+                              Integer channel);
+
+    // ==================== 定时任务业务方法 ====================
+
+    /**
+     * 取消超时未支付的 pending 订单（每5分钟执行）
+     * 仅释放名额，不退款。
+     *
+     * @return 取消的订单数量
+     */
+    int cancelExpiredOrders();
+
+    /**
+     * 关闭已过招募期的用户发起拼团（每天凌晨2点执行）
+     *
+     * @return 关闭的记录数量
+     */
+    int expireInitiatedGroups();
+
+    /**
+     * 自动更新拼团活动状态（每天凌晨2:30执行）
+     * 根据参团人数和时间自动更新：1进行中→2拼团成功→3已结束
+     *
+     * @return 更新的活动数量
+     */
+    int autoUpdateActivityStatus();
+
+    /**
+     * 同步活动当前参与人数（每10分钟执行）
+     * 基于 osh_group_work 表刷新 osh_group_activity.current_num
+     *
+     * @return 同步的活动数量
+     */
+    int refreshActivityCurrentNum();
+
+    /**
+     * 服务器到期前提醒（每天9点执行）
+     * 在到期前N天提醒用户
+     *
+     * @return 提醒的记录数量
+     */
+    int notifyExpiringServers();
+
+    /**
+     * 清理长期未成团且已过期的组团（每天凌晨3点执行）
+     *
+     * @return 清理的活动数量
+     */
+    int cleanupExpiredGroups();
+
+    /**
+     * 每日数据快照（每天凌晨4点执行）
+     * 生成前一天拼团数据快照（订单数/成交额/成团率等）
+     */
+    void dailySnapshot();
+
+    // ==================== 安全校验方法 ====================
+
+    /**
+     * 校验用户是否为某个拼团的成员
+     *
+     * @param userId     用户ID
+     * @param activityId 活动ID
+     * @return 是否为成员
+     */
+    boolean isUserInGroup(Long userId, Long activityId, String sourceType);
+
+    /**
+     * 校验用户是否为指定订单的所有者
+     *
+     * @param orderNo 订单号
+     * @param userId  用户ID
+     * @return 是否为订单所有者
+     */
+    boolean checkOrderOwnership(String orderNo, Long userId);
+
+    /**
+     * 获取分享海报数据（系统活动）
+     *
+     * @param activityId 活动ID
+     * @param userId     当前用户ID（用于生成邀请码）
+     * @return 分享海报数据
+     */
+    SharePosterVO getSharePosterData(Long activityId, Long userId);
+
+    /**
+     * 获取分享海报数据（用户发起拼团）
+     *
+     * @param initiatedId 用户发起拼团ID
+     * @param userId      当前用户ID
+     * @return 分享海报数据
+     */
+    SharePosterVO getSharePosterDataByInitiated(Long initiatedId, Long userId);
 }

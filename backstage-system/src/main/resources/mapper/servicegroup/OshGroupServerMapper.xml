@@ -26,6 +26,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <!-- 结果映射：我的拼团列表VO -->
     <resultMap type="com.backstage.system.domain.vo.MyGroupListVO" id="MyGroupListVOResult">
         <id property="groupWorkId" column="group_work_id"/>
+        <result property="sourceType" column="source_type"/>
+        <result property="sourceId" column="source_id"/>
         <result property="activityId" column="activity_id"/>
         <result property="title" column="title"/>
         <result property="cpu" column="cpu"/>
@@ -105,6 +107,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         FROM osh_group_activity ga
         <where>
             ga.type = 'server'
+            AND ga.delete_flag = 0
             <if test="status != null">
                 AND ga.status = #{status}
             </if>
@@ -120,22 +123,33 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         SELECT <include refid="groupActivityAllColumns"/>
         FROM osh_group_activity
         WHERE id = #{id}
+          AND delete_flag = 0
     </select>
 
-    <!-- 查询我的拼团列表（加入的） -->
-    <select id="selectMyGroupList" resultMap="MyGroupListVOResult">
+    <select id="selectGroupActivityByIdForUpdate" parameterType="java.lang.Long" resultType="com.backstage.system.domain.servergroup.OshGroupActivity">
+        SELECT <include refid="groupActivityAllColumns"/>
+        FROM osh_group_activity
+        WHERE id = #{id}
+          AND delete_flag = 0
+        FOR UPDATE
+    </select>
+
+    <!-- 查询我的拼团列表（加入的） - 拆分优化版本 -->
+    <!-- 方案：拆为两个独立查询，Java 层合并排序，避免 UNION ALL + ORDER BY 全表 filesort -->
+    <select id="selectMyJoinedGroupList" resultMap="MyGroupListVOResult">
         SELECT 
-            'joined' AS source_type,
+            go.source_type,
+            CASE WHEN go.source_type = 'initiated' THEN go.initiated_id ELSE go.group_activity_id END AS source_id,
             gw.id AS group_work_id,
-            ga.id AS activity_id,
+            go.group_activity_id AS activity_id,
             ga.title,
             ga.cpu,
             ga.memory,
             ga.storage,
-            ga.base_price,
+            COALESCE(go.base_price, ga.base_price) AS base_price,
             gw.actual_price,
-            ga.total_duration,
-            ga.start_time,
+            COALESCE(gui.duration, ga.total_duration) AS total_duration,
+            COALESCE(gui.initiate_time, ga.start_time) AS start_time,
             gw.server_start_time,
             gw.server_expire_time,
             gw.group_status,
@@ -149,15 +163,22 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             go.status AS order_status,
             gw.join_time,
             NULL AS admin_contact
-        FROM osh_group_activity ga
-        LEFT JOIN osh_group_work gw ON ga.id = gw.group_activity_id
-        LEFT JOIN osh_group_order go ON gw.order_id = go.id
+        FROM osh_group_work gw
+        JOIN osh_group_order go ON gw.order_id = go.id AND gw.user_id = go.user_id
+        LEFT JOIN osh_group_user_initiated gui
+               ON go.source_type = 'initiated' AND gui.id = go.initiated_id
+        LEFT JOIN osh_group_activity ga ON ga.id = go.group_activity_id
         WHERE gw.user_id = #{userId}
+          AND go.source_type IN ('system', 'initiated')
+          AND go.delete_flag = 0
         <if test="groupStatus != null">
             AND gw.group_status = #{groupStatus}
         </if>
-        UNION ALL
-        <!-- 查询我的拼团列表(发起的) -->
+        ORDER BY gw.join_time DESC
+    </select>
+
+    <!-- 查询我的拼团列表（发起的） - 拆分优化版本 -->
+    <select id="selectMyInitiatedGroupList" resultMap="MyGroupListVOResult">
         SELECT 
             'initiated' AS source_type,
             gui.id AS group_work_id,
@@ -190,7 +211,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <if test="groupStatus != null">
             AND gui.group_status = #{groupStatus}
         </if>
-        ORDER BY join_time DESC
+        ORDER BY gui.initiate_time DESC
     </select>
 
     <!-- 查询拼团详情 -->
@@ -200,31 +221,33 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         WHERE id = #{id}
     </select>
 
-    <!-- 查询参团用户列表 -->
+    <!-- 查询参团用户列表（优化：移除 O(N²) 子查询，改为 Java 层标记团长） -->
     <select id="selectGroupUsers" parameterType="java.lang.Long" resultMap="ServerGroupUserVoResult">
         SELECT 
             u.id AS user_id,
             u.username,
             u.username AS nickname,
             u.avatar,
-            gw.join_time,
-            IF(
-                gw.id = (SELECT MIN(gw2.id) FROM osh_group_work gw2 WHERE gw2.group_activity_id = #{groupActivityId}),
-                TRUE,
-                FALSE
-            ) AS is_leader
+            gw.join_time
         FROM osh_group_work gw
-        LEFT JOIN osh_user u ON gw.user_id = u.id
-        WHERE gw.group_activity_id = #{groupActivityId}
+        INNER JOIN osh_user u ON gw.user_id = u.id
+        INNER JOIN osh_group_order go ON go.id = gw.order_id AND go.group_work_id = gw.id
+        WHERE go.source_type = 'system'
+          AND go.group_activity_id = #{groupActivityId}
+          AND go.status IN ('paid', 'success')
+          AND go.delete_flag = 0
         ORDER BY gw.join_time ASC
     </select>
 
-    <!-- 检查用户是否已参团 -->
+    <!-- 检查用户是否已参团（排除已取消的记录，取消后允许重新参团） -->
     <select id="checkUserJoined" resultType="int">
         SELECT COUNT(*)
-        FROM osh_group_work
-        WHERE group_activity_id = #{groupActivityId}
+        FROM osh_group_order
+        WHERE source_type = 'system'
+          AND group_activity_id = #{groupActivityId}
           AND user_id = #{userId}
+          AND status IN ('pending', 'paid', 'success')
+          AND delete_flag = 0
     </select>
 
     <!-- 根据用户发起拼团ID查询参团用户列表（仅显示已支付的用户） -->
@@ -237,9 +260,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             gw.join_time
         FROM osh_group_work gw
         INNER JOIN osh_user u ON gw.user_id = u.id
-        INNER JOIN osh_group_order go ON go.group_work_id = gw.id AND go.user_id = gw.user_id
-        WHERE gw.group_activity_id = #{initiatedId}
-          AND go.status = 'paid'
+        INNER JOIN osh_group_order go ON go.id = gw.order_id AND go.user_id = gw.user_id
+        WHERE go.source_type = 'initiated'
+          AND go.initiated_id = #{initiatedId}
+          AND go.group_work_id = gw.id
+          AND go.status IN ('paid', 'success')
+          AND go.delete_flag = 0
         ORDER BY gw.join_time ASC
     </select>
 
@@ -247,10 +273,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="checkUserJoinedByInitiatedId" resultType="int">
         SELECT COUNT(*)
         FROM osh_group_work gw
-        INNER JOIN osh_group_order go ON go.group_work_id = gw.group_activity_id AND go.user_id = gw.user_id
-        WHERE gw.group_activity_id = #{initiatedId}
+        INNER JOIN osh_group_order go ON go.id = gw.order_id AND go.user_id = gw.user_id
+        WHERE go.source_type = 'initiated'
+          AND go.initiated_id = #{initiatedId}
+          AND go.group_work_id = gw.id
           AND gw.user_id = #{userId}
-          AND go.status = 'paid'
+          AND go.status IN ('pending', 'paid', 'success')
+          AND go.delete_flag = 0
     </select>
 
     <!-- 更新参团记录服务器时间 -->
@@ -262,12 +291,77 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </update>
 
     <!-- 根据活动和用户查询参团记录 -->
+    <!-- 修复：添加 ORDER BY 确保结果确定性，避免同一用户多条记录时返回不确定 -->
     <select id="selectGroupWorkByActivityAndUser" parameterType="java.lang.Long" resultType="com.backstage.system.domain.servergroup.OshGroupWork">
         SELECT *
         FROM osh_group_work
         WHERE group_activity_id = #{activityId}
           AND user_id = #{userId}
+        ORDER BY join_time DESC
         LIMIT 1
+    </select>
+
+    <select id="selectGroupWorkById" parameterType="java.lang.Long" resultType="com.backstage.system.domain.servergroup.OshGroupWork">
+        SELECT *
+        FROM osh_group_work
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectActiveGroupWorkForUser" resultType="com.backstage.system.domain.servergroup.OshGroupWork">
+        SELECT gw.*
+        FROM osh_group_order go
+        JOIN osh_group_work gw
+          ON gw.id = go.group_work_id
+         AND gw.order_id = go.id
+         AND gw.user_id = go.user_id
+        WHERE go.source_type = #{sourceType}
+          AND go.user_id = #{userId}
+          AND go.status IN ('paid', 'success')
+          AND go.delete_flag = 0
+          AND (
+              (#{sourceType} = 'system' AND go.group_activity_id = #{sourceId})
+              OR (#{sourceType} = 'initiated' AND go.initiated_id = #{sourceId})
+          )
+        LIMIT 1
+    </select>
+
+    <!-- pending 也占用支付名额；父记录 FOR UPDATE 使“计数+插入”串行，避免先付款后超卖。 -->
+    <select id="countActiveSystemOrders" resultType="int">
+        SELECT COUNT(*)
+        FROM osh_group_order
+        WHERE source_type = 'system'
+          AND group_activity_id = #{activityId}
+          AND status IN ('pending', 'paid', 'success')
+          AND delete_flag = 0
+    </select>
+
+    <select id="countActiveInitiatedOrders" resultType="int">
+        SELECT COUNT(*)
+        FROM osh_group_order
+        WHERE source_type = 'initiated'
+          AND initiated_id = #{initiatedId}
+          AND status IN ('pending', 'paid', 'success')
+          AND delete_flag = 0
+    </select>
+
+    <select id="countActiveSystemOrdersForUser" resultType="int">
+        SELECT COUNT(*)
+        FROM osh_group_order
+        WHERE source_type = 'system'
+          AND group_activity_id = #{activityId}
+          AND user_id = #{userId}
+          AND status IN ('pending', 'paid', 'success')
+          AND delete_flag = 0
+    </select>
+
+    <select id="countActiveInitiatedOrdersForUser" resultType="int">
+        SELECT COUNT(*)
+        FROM osh_group_order
+        WHERE source_type = 'initiated'
+          AND initiated_id = #{initiatedId}
+          AND user_id = #{userId}
+          AND status IN ('pending', 'paid', 'success')
+          AND delete_flag = 0
     </select>
 
     <!-- 插入参团记录 -->
@@ -332,6 +426,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             user_id,
             group_activity_id,
             group_work_id,
+            source_type,
+            initiated_id,
             order_no,
             price,
             base_price,
@@ -344,6 +440,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             #{userId},
             #{groupActivityId},
             #{groupWorkId},
+            #{sourceType},
+            #{initiatedId},
             #{orderNo},
             #{price},
             #{basePrice},
@@ -362,28 +460,43 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         WHERE id = #{id}
     </update>
 
+    <update id="updatePendingGroupWorkToPaid">
+        UPDATE osh_group_work
+        SET group_status = 1
+        WHERE id = #{id}
+          AND group_status = 0
+    </update>
+
     <!-- 根据订单号查询订单（联查最新一条支付流水，防止历史重复流水导致 TooManyResultsException） -->
+    <!-- 优化说明：移除 COLLATE 强制转换（两表已统一 utf8mb4_unicode_ci），避免索引失效；
+         使用 ORDER BY + LIMIT 1 替代嵌套子查询，降低 O(N²) 复杂度 -->
     <select id="selectGroupOrderByOrderNo" parameterType="java.lang.String" resultType="com.backstage.system.domain.servergroup.OshGroupOrder">
         SELECT 
-            go.id, go.user_id, go.group_activity_id, go.group_work_id, go.order_no,
+            go.id, go.user_id, go.group_activity_id, go.group_work_id,
+            go.source_type, go.initiated_id, go.order_no,
             go.price, go.base_price, go.remaining_months, go.status, go.pay_method,
             go.pay_time, go.created_time, go.updated_time,
             p.payment_no, p.channel, p.status AS payment_status, p.platform_trade_no,
             p.pay_url, p.qrcode, p.paid_time, p.created_time AS payment_created_time
         FROM osh_group_order go
-        LEFT JOIN (
-            SELECT t.*
-            FROM osh_payment t
-            WHERE t.delete_flag = 0
-              AND t.id = (
-                  SELECT MAX(t2.id)
-                  FROM osh_payment t2
-                  WHERE t2.payment_no = t.payment_no
-                    AND t2.delete_flag = 0
-              )
-        ) p ON go.order_no = p.payment_no COLLATE utf8mb4_unicode_ci
+        LEFT JOIN osh_payment p ON p.id = (
+            SELECT MAX(t2.id)
+            FROM osh_payment t2
+            WHERE t2.payment_no = go.order_no
+              AND t2.delete_flag = 0
+        )
         WHERE go.order_no = #{orderNo}
           AND go.delete_flag = 0
+    </select>
+
+    <select id="selectGroupOrderByOrderNoForUpdate" parameterType="java.lang.String" resultType="com.backstage.system.domain.servergroup.OshGroupOrder">
+        SELECT id, user_id, group_activity_id, group_work_id, source_type, initiated_id,
+               order_no, price, base_price, remaining_months, status, pay_method,
+               pay_time, created_time, updated_time
+        FROM osh_group_order
+        WHERE order_no = #{orderNo}
+          AND delete_flag = 0
+        FOR UPDATE
     </select>
 
     <!-- 校验支付流水是否已存在（用于 createGroupPayment 幂等判断） -->
@@ -401,14 +514,54 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         WHERE id = #{id}
     </update>
 
+    <update id="updatePendingGroupOrderToCancelled">
+        UPDATE osh_group_order
+        SET status = 'cancelled',
+            updated_time = #{updateTime}
+        WHERE id = #{id}
+          AND status = 'pending'
+    </update>
+
+    <update id="updatePendingGroupWorkToCancelled">
+        UPDATE osh_group_work
+        SET group_status = 3
+        WHERE id = #{id}
+          AND group_status = 0
+    </update>
+
+    <update id="updatePendingOrderToPaid">
+        UPDATE osh_group_order
+        SET status = 'paid',
+            pay_time = #{updateTime},
+            updated_time = #{updateTime}
+        WHERE id = #{id}
+          AND status = 'pending'
+    </update>
+
+    <!-- 回写订单的 group_work_id（订单创建时 work 尚未生成，插入后再更新） -->
+    <update id="updateOrderGroupWorkId">
+        UPDATE osh_group_order
+        SET group_work_id = #{groupWorkId},
+            updated_time = NOW()
+        WHERE id = #{orderId}
+    </update>
+
+    <update id="updateOrderInitiatedId">
+        UPDATE osh_group_order
+        SET source_type = 'initiated',
+            initiated_id = #{initiatedId},
+            updated_time = NOW()
+        WHERE id = #{orderId}
+    </update>
+
     <!-- 计算动态价格（SQL实现） -->
     <select id="calculateDynamicPrice" resultType="java.math.BigDecimal">
         SELECT ROUND(#{basePrice} * (#{remainingMonths} / #{totalDuration}), 2)
     </select>
 
-    <!-- 查询全量组团记录列表（管理端，按状态筛选） -->
+    <!-- 查询全量组团记录列表（管理端，按状态筛选）- 已废弃，使用拆分查询替代 -->
+    <!-- 保留原 UNION ALL 查询作为兼容，实际调用已走拆分查询 -->
     <select id="selectGroupWorkList" resultMap="GroupWorkListVOResult">
-        <!-- 用户加入系统活动的记录 -->
         SELECT
             'joined' AS source_type,
             gw.id               AS group_work_id,
@@ -441,7 +594,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             </if>
         </where>
         UNION ALL
-        <!-- 用户发起的拼团记录 -->
         SELECT
             'initiated' AS source_type,
             gui.id              AS group_work_id,
@@ -476,10 +628,80 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         ORDER BY join_time DESC
     </select>
 
+    <!-- 管理端拆分查询1：系统活动拼团记录（避免 UNION ALL + ORDER BY 全表 filesort） -->
+    <select id="selectSystemGroupWorkList" resultMap="GroupWorkListVOResult">
+        SELECT
+            gw.id               AS group_work_id,
+            ga.id               AS activity_id,
+            ga.title            AS activity_title,
+            gw.user_id,
+            u.username,
+            u.username          AS nickname,
+            gw.actual_price,
+            gw.remaining_months,
+            gw.group_status,
+            CASE gw.group_status
+            WHEN 0 THEN '进行中'
+            WHEN 1 THEN '已成团'
+            WHEN 2 THEN '已取消/过期'
+            ELSE '未知'
+            END AS group_status_text,
+            gw.join_time,
+            gw.server_start_time,
+            gw.server_expire_time,
+            go.order_no,
+            go.status           AS order_status
+        FROM osh_group_work gw
+        LEFT JOIN osh_group_activity ga ON gw.group_activity_id = ga.id
+        LEFT JOIN osh_user u            ON gw.user_id = u.id
+        LEFT JOIN osh_group_order go    ON gw.order_id = go.id
+        <where>
+            <if test="groupStatus != null">
+                gw.group_status = #{groupStatus}
+            </if>
+        </where>
+        ORDER BY gw.join_time DESC
+    </select>
+
+    <!-- 管理端拆分查询2：用户发起拼团记录（避免 UNION ALL + ORDER BY 全表 filesort） -->
+    <select id="selectInitiatedGroupWorkList" resultMap="GroupWorkListVOResult">
+        SELECT
+            gui.id              AS group_work_id,
+            NULL                AS activity_id,
+            '用户发起拼团'      AS activity_title,
+            gui.user_id,
+            u.username,
+            u.username          AS nickname,
+            gui.custom_price    AS actual_price,
+            NULL                AS remaining_months,
+            gui.group_status,
+            CASE gui.group_status
+            WHEN 0 THEN '招募中'
+            WHEN 1 THEN '已成团'
+            WHEN 2 THEN '已取消/过期'
+            ELSE '未知'
+            END AS group_status_text,
+            gui.initiate_time   AS join_time,
+            gui.server_start_time,
+            gui.server_expire_time,
+            go.order_no,
+            go.status           AS order_status
+        FROM osh_group_user_initiated gui
+        LEFT JOIN osh_user u            ON gui.user_id = u.id
+        LEFT JOIN osh_group_order go    ON gui.order_id = go.id
+        <where>
+            gui.delete_flag = 0
+            <if test="groupStatus != null">
+                AND gui.group_status = #{groupStatus}
+            </if>
+        </where>
+        ORDER BY gui.initiate_time DESC
+    </select>
+
     <!-- 查询超时未支付订单 -->
     <select id="selectTimeoutOrders" parameterType="java.time.LocalDateTime" resultType="com.backstage.system.domain.servergroup.OshGroupOrder">
         SELECT 
-            id, user_id, group_activity_id, group_work_id, order_no,
+            id, user_id, group_activity_id, group_work_id, source_type, initiated_id, order_no,
             price, base_price, remaining_months, status, pay_method,
             pay_time, created_time, updated_time
         FROM osh_group_order
@@ -518,14 +740,147 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <!-- 插入支付流水记录（用于拼团订单） -->
     <insert id="insertGroupPayment">
         INSERT INTO osh_payment (
-            payment_no, order_no, order_id, amount, status, 
+            payment_no, order_no, order_id, channel, provider, amount, status,
             request_payload, expire_time, created_time, updated_time, delete_flag
         ) VALUES (
-            #{paymentNo}, #{orderNo}, #{orderId}, #{amount}, 0,
-            CONCAT('{"clientIp":"', #{clientIp}, '","source":"group"}'),
+            #{paymentNo}, #{orderNo}, #{orderId}, #{channel}, #{provider}, #{amount}, 0,
+            #{requestPayload},
             DATE_ADD(NOW(), INTERVAL 30 MINUTE),
             NOW(), NOW(), 0
         )
     </insert>
+
+    <!-- ==================== 定时任务 + 安全校验 SQL ==================== -->
+
+    <!-- 批量更新订单状态（用于超时取消） -->
+    <update id="batchUpdateOrderStatus">
+        UPDATE osh_group_order
+        SET status = #{status},
+            updated_time = #{updateTime}
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          AND status = 'pending'
+    </update>
+
+    <!-- 查询所有进行中的拼团活动（status=1） -->
+    <select id="selectAllActiveActivities" resultType="com.backstage.system.domain.servergroup.OshGroupActivity">
+        SELECT id, title, current_num, group_min_num, group_max_num, status,
+               start_time, server_start_time, server_end_time
+        FROM osh_group_activity
+        WHERE status = 1 AND delete_flag = 0
+    </select>
+
+    <!-- 按订单显式来源统计系统活动已支付用户，避免 initiated/system 数值 ID 碰撞串数。 -->
+    <select id="countGroupWorkByActivityId" resultType="int">
+        SELECT COUNT(DISTINCT user_id)
+        FROM osh_group_order
+        WHERE source_type = 'system'
+          AND group_activity_id = #{activityId}
+          AND status IN ('paid', 'success')
+          AND delete_flag = 0
+    </select>
+
+    <!-- 直接更新活动的 current_num（用于数据同步任务） -->
+    <update id="updateActivityCurrentNum">
+        UPDATE osh_group_activity
+        SET current_num = #{currentNum},
+            update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <!-- 原子递增活动 current_num（CAS 模式，防超卖） -->
+    <update id="atomicIncrementCurrentNum">
+        UPDATE osh_group_activity
+        SET current_num = current_num + 1,
+            update_time = NOW()
+        WHERE id = #{id}
+          AND current_num &lt; group_max_num
+    </update>
+
+    <!-- 原子递减活动 current_num（用于订单取消时释放名额） -->
+    <update id="decrementActivityCurrentNum">
+        UPDATE osh_group_activity
+        SET current_num = GREATEST(current_num - 1, 0),
+            update_time = NOW()
+        WHERE id = #{id}
+          AND current_num &gt; 0
+    </update>
+
+    <!-- 查询即将到期的参团记录（用于到期前提醒，只查已成团的成员） -->
+    <select id="selectExpiringWorks" resultType="com.backstage.system.domain.servergroup.OshGroupWork">
+        SELECT gw.id, gw.group_activity_id, gw.user_id, gw.server_expire_time
+        FROM osh_group_work gw
+        WHERE gw.group_status = 2
+          AND gw.server_expire_time IS NOT NULL
+          AND gw.server_expire_time &gt;= #{startExpire}
+          AND gw.server_expire_time &lt;= #{endExpire}
+    </select>
+
+    <!-- 查询长期未成团且已过期的组团活动 -->
+    <select id="selectExpiredUnformedActivities" resultType="com.backstage.system.domain.servergroup.OshGroupActivity">
+        SELECT id, title, current_num, group_min_num, group_max_num, status, start_time
+        FROM osh_group_activity
+        WHERE status = 1
+          AND create_time &lt; #{expireBefore}
+          AND current_num &lt; group_min_num
+    </select>
+
+    <!-- 校验用户是否为某个拼团的成员（安全校验用） -->
+    <select id="isUserInGroup" resultType="int">
+        SELECT COUNT(*) FROM (
+            SELECT user_id FROM osh_group_work
+            WHERE group_activity_id = #{activityId} AND user_id = #{userId}
+            UNION ALL
+            SELECT user_id FROM osh_group_user_initiated
+            WHERE id = #{activityId} AND user_id = #{userId} AND delete_flag = 0
+        ) AS combined
+    </select>
+
+    <!-- 校验用户是否为指定订单的所有者 -->
+    <select id="checkOrderOwnership" resultType="int">
+        SELECT COUNT(*)
+        FROM osh_group_order
+        WHERE order_no = #{orderNo}
+          AND user_id = #{userId}
+          AND delete_flag = 0
+    </select>
+
+    <!-- 统计指定状态的订单数量 -->
+    <select id="countOrdersByStatus" resultType="int">
+        SELECT COUNT(*)
+        FROM osh_group_order
+        WHERE status = #{status}
+          AND delete_flag = 0
+    </select>
+
+    <!-- 统计拼团活动总数 -->
+    <select id="countActivities" resultType="int">
+        SELECT COUNT(*)
+        FROM osh_group_activity
+        WHERE delete_flag = 0
+        <if test="status != null">
+            AND status = #{status}
+        </if>
+    </select>
+
+    <!-- 更新拼团活动状态（通用方法） -->
+    <update id="updateGroupActivityStatus">
+        UPDATE osh_group_activity
+        SET status = #{status},
+            update_time = #{updateTime}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 批量更新指定活动下所有已支付的 work 为指定状态（如2=已成团），并设置服务器时间 -->
+    <update id="batchUpdateWorkStatusByActivity">
+        UPDATE osh_group_work
+        SET group_status = #{groupStatus},
+            server_start_time = #{serverStartTime},
+            server_expire_time = #{serverExpireTime}
+        WHERE group_activity_id = #{activityId}
+          AND group_status = 1
+    </update>
 
 </mapper>

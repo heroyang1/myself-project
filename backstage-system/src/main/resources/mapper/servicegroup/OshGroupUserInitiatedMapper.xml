@@ -8,6 +8,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <resultMap type="com.backstage.system.domain.servergroup.OshGroupUserInitiated" id="OshGroupUserInitiatedResult">
         <id     property="id"              column="id"/>
         <result property="userId"          column="user_id"/>
+        <result property="activityId"      column="activity_id"/>
         <result property="orderId"         column="order_id"/>
         <result property="minNum"          column="min_num"/>
         <result property="maxNum"          column="max_num"/>
@@ -93,15 +94,19 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="type != null and type != ''">
                 AND gui.user_id IS NOT NULL
             </if>
-            <if test="status != null">
-                AND (
-                    CASE 
-                        WHEN gui.group_status = 0 THEN 1
-                        WHEN gui.group_status = 1 THEN 2
-                        WHEN gui.group_status = 2 THEN 3
-                        ELSE 1
-                    END
-                ) = #{status}
+            <!-- 状态映射：前端 status → 数据库 group_status
+                 status=1(进行中) → group_status=0(招募中)
+                 status=2(拼团成功) → group_status=1(已成团)
+                 status=3(已结束) → group_status=2(已取消/过期)
+                 使用直接等值比较，避免 CASE WHEN 导致索引失效 -->
+            <if test="status != null and status == 1">
+                AND gui.group_status = 0
+            </if>
+            <if test="status != null and status == 2">
+                AND gui.group_status = 1
+            </if>
+            <if test="status != null and status == 3">
+                AND gui.group_status = 2
             </if>
         </where>
         ORDER BY gui.initiate_time DESC
@@ -147,6 +152,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectById" parameterType="java.lang.Long" resultMap="OshGroupUserInitiatedResult">
         <include refid="selectUserInitiatedVo"/>
         WHERE id = #{id} AND delete_flag = 0
+    </select>
+
+    <select id="selectByIdForUpdate" parameterType="java.lang.Long" resultMap="OshGroupUserInitiatedResult">
+        <include refid="selectUserInitiatedVo"/>
+        WHERE id = #{id} AND delete_flag = 0
+        FOR UPDATE
     </select>
 
     <!-- 查询用户发起的拼团列表 -->
@@ -227,10 +238,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </select>
 
     <!-- 查询拼团活动详情（用于校验） -->
-    <select id="selectActivityDetail" resultType="java.util.HashMap">
+    <select id="selectActivityDetail" resultMap="OshGroupUserInitiatedResult">
         SELECT 
             id,
-            user_id AS leaderUserId,
+            user_id,
             min_num,
             max_num,
             current_num,
@@ -242,5 +253,56 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         WHERE id = #{activityId}
           AND delete_flag = 0
     </select>
+
+    <!-- ==================== 定时任务相关 SQL ==================== -->
+
+    <!-- 查询已过招募期且状态仍为招募中的用户发起拼团记录 -->
+    <select id="selectExpiredInitiatedGroups" resultMap="OshGroupUserInitiatedResult">
+        <include refid="selectUserInitiatedVo"/>
+        WHERE group_status = 0
+          AND delete_flag = 0
+          AND expire_time IS NOT NULL
+          AND expire_time &lt; #{expireBefore}
+    </select>
+
+    <!-- 批量更新用户发起拼团记录的状态 -->
+    <update id="batchUpdateGroupStatus">
+        UPDATE osh_group_user_initiated
+        SET group_status = #{groupStatus},
+            update_time = NOW()
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          AND group_status = 0
+    </update>
+
+    <!-- 统计进行中的用户发起拼团数量 -->
+    <select id="countActiveInitiatedGroups" resultType="int">
+        SELECT COUNT(*)
+        FROM osh_group_user_initiated
+        WHERE group_status = 0
+          AND delete_flag = 0
+    </select>
+
+    <!-- 原子递增用户发起拼团的 current_num（CAS 模式，防超卖） -->
+    <update id="incrementCurrentNumAtomic">
+        UPDATE osh_group_user_initiated
+        SET current_num = current_num + 1,
+            update_time = NOW()
+        WHERE id = #{id}
+          AND current_num &lt; max_num
+          AND delete_flag = 0
+    </update>
+
+    <!-- 批量更新用户发起拼团下所有已支付的参团记录的状态和服务器时间 -->
+    <update id="batchUpdateWorkStatusByInitiatedId">
+        UPDATE osh_group_work
+        SET group_status = #{groupStatus},
+            server_start_time = #{serverStartTime},
+            server_expire_time = #{serverExpireTime}
+        WHERE group_activity_id = #{initiatedId}
+          AND group_status = 1
+    </update>
 
 </mapper>

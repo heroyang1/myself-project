@@ -1,16 +1,10 @@
 package com.backstage.system.domain.homepage.vo;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 
 import java.util.Date;
 
-/**
- * 首页热门用户反馈 VO
- *
- * @author jayTatum
- */
 @ApiModel(description = "首页热门用户反馈")
 public class HotFeedbackVO {
 
@@ -26,16 +20,16 @@ public class HotFeedbackVO {
     @ApiModelProperty("分类名称")
     private String category;
 
-    @ApiModelProperty("分类图标 emoji")
+    @ApiModelProperty("分类图标")
     private String categoryIcon;
 
-    @ApiModelProperty("状态：PENDING/PROCESSING/RESOLVED/CLOSED/PENDING_USER_CONFIRM")
+    @ApiModelProperty("状态")
     private String status;
 
     @ApiModelProperty("提交用户名")
     private String username;
 
-    @ApiModelProperty("第一个标签名称")
+    @ApiModelProperty("标签名")
     private String tagName;
 
     @ApiModelProperty("点赞数")
@@ -53,14 +47,11 @@ public class HotFeedbackVO {
     @ApiModelProperty("热度分")
     private Integer hotScore;
 
-    @JsonFormat(pattern = "yyyy/M/d", timezone = "GMT+8")
     @ApiModelProperty("创建时间")
     private Date createTime;
 
-    @ApiModelProperty("详情页跳转路径")
+    @ApiModelProperty("详情地址")
     private String detailUrl;
-
-    // ========== getter / setter ==========
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }

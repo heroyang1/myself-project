@@ -1,9 +1,11 @@
 package com.backstage.system.service.openproject;
 
 import com.backstage.system.domain.openproject.OshOpenProjectTag;
-import com.backstage.system.domain.openproject.dto.OpenProjectAuditDTO;
+import com.backstage.system.domain.openproject.OshOpenProjectTechComponent;
+import com.backstage.system.domain.openproject.dto.OpenProjectEditDTO;
+import com.backstage.system.domain.openproject.dto.OpenProjectLeaderTransferDTO;
 import com.backstage.system.domain.openproject.dto.OpenProjectQueryDTO;
-import com.backstage.system.domain.openproject.dto.OpenProjectSubmitDTO;
+import com.backstage.system.domain.openproject.dto.OpenProjectTechComponentLibraryDTO;
 import com.backstage.system.domain.openproject.vo.OpenProjectVO;
 
 import java.util.List;
@@ -11,24 +13,25 @@ import java.util.Map;
 
 public interface IOshOpenProjectService {
 
-    /** 分页查询已通过的开源项目列表 */
     Map<String, Object> listPage(OpenProjectQueryDTO queryDTO);
 
-    /** 查询待审核列表 */
-    Map<String, Object> listPending(OpenProjectQueryDTO queryDTO);
+    void updateProject(OpenProjectEditDTO dto);
 
-    /** 用户提交开源项目 */
-    void submit(OpenProjectSubmitDTO dto);
+    void updateProjectCore(OpenProjectEditDTO dto);
 
-    /** 审核开源项目 */
-    void audit(OpenProjectAuditDTO dto);
+    void updateProjectCollaboration(OpenProjectEditDTO dto);
 
-    /** 增加点击次数 */
+    void transferLeader(OpenProjectLeaderTransferDTO dto);
+
     void incrementClickCount(Long id);
 
-    /** 查询项目详情 */
     OpenProjectVO getDetail(Long id);
 
-    /** 查询所有标签 */
     List<OshOpenProjectTag> listTags();
+
+    List<OshOpenProjectTechComponent> listTechComponentLibrary(String keyword);
+
+    OshOpenProjectTechComponent saveTechComponentLibrary(OpenProjectTechComponentLibraryDTO dto);
+
+    void deleteTechComponentLibrary(Long id);
 }

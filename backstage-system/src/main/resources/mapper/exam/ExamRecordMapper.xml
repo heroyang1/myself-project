@@ -73,6 +73,28 @@
         LIMIT 1
     </select>
 
+
+
+    <select id="selectRecordByIdAndUserId" resultMap="OshUserExamRecordResult">
+        SELECT * FROM osh_user_exam_record
+        WHERE id = #{id}
+          AND user_id = #{userId}
+          AND delete_flag = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectUserTestDetail" resultMap="UserExamRecordResult">
+        SELECT
+        ut.id, ut.answer_status, ut.read_status, ut.score, ut.create_time,
+        e.id as exam_id, e.title, e.total_score, e.pass_score, e.expire, e.question_count
+        FROM osh_user_exam_record ut
+        LEFT JOIN osh_examination e ON ut.exam_id = e.id
+        WHERE ut.id = #{id}
+          AND ut.user_id = #{userId}
+          AND ut.delete_flag = 0
+        LIMIT 1
+    </select>
+
     <select id="selectUserTestList" resultMap="UserExamRecordResult">
         SELECT
         ut.id, ut.answer_status, ut.read_status, ut.score, ut.create_time,

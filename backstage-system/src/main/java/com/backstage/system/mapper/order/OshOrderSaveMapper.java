@@ -51,19 +51,4 @@ public interface OshOrderSaveMapper
      */
     public int updateOshOrderSave(OshOrderSave oshOrderSave);
 
-    /**
-     * 删除创建订单
-     * 
-     * @param id 创建订单主键
-     * @return 结果
-     */
-    public int deleteOshOrderSaveById(Long id);
-
-    /**
-     * 批量删除创建订单
-     * 
-     * @param ids 需要删除的数据主键集合
-     * @return 结果
-     */
-    public int deleteOshOrderSaveByIds(Long[] ids);
 }

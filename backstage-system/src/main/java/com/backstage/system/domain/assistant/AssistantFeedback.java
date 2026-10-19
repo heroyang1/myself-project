@@ -2,7 +2,6 @@ package com.backstage.system.domain.assistant;
 
 import com.backstage.common.core.domain.entity.OSHBaseEntity;
 import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
@@ -46,6 +45,11 @@ public class AssistantFeedback extends OSHBaseEntity {
      * 反馈详细内容
      */
     private String content;
+
+    /**
+     * 反馈图片JSON数组（最多9张）
+     */
+    private String images;
 
     /**
      * 反馈状态（PENDING、PROCESSING、RESOLVED、CLOSED）
@@ -100,19 +104,16 @@ public class AssistantFeedback extends OSHBaseEntity {
     /**
      * 处理人名称
      */
-    @TableField(exist = false)
     private String handlerName;
 
     /**
      * 最近处理时间
      */
-    @TableField(exist = false)
     private LocalDateTime handledTime;
 
     /**
      * 关闭原因
      */
-    @TableField(exist = false)
     private String closeReason;
 
     /**
@@ -168,6 +169,14 @@ public class AssistantFeedback extends OSHBaseEntity {
 
     public void setContent(String content) {
         this.content = content;
+    }
+
+    public String getImages() {
+        return images;
+    }
+
+    public void setImages(String images) {
+        this.images = images;
     }
 
     public String getStatus() {

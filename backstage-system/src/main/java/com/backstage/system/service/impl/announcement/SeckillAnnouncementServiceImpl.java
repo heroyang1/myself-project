@@ -8,7 +8,6 @@ import com.backstage.system.mapper.announcement.OshAnnouncementMapper;
 import com.backstage.system.mapper.seckill.OshSeckillActivityItemMapper;
 import com.backstage.system.mapper.seckill.OshSeckillActivityMapper;
 import com.backstage.system.mapper.seckill.OshSeckillOrderMapper;
-import com.backstage.system.mapper.user.OshUserMapper;
 import com.backstage.system.service.announcement.ISeckillAnnouncementService;
 import com.backstage.system.service.websocket.WebSocketNotifyService;
 import org.slf4j.Logger;
@@ -23,12 +22,12 @@ import java.util.List;
  *
  * <p>表字段说明（osh_announcement 新结构）：</p>
  * <ul>
- *   <li>channel=1  系统动态（公告栏，对应原 biz_type='seckill_notice'）</li>
- *   <li>channel=2  业务动态（动态栏，对应原 biz_type='seckill_dynamic'）</li>
- *   <li>module='seckill'  归属模块（对应原 scene='seckill'）</li>
- *   <li>source='system'   来源（对应原 trigger_type='auto'）</li>
- *   <li>color             图标颜色（对应原 icon_color）</li>
- *   <li>status=4          已发布（对应原 status=1 启用）</li>
+ *   <li>channel=1  系统动态（公告栏）</li>
+ *   <li>channel=2  业务动态（动态栏）</li>
+ *   <li>module='seckill'  归属模块</li>
+ *   <li>source='system'   来源</li>
+ *   <li>color             图标颜色</li>
+ *   <li>status=4          已发布</li>
  * </ul>
  *
  * @author backstage
@@ -46,11 +45,9 @@ public class SeckillAnnouncementServiceImpl implements ISeckillAnnouncementServi
 
     /** 公告栏图标与颜色 */
     private static final String NOTICE_ICON  = "🔥";
-    private static final String NOTICE_COLOR = "#ef4444";
 
     /** 动态栏图标与颜色 */
     private static final String DYNAMIC_ICON  = "💳";
-    private static final String DYNAMIC_COLOR = "#10b981";
 
     /** 秒杀资源类型 */
     private static final String RESOURCE_TYPE_SECKILL = "seckill";
@@ -66,9 +63,6 @@ public class SeckillAnnouncementServiceImpl implements ISeckillAnnouncementServi
 
     @Autowired
     private OshSeckillOrderMapper orderMapper;
-
-    @Autowired
-    private OshUserMapper userMapper;
 
     @Autowired
     private WebSocketNotifyService webSocketNotifyService;
@@ -118,7 +112,7 @@ public class SeckillAnnouncementServiceImpl implements ISeckillAnnouncementServi
                 int sort = item.getSort() != null ? item.getSort() : 0;
 
                 announcementMapper.insertSeckillAnnouncement(
-                        title, link, NOTICE_ICON, NOTICE_COLOR,
+                        title, link, NOTICE_ICON,
                         RESOURCE_TYPE_SECKILL, activity.getId(), sort, CHANNEL_NOTICE);
                 insertCount++;
             }
@@ -169,7 +163,7 @@ public class SeckillAnnouncementServiceImpl implements ISeckillAnnouncementServi
             }
 
             announcementMapper.insertSeckillAnnouncement(
-                    title, "", DYNAMIC_ICON, DYNAMIC_COLOR,
+                    title, "", DYNAMIC_ICON,
                     RESOURCE_TYPE_SECKILL, 0L, 0, CHANNEL_DYNAMIC);
             insertCount++;
         }
@@ -187,7 +181,7 @@ public class SeckillAnnouncementServiceImpl implements ISeckillAnnouncementServi
         String title = buildDynamicTitle(username, goodsTitle);
         try {
             announcementMapper.insertSeckillAnnouncement(
-                    title, "", DYNAMIC_ICON, DYNAMIC_COLOR,
+                    title, "", DYNAMIC_ICON,
                     RESOURCE_TYPE_SECKILL, goodsId != null ? goodsId : 0L, 0, CHANNEL_DYNAMIC);
             logger.info("【秒杀动态写入】成功，title={}", title);
 

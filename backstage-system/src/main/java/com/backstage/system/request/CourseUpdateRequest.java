@@ -1,5 +1,6 @@
 package com.backstage.system.request;
 
+import com.backstage.common.annotation.OshResourceId;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.commons.lang3.StringUtils;
 
@@ -17,6 +18,7 @@ import java.util.List;
 public class CourseUpdateRequest {
 
     @NotNull(message = "课程id不能为空")
+    @OshResourceId
     private Long id;
 
     private String title;
@@ -49,6 +51,9 @@ public class CourseUpdateRequest {
     private String resourceType;
 
     private Integer level;
+
+    /** 课程难度：1-新手入门 2-基础巩固 3-能力提升 */
+    private Integer difficulty;
 
     private Integer servicePeriod;
 
@@ -173,6 +178,14 @@ public class CourseUpdateRequest {
 
     public void setLevel(Integer level) {
         this.level = level;
+    }
+
+    public Integer getDifficulty() {
+        return difficulty;
+    }
+
+    public void setDifficulty(Integer difficulty) {
+        this.difficulty = difficulty;
     }
 
     public List<String> getTags() {

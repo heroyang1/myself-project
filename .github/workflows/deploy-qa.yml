@@ -1,0 +1,178 @@
+name: Deploy Backend Release
+
+on:
+  push:
+    branches:
+      - 'qa/**'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend-release
+  cancel-in-progress: false
+
+env:
+  JAVA_VERSION: '17'
+  # 25 测试机：push 到 qa/** 自动部署（仅最新 qa 分支，如 qa/20260708）
+  DEPLOY_HOST: ${{ vars.TEST25_DEPLOY_HOST }}
+  DEPLOY_USER: ${{ vars.TEST25_DEPLOY_USER || 'root' }}
+  DEPLOY_PORT: ${{ vars.TEST25_DEPLOY_PORT }}
+  BACKEND_DEPLOY_DIR: ${{ vars.TEST25_BACKEND_DEPLOY_DIR || '/opt/osh/app/osh/osh-backend' }}
+  BACKEND_JAR_NAME: ${{ vars.TEST25_BACKEND_JAR_NAME || 'backstage-admin.jar' }}
+  DOCKER_COMPOSE_DIR: ${{ vars.TEST25_DOCKER_COMPOSE_DIR || '/opt/osh-deploy-tools/bundle' }}
+  DOCKER_COMPOSE_FILE: ${{ vars.TEST25_DOCKER_COMPOSE_FILE || 'docker-compose.osh.yml' }}
+  DOCKER_COMPOSE_ENV: ${{ vars.TEST25_DOCKER_COMPOSE_ENV || '/opt/osh/001-docker-compose/osh/osh-stack.env' }}
+  DOCKER_COMPOSE_PROJECT: ${{ vars.TEST25_DOCKER_COMPOSE_PROJECT || 'osh' }}
+  BACKEND_SERVICE_NAME: ${{ vars.TEST25_BACKEND_SERVICE_NAME || 'osh-backend' }}
+  NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL || vars.NOTIFY_EMAIL || '1402272093@qq.com' }}
+  MAIL_USERNAME: ${{ secrets.MAIL_USERNAME || vars.MAIL_USERNAME || '1402272093@qq.com' }}
+  MAIL_SERVER: ${{ vars.MAIL_SERVER || 'smtp.qq.com' }}
+  MAIL_PORT: ${{ vars.MAIL_PORT || '465' }}
+
+jobs:
+  deploy:
+    name: Build and deploy backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Detect latest qa branch
+        id: latest_qa
+        run: |
+          git fetch --prune --prune-tags origin '+refs/heads/qa/*:refs/remotes/origin/qa/*'
+          latest_branch="$(git branch -r --list 'origin/qa/*' | sed 's#^[[:space:]]*origin/##' | sort -V | tail -n 1)"
+          echo "latest_branch=$latest_branch" >> "$GITHUB_OUTPUT"
+          echo "Latest qa branch: $latest_branch"
+
+      - name: Skip non-latest qa branch
+        if: github.event_name == 'push' && github.ref_name != steps.latest_qa.outputs.latest_branch
+        run: |
+          echo "Current branch ${{ github.ref_name }} is not the latest qa branch."
+          echo "Latest qa branch is ${{ steps.latest_qa.outputs.latest_branch }}."
+          exit 0
+
+      - name: Setup JDK
+        if: github.event_name != 'push' || github.ref_name == steps.latest_qa.outputs.latest_branch
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Build backend jar
+        if: github.event_name != 'push' || github.ref_name == steps.latest_qa.outputs.latest_branch
+        run: mvn clean install -DskipTests -pl '!backstage-flink'
+
+      - name: Validate jar output
+        if: github.event_name != 'push' || github.ref_name == steps.latest_qa.outputs.latest_branch
+        run: |
+          test -f backstage-admin/target/backstage-admin.jar
+          unzip -t backstage-admin/target/backstage-admin.jar >/tmp/backend-jar-check.log
+          sha256sum backstage-admin/target/backstage-admin.jar | tee /tmp/backend-jar.sha256
+
+      - name: Setup SSH agent
+        if: github.event_name != 'push' || github.ref_name == steps.latest_qa.outputs.latest_branch
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        if: github.event_name != 'push' || github.ref_name == steps.latest_qa.outputs.latest_branch
+        run: |
+          mkdir -p ~/.ssh
+          for i in 1 2 3; do
+            ssh-keyscan -p "$DEPLOY_PORT" -T 15 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null && break
+            echo "ssh-keyscan attempt $i failed, retrying..."
+            sleep 3
+          done
+          test -s ~/.ssh/known_hosts || { echo "ERROR: known_hosts is empty"; exit 1; }
+
+      - name: Stop backend before replacing jar
+        if: github.event_name != 'push' || github.ref_name == steps.latest_qa.outputs.latest_branch
+        run: |
+          ssh -o ConnectTimeout=30 \
+            -p "$DEPLOY_PORT" \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "mkdir -p '$BACKEND_DEPLOY_DIR' && cd '$DOCKER_COMPOSE_DIR' && docker compose -p '$DOCKER_COMPOSE_PROJECT' --env-file '$DOCKER_COMPOSE_ENV' -f '$DOCKER_COMPOSE_FILE' stop '$BACKEND_SERVICE_NAME' || true"
+
+      - name: Upload backend jar safely
+        if: github.event_name != 'push' || github.ref_name == steps.latest_qa.outputs.latest_branch
+        run: |
+          rsync -az --inplace --progress \
+            -e "ssh -o ConnectTimeout=30 -p $DEPLOY_PORT" \
+            backstage-admin/target/backstage-admin.jar \
+            "$DEPLOY_USER@$DEPLOY_HOST:$BACKEND_DEPLOY_DIR/$BACKEND_JAR_NAME"
+
+      - name: Verify remote jar integrity
+        if: github.event_name != 'push' || github.ref_name == steps.latest_qa.outputs.latest_branch
+        run: |
+          local_sha="$(sha256sum backstage-admin/target/backstage-admin.jar | cut -d ' ' -f 1)"
+          remote_sha="$(ssh -o ConnectTimeout=30 -p "$DEPLOY_PORT" \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "sha256sum '$BACKEND_DEPLOY_DIR/$BACKEND_JAR_NAME' | cut -d ' ' -f 1")"
+          echo "local_sha=$local_sha"
+          echo "remote_sha=$remote_sha"
+          test "$local_sha" = "$remote_sha"
+
+      - name: Restart backend service
+        if: github.event_name != 'push' || github.ref_name == steps.latest_qa.outputs.latest_branch
+        run: |
+          ssh -o ConnectTimeout=30 -p "$DEPLOY_PORT" \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd '$DOCKER_COMPOSE_DIR' && docker compose -p '$DOCKER_COMPOSE_PROJECT' --env-file '$DOCKER_COMPOSE_ENV' -f '$DOCKER_COMPOSE_FILE' up -d '$BACKEND_SERVICE_NAME' && sleep 20 && docker compose -p '$DOCKER_COMPOSE_PROJECT' --env-file '$DOCKER_COMPOSE_ENV' -f '$DOCKER_COMPOSE_FILE' ps '$BACKEND_SERVICE_NAME'"
+
+      - name: Show backend logs
+        if: always() && (github.event_name != 'push' || github.ref_name == steps.latest_qa.outputs.latest_branch)
+        run: |
+          ssh -o ConnectTimeout=30 -p "$DEPLOY_PORT" \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "docker logs --tail 80 '$BACKEND_SERVICE_NAME' 2>&1 || true" || true
+
+      - name: Notify on success
+        if: success() && (github.event_name != 'push' || github.ref_name == steps.latest_qa.outputs.latest_branch)
+        continue-on-error: true
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ env.MAIL_SERVER }}
+          server_port: ${{ env.MAIL_PORT }}
+          secure: true
+          username: ${{ env.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "✅ 后端部署成功 - ${{ github.repository }}"
+          to: ${{ env.NOTIFY_EMAIL }}
+          from: GitHub Actions <${{ env.MAIL_USERNAME }}>
+          body: |
+            后端部署成功！
+
+            仓库：${{ github.repository }}
+            分支：${{ github.ref_name }}
+            提交：${{ github.sha }}
+            提交信息：${{ github.event.head_commit.message }}
+            触发人：${{ github.actor }}
+            时间：${{ github.event.head_commit.timestamp }}
+
+            访问地址：http://43.242.200.25:8081/
+
+      - name: Notify on failure
+        if: failure() && (github.event_name != 'push' || github.ref_name == steps.latest_qa.outputs.latest_branch)
+        continue-on-error: true
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ env.MAIL_SERVER }}
+          server_port: ${{ env.MAIL_PORT }}
+          secure: true
+          username: ${{ env.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "❌ 后端部署失败 - ${{ github.repository }}"
+          to: ${{ env.NOTIFY_EMAIL }}
+          from: GitHub Actions <${{ env.MAIL_USERNAME }}>
+          body: |
+            后端部署失败！请检查 Actions 日志。
+
+            仓库：${{ github.repository }}
+            分支：${{ github.ref_name }}
+            提交：${{ github.sha }}
+            提交信息：${{ github.event.head_commit.message }}
+            触发人：${{ github.actor }}
+
+            查看详情：https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}

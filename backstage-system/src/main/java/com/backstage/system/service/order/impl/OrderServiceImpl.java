@@ -1,15 +1,12 @@
 package com.backstage.system.service.order.impl;
 
-import com.alibaba.fastjson2.JSON;
 import com.backstage.common.config.PayConfig;
 import com.backstage.common.constant.OshUserConstants;
 import com.backstage.common.core.redis.RedisCache;
-import com.backstage.common.constant.KafkaConstants;
 import com.backstage.common.exception.ServiceException;
 import com.backstage.common.utils.StringUtils;
 import com.backstage.common.utils.ip.IpUtils;
-import com.backstage.common.utils.kafka.KafkaMessageUtil;
-import com.backstage.system.domain.message.order.PaySuccessMessage;
+import com.backstage.system.domain.payment.VerifiedPaymentNotification;
 import com.backstage.system.domain.user.OshUserAsset;
 import com.backstage.system.domain.user.OshUserAssetRecord;
 import com.backstage.system.domain.vo.pay.OrderCheckoutReqVO;
@@ -23,23 +20,25 @@ import com.backstage.system.domain.order.enums.NotifyProcessStatusEnum;
 import com.backstage.system.domain.order.enums.OrderStatusEnum;
 import com.backstage.system.domain.order.enums.PayChannelEnum;
 import com.backstage.system.domain.order.enums.PaymentStatusEnum;
+import com.backstage.system.domain.order.enums.PaymentProviderEnum;
+import com.backstage.system.domain.order.enums.PlatformPayQueryResult;
 import com.backstage.system.domain.order.enums.ProductTypeEnum;
 import com.backstage.system.domain.vo.order.PayResponse;
+import com.backstage.system.enums.behavior.ContributionResourceType;
 import com.backstage.system.mapper.order.OshOrderMapper;
 import com.backstage.system.mapper.order.OshPaymentMapper;
 import com.backstage.system.mapper.order.OshPaymentNotifyLogMapper;
 import com.backstage.system.mapper.user.OshUserAssetMapper;
 import com.backstage.system.mapper.user.OshUserAssetRecordMapper;
+import com.backstage.system.service.behavior.ContributionService;
 import com.backstage.system.service.order.*;
 import com.backstage.system.service.book.IBookService;
 import com.backstage.system.service.order.OrderNoGenerator;
 import com.backstage.system.service.order.PayService;
-import com.backstage.system.service.order.OrderPaidHandlerRegistry;
+import com.backstage.system.service.order.OrderCancelHandlerRegistry;
 import com.backstage.system.service.order.OrderService;
-import com.backstage.system.service.tool.ToolPurchaseService;
 import com.backstage.system.utils.SignUtil;
 import com.backstage.system.utils.UserContextUtil;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -64,22 +63,26 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * 统一订单服务实现，负责订单创建、支付查询和支付回调处理。
  */
 @Service
-public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> implements OrderService {
+public class OrderServiceImpl implements OrderService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderServiceImpl.class);
 
     private static final int PAY_CREATE_SUCCESS_CODE = 1;
+    private static final int PAY_CREATE_UNKNOWN_CODE = -1;
     private static final int SIGN_INVALID = 0;
     private static final int SIGN_VALID = 1;
 
     private static final int ORDER_PAID = OrderStatusEnum.PAID.getCode();
     private static final int PAYMENT_PENDING = PaymentStatusEnum.PENDING.getCode();
     private static final int PAYMENT_SUCCESS = PaymentStatusEnum.SUCCESS.getCode();
+    private static final int PAYMENT_FAILED = PaymentStatusEnum.FAILED.getCode();
+    private static final int PAYMENT_CLOSED = PaymentStatusEnum.CLOSED.getCode();
     private static final int CHANNEL_FREE = PayChannelEnum.FREE.getCode();
     private static final String TRADE_SUCCESS = "TRADE_SUCCESS";
     private static final String PAY_CREATE_FAILED_MESSAGE = "发起支付失败";
@@ -115,10 +118,13 @@ public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> impl
     private Validator validator;
 
     @Resource
-    private OrderPaidHandlerRegistry paidHandlerRegistry;
+    private OrderEntitlementTaskService entitlementTaskService;
 
     @Resource
-    private ToolPurchaseService toolPurchaseService;
+    private PaymentSuccessEventPublisher paymentSuccessEventPublisher;
+
+    @Resource
+    private OrderCancelHandlerRegistry cancelHandlerRegistry;
 
     @Resource
     private OshUserAssetMapper oshUserAssetMapper;
@@ -128,6 +134,9 @@ public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> impl
 
     @Resource
     private RedisCache redisCache;
+
+    @Resource
+    private ContributionService contributionService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -169,25 +178,79 @@ public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> impl
         if (isFreeAmount(amount)) {
             LocalDateTime now = LocalDateTime.now();
             completeFreePayment(orderNo, paymentNo, now);
-            handleOrderProductPaid(orderNo);
             return freeCheckoutResult(orderNo, paymentNo, amount, pointDeduction);
         }
 
         // 请求支付渠道创建付款信息
         PayResponse payResponse = requestPayment(orderNo, paymentNo, reqVO.getProductName(), amount, clientIp, channelEnum.getValue());
-        log.info("【支付】调用易支付平台生成订单及二维码，result：{}",payResponse);
+        log.info("支付平台下单完成, provider={}, paymentNo={}, code={}",
+                payment.getProvider(), paymentNo, payResponse == null ? null : payResponse.getCode());
         // 保存支付渠道响应
         savePayResponse(paymentNo, payResponse);
 
         // 支付渠道创建失败时关闭本地订单
         if (!isPayCreateSuccess(payResponse)) {
-            failPaymentAndCloseOrder(paymentNo, orderNo, payResponse);
+            if (payResponse.getCode() != PAY_CREATE_UNKNOWN_CODE) {
+                failPaymentAndCloseOrder(paymentNo, orderNo, payResponse);
+            }
 
             throw new ServiceException(StringUtils.defaultIfBlank(payResponse.getMsg(), PAY_CREATE_FAILED_MESSAGE));
         }
 
         // 组装支付参数返回前端
         return packageOrderCheckoutResult(orderNo, paymentNo, amount, channelEnum.getValue(), payResponse, payment, pointDeduction);
+    }
+
+    @Override
+    public PayResponse createPaymentForExistingOrder(String orderNo,
+                                                     String paymentNo,
+                                                     String clientIp,
+                                                     String channel) {
+        OshOrder order = orderMapper.selectByOrderNo(orderNo);
+        OshPayment payment = paymentMapper.selectByPaymentNo(paymentNo);
+        if (order == null || payment == null || !Objects.equals(payment.getOrderNo(), orderNo)) {
+            throw new ServiceException("统一订单或支付流水不存在");
+        }
+        if (!Objects.equals(order.getStatus(), OrderStatusEnum.PENDING.getCode())
+                || !Objects.equals(payment.getStatus(), PAYMENT_PENDING)) {
+            throw new ServiceException("当前订单状态不允许发起支付");
+        }
+        if (payment.getExpireTime() != null && !payment.getExpireTime().isAfter(LocalDateTime.now())) {
+            throw new ServiceException("支付订单已超时，请重新发起");
+        }
+        if (StringUtils.isNotBlank(payment.getQrcode()) || StringUtils.isNotBlank(payment.getPayUrl())) {
+            PayResponse cached = new PayResponse();
+            cached.setCode(PAY_CREATE_SUCCESS_CODE);
+            cached.setMsg("复用原支付二维码");
+            cached.setOutTradeNo(paymentNo);
+            cached.setTradeNo(payment.getPlatformTradeNo());
+            cached.setQrcode(payment.getQrcode());
+            cached.setPayUrl(payment.getPayUrl());
+            return cached;
+        }
+
+        PayResponse response;
+        try {
+            response = payService.createPay(
+                    payment.getProvider(),
+                    paymentNo,
+                    StringUtils.defaultIfBlank(order.getProductName(), "OSH商品"),
+                    money(payment.getAmount()).toPlainString(),
+                    clientIp,
+                    resolvePaymentChannel(channel).getValue()
+            );
+        } catch (RuntimeException e) {
+            log.warn("已有订单发起支付异常, orderNo={}, paymentNo={}", orderNo, paymentNo, e);
+            response = failedPayResponse();
+        }
+        if (response == null) {
+            response = failedPayResponse();
+        }
+        savePayResponse(paymentNo, response);
+        if (!isPayCreateSuccess(response) && response.getCode() != PAY_CREATE_UNKNOWN_CODE) {
+            failPaymentAndCloseOrder(paymentNo, orderNo, response);
+        }
+        return response;
     }
 
     /**
@@ -304,6 +367,9 @@ public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> impl
         if (!signValid) {
             return markNotifyFailed(notifyLog, SIGN_INVALID, "签名校验失败");
         }
+        if (!Objects.equals(payConfig.PID, params.get("pid"))) {
+            return markNotifyFailed(notifyLog, SIGN_VALID, "旧支付商户号不一致");
+        }
 
         // 过滤非支付成功状态
         if (!TRADE_SUCCESS.equals(params.get("trade_status"))) {
@@ -316,6 +382,9 @@ public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> impl
             return markNotifyFailed(notifyLog, SIGN_VALID, "支付流水不存在");
         }
         notifyLog.setOrderNo(payment.getOrderNo());
+        if (!PaymentProviderEnum.LEGACY.getValue().equals(payment.getProvider())) {
+            return markNotifyFailed(notifyLog, SIGN_VALID, "支付提供方不一致");
+        }
 
         // 校验支付金额
         if (!sameMoney(params.get("money"), payment.getAmount())) {
@@ -324,11 +393,95 @@ public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> impl
 
         // 处理重复回调
         if (Objects.nonNull(payment.getStatus()) && payment.getStatus() == PAYMENT_SUCCESS) {
+            handleOrderProductPaid(payment.getOrderNo());
             return markNotifyIgnored(notifyLog, "重复回调", true);
         }
 
         // 推进支付流水和订单状态
         return completePaidNotify(paymentNo, platformTradeNo, payment, notifyLog);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean handleVerifiedPayNotify(VerifiedPaymentNotification notification) {
+        if (notification == null || StringUtils.isBlank(notification.getPaymentNo())) {
+            return false;
+        }
+
+        OshPaymentNotifyLogDO notifyLog = buildVerifiedNotifyLog(notification);
+        notifyLogMapper.insertOshPaymentNotifyLog(notifyLog);
+
+        OshPayment payment = paymentMapper.selectByPaymentNo(notification.getPaymentNo());
+        if (Objects.isNull(payment)) {
+            return markNotifyFailed(notifyLog, SIGN_VALID, "支付流水不存在");
+        }
+        notifyLog.setOrderNo(payment.getOrderNo());
+
+        if (!Objects.equals(payment.getProvider(), notification.getProvider())) {
+            return markNotifyFailed(notifyLog, SIGN_VALID, "支付提供方不一致");
+        }
+        if (notification.getAmount() == null
+                || notification.getAmount().compareTo(money(payment.getAmount())) != 0) {
+            return markNotifyFailed(notifyLog, SIGN_VALID, "支付金额不一致");
+        }
+        if (Objects.equals(payment.getStatus(), PAYMENT_SUCCESS)) {
+            handleOrderProductPaid(payment.getOrderNo());
+            return markNotifyIgnored(notifyLog, "重复回调", true);
+        }
+
+        return completePaidNotify(
+                payment.getPaymentNo(),
+                notification.getPlatformTradeNo(),
+                payment,
+                notifyLog,
+                notification.getChannel()
+        );
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean handleVerifiedPayFailure(VerifiedPaymentNotification notification) {
+        if (notification == null || StringUtils.isBlank(notification.getPaymentNo())) {
+            return false;
+        }
+
+        OshPaymentNotifyLogDO notifyLog = buildVerifiedNotifyLog(notification);
+        notifyLogMapper.insertOshPaymentNotifyLog(notifyLog);
+
+        OshPayment payment = paymentMapper.selectByPaymentNo(notification.getPaymentNo());
+        if (payment == null) {
+            return markNotifyFailed(notifyLog, SIGN_VALID, "支付流水不存在");
+        }
+        notifyLog.setOrderNo(payment.getOrderNo());
+        if (!Objects.equals(payment.getProvider(), notification.getProvider())) {
+            return markNotifyFailed(notifyLog, SIGN_VALID, "支付提供方不一致");
+        }
+        if (notification.getAmount() != null
+                && notification.getAmount().compareTo(money(payment.getAmount())) != 0) {
+            return markNotifyFailed(notifyLog, SIGN_VALID, "支付金额不一致");
+        }
+        if (Objects.equals(payment.getStatus(), PAYMENT_SUCCESS)) {
+            handleOrderProductPaid(payment.getOrderNo());
+            return markNotifyIgnored(notifyLog, "支付已成功，忽略迟到的失败通知", true);
+        }
+        if (!Objects.equals(payment.getStatus(), PAYMENT_PENDING)) {
+            return markNotifyIgnored(notifyLog, "重复失败通知", true);
+        }
+
+        OshOrder order = orderMapper.selectByOrderNo(payment.getOrderNo());
+        int paymentUpdated = paymentMapper.updatePendingToFailed(
+                payment.getPaymentNo(), toJson(notification.getSafePayload()));
+        if (paymentUpdated != 1) {
+            return handlePaymentUpdateConflict(payment.getPaymentNo(), notifyLog);
+        }
+        int orderUpdated = orderMapper.updatePendingToClosed(payment.getOrderNo(), LocalDateTime.now());
+        if (orderUpdated != 1) {
+            throw new ServiceException("支付失败时订单状态并发冲突");
+        }
+        refundOrderPoints(payment.getOrderNo());
+        markNotifyLog(notifyLog, SIGN_VALID, NotifyProcessStatusEnum.SUCCESS.getCode(), null);
+        registerAfterCommit(() -> handleOrderProductCanceled(order, payment.getPaymentNo()));
+        return true;
     }
 
     /**
@@ -385,6 +538,9 @@ public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> impl
         payment.setOrderNo(orderNo);
         payment.setPaymentNo(paymentNo);
         payment.setChannel(isFreeAmount(amount) ? CHANNEL_FREE : channelCode);
+        payment.setProvider(isFreeAmount(amount)
+                ? PaymentProviderEnum.INTERNAL.getValue()
+                : payService.currentProvider());
         payment.setAmount(amount);
         payment.setStatus(PAYMENT_PENDING);
         payment.setRequestPayload(toJson(payRequestSnapshot(paymentNo, param, clientIp, channelCode, amount)));
@@ -467,25 +623,141 @@ public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> impl
      * 本地轮询时主动查询支付平台，若已支付则推进本地状态。
      */
     private void tryRefreshFromPlatform(OshPayment payment) {
+        reconcilePaymentFromPlatform(payment);
+    }
+
+    @Override
+    public PlatformPayQueryResult reconcilePaymentFromPlatform(String paymentNo) {
+        OshPayment payment = paymentMapper.selectByPaymentNo(paymentNo);
+        if (Objects.isNull(payment)) {
+            log.warn("对账跳过，支付流水不存在, paymentNo={}", paymentNo);
+            return PlatformPayQueryResult.UNKNOWN;
+        }
+        return reconcilePaymentFromPlatform(payment);
+    }
+
+    @Override
+    public PlatformPayQueryResult reconcilePaymentFromPlatform(OshPayment payment) {
+        if (Objects.isNull(payment)) {
+            return PlatformPayQueryResult.UNKNOWN;
+        }
+        if (Objects.equals(payment.getStatus(), PAYMENT_SUCCESS)) {
+            handleOrderProductPaid(payment.getOrderNo());
+            return PlatformPayQueryResult.PAID;
+        }
+        if (Objects.equals(payment.getStatus(), PAYMENT_CLOSED)) {
+            return PlatformPayQueryResult.CLOSED;
+        }
+        if (Objects.equals(payment.getStatus(), PAYMENT_FAILED)) {
+            return PlatformPayQueryResult.FAILED;
+        }
+        if (!Objects.equals(payment.getStatus(), PAYMENT_PENDING)) {
+            return PlatformPayQueryResult.UNKNOWN;
+        }
+
+        Map<String, String> platformResult;
         try {
-            Map<String, String> platformResult = payService.queryPay(payment.getPaymentNo());
-            if (Objects.isNull(platformResult)) {
-                return;
-            }
-            String tradeStatus = platformResult.get("status");
-            // 易支付 api.php 返回 status=1 表示已支付
-            if ("1".equals(tradeStatus)) {
-                String platformTradeNo = platformResult.get("trade_no");
-                LocalDateTime paidTime = LocalDateTime.now();
-                executeInTransaction(() -> {
-                    paymentMapper.updatePendingToSuccess(payment.getPaymentNo(), platformTradeNo, paidTime);
-                    orderMapper.updatePendingToPaid(payment.getOrderNo(), paidTime);
-                });
-                handleOrderProductPaid(payment.getOrderNo());
-            }
+            platformResult = payService.queryPay(
+                    payment.getPaymentNo(),
+                    payment.getProvider(),
+                    payment.getAmount()
+            );
         } catch (Exception e) {
             log.warn("主动查询支付平台异常, paymentNo={}", payment.getPaymentNo(), e);
+            return PlatformPayQueryResult.UNKNOWN;
         }
+        if (Objects.isNull(platformResult)) {
+            return PlatformPayQueryResult.UNKNOWN;
+        }
+
+        String tradeStatus = platformResult.get("status");
+        if ("closed".equals(tradeStatus)) {
+            return closeTerminalPaymentFromPlatform(payment);
+        }
+        if ("failed".equals(tradeStatus)) {
+            return failTerminalPaymentFromPlatform(payment, platformResult);
+        }
+        if (!"1".equals(tradeStatus)) {
+            return "0".equals(tradeStatus) ? PlatformPayQueryResult.UNPAID : PlatformPayQueryResult.UNKNOWN;
+        }
+        if (StringUtils.isNotBlank(platformResult.get("money"))
+                && !sameMoney(platformResult.get("money"), payment.getAmount())) {
+            log.error("支付平台查单金额不一致，拒绝补单, paymentNo={}, orderNo={}",
+                    payment.getPaymentNo(), payment.getOrderNo());
+            return PlatformPayQueryResult.UNKNOWN;
+        }
+
+        LocalDateTime paidTime = LocalDateTime.now();
+        String platformTradeNo = platformResult.get("trade_no");
+        boolean paymentUpdated = Boolean.TRUE.equals(executeInTransaction(() -> {
+            int updated = paymentMapper.updatePendingToSuccess(payment.getPaymentNo(), platformTradeNo, paidTime, null);
+            if (updated == 0) {
+                return false;
+            }
+            int orderUpdated = orderMapper.updatePendingToPaid(payment.getOrderNo(), paidTime);
+            if (orderUpdated != 1) {
+                throw new ServiceException("补单时订单状态并发冲突");
+            }
+            handleOrderProductPaid(payment.getOrderNo());
+            return true;
+        }));
+        if (!paymentUpdated) {
+            log.info("主动查单发现订单已被处理，跳过重复权益发放, paymentNo={}, orderNo={}",
+                    payment.getPaymentNo(), payment.getOrderNo());
+        }
+        return PlatformPayQueryResult.PAID;
+    }
+
+    private PlatformPayQueryResult closeTerminalPaymentFromPlatform(OshPayment payment) {
+        OshOrder order = orderMapper.selectByOrderNo(payment.getOrderNo());
+        return executeInTransaction(() -> {
+            int paymentUpdated = paymentMapper.updatePendingToClosed(payment.getPaymentNo());
+            if (paymentUpdated != 1) {
+                OshPayment latest = paymentMapper.selectByPaymentNo(payment.getPaymentNo());
+                if (latest != null && Objects.equals(latest.getStatus(), PAYMENT_SUCCESS)) {
+                    return PlatformPayQueryResult.PAID;
+                }
+                if (latest != null && Objects.equals(latest.getStatus(), PAYMENT_CLOSED)) {
+                    return PlatformPayQueryResult.CLOSED;
+                }
+                if (latest != null && Objects.equals(latest.getStatus(), PAYMENT_FAILED)) {
+                    return PlatformPayQueryResult.FAILED;
+                }
+                return PlatformPayQueryResult.UNKNOWN;
+            }
+            if (orderMapper.updatePendingToClosed(payment.getOrderNo(), LocalDateTime.now()) != 1) {
+                throw new ServiceException("同步平台关单状态时发生并发冲突");
+            }
+            refundOrderPoints(payment.getOrderNo());
+            registerAfterCommit(() -> handleOrderProductCanceled(order, payment.getPaymentNo()));
+            return PlatformPayQueryResult.CLOSED;
+        });
+    }
+
+    private PlatformPayQueryResult failTerminalPaymentFromPlatform(OshPayment payment,
+                                                                    Map<String, String> platformResult) {
+        OshOrder order = orderMapper.selectByOrderNo(payment.getOrderNo());
+        return executeInTransaction(() -> {
+            int paymentUpdated = paymentMapper.updatePendingToFailed(
+                    payment.getPaymentNo(), toJson(platformResult));
+            if (paymentUpdated != 1) {
+                OshPayment latest = paymentMapper.selectByPaymentNo(payment.getPaymentNo());
+                if (latest != null && Objects.equals(latest.getStatus(), PAYMENT_SUCCESS)) {
+                    return PlatformPayQueryResult.PAID;
+                }
+                if (latest != null && (Objects.equals(latest.getStatus(), PAYMENT_FAILED)
+                        || Objects.equals(latest.getStatus(), PAYMENT_CLOSED))) {
+                    return PlatformPayQueryResult.FAILED;
+                }
+                return PlatformPayQueryResult.UNKNOWN;
+            }
+            if (orderMapper.updatePendingToClosed(payment.getOrderNo(), LocalDateTime.now()) != 1) {
+                throw new ServiceException("平台失败终态关闭订单时发生并发冲突");
+            }
+            refundOrderPoints(payment.getOrderNo());
+            registerAfterCommit(() -> handleOrderProductCanceled(order, payment.getPaymentNo()));
+            return PlatformPayQueryResult.FAILED;
+        });
     }
 
     /**
@@ -497,8 +769,13 @@ public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> impl
      */
     private void completeFreePayment(String orderNo, String paymentNo, LocalDateTime paidTime) {
         executeInTransaction(() -> {
-            paymentMapper.updatePendingToSuccess(paymentNo, null, paidTime);
-            orderMapper.updatePendingToPaid(orderNo, paidTime);
+            if (paymentMapper.updatePendingToSuccess(paymentNo, null, paidTime, null) != 1) {
+                throw new ServiceException("免费订单支付流水状态更新失败");
+            }
+            if (orderMapper.updatePendingToPaid(orderNo, paidTime) != 1) {
+                throw new ServiceException("免费订单状态更新失败");
+            }
+            handleOrderProductPaid(orderNo);
         });
     }
 
@@ -553,13 +830,19 @@ public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> impl
      * @param payResponse 支付渠道响应
      */
     private void failPaymentAndCloseOrder(String paymentNo, String orderNo, PayResponse payResponse) {
+        OshOrder order = orderMapper.selectByOrderNo(orderNo);
         executeInTransaction(() -> {
-            paymentMapper.updatePendingToFailed(paymentNo, toJson(payResponse));
-            int orderUpdated = orderMapper.updatePendingToClosed(orderNo, LocalDateTime.now());
-            if (orderUpdated > 0) {
-                refundOrderPoints(orderNo);
+            int paymentUpdated = paymentMapper.updatePendingToFailed(paymentNo, toJson(payResponse));
+            if (paymentUpdated != 1) {
+                throw new ServiceException("支付创建失败时支付流水状态已变化");
             }
+            int orderUpdated = orderMapper.updatePendingToClosed(orderNo, LocalDateTime.now());
+            if (orderUpdated != 1) {
+                throw new ServiceException("支付创建失败时订单状态已变化");
+            }
+            refundOrderPoints(orderNo);
         });
+        handleOrderProductCanceled(order, paymentNo);
     }
 
     /**
@@ -575,6 +858,17 @@ public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> impl
     }
 
     /**
+     * 执行本地事务操作，并返回事务内计算结果。
+     *
+     * @param operation 需要纳入事务的操作
+     * @param <T> 返回结果类型
+     * @return 事务内操作返回值
+     */
+    private <T> T executeInTransaction(Supplier<T> operation) {
+        return new TransactionTemplate(transactionManager).execute(status -> operation.get());
+    }
+
+    /**
      * 关闭待支付流水和关联订单。
      *
      * @param payment 待关闭支付流水
@@ -586,15 +880,75 @@ public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> impl
         if (payment.getStatus() != PAYMENT_PENDING) {
             throw new ServiceException("当前支付状态不可取消");
         }
-        String paymentNo = payment.getPaymentNo();
-        executeInTransaction(() -> {
-            int paymentUpdated = paymentMapper.updatePendingToClosed(paymentNo);
-            int orderUpdated = orderMapper.updatePendingToClosed(payment.getOrderNo(), LocalDateTime.now());
-            if (paymentUpdated > 0 && orderUpdated > 0) {
-                refundOrderPoints(payment.getOrderNo());
+        if (!PaymentProviderEnum.INTERNAL.getValue().equals(payment.getProvider())) {
+            PlatformPayQueryResult queryResult = reconcilePaymentFromPlatform(payment);
+            if (queryResult == PlatformPayQueryResult.PAID) {
+                throw new ServiceException("订单已支付，不能取消");
             }
-        });
-        toolPurchaseService.cancelPendingPurchase(paymentNo);
+            if (queryResult == PlatformPayQueryResult.FAILED) {
+                return;
+            }
+            if (queryResult == PlatformPayQueryResult.CLOSED) {
+                return;
+            }
+            if (queryResult == PlatformPayQueryResult.UNKNOWN) {
+                throw new ServiceException("支付平台状态暂时未知，稍后重试关闭");
+            }
+            if (!payService.closePay(payment.getPaymentNo(), payment.getProvider())) {
+                throw new ServiceException("支付平台关单失败，未关闭本地订单");
+            }
+            PlatformPayQueryResult afterClose = reconcilePaymentFromPlatform(
+                    paymentMapper.selectByPaymentNo(payment.getPaymentNo()));
+            if (afterClose == PlatformPayQueryResult.PAID) {
+                throw new ServiceException("关单后确认订单已支付，不能关闭本地订单");
+            }
+            if (afterClose == PlatformPayQueryResult.FAILED) {
+                return;
+            }
+            if (afterClose == PlatformPayQueryResult.CLOSED) {
+                return;
+            }
+            if (afterClose == PlatformPayQueryResult.UNKNOWN) {
+                throw new ServiceException("关单后平台状态暂时未知，保持待支付并稍后重试");
+            }
+        }
+        String paymentNo = payment.getPaymentNo();
+        OshOrder order = orderMapper.selectByOrderNo(payment.getOrderNo());
+        boolean closed = Boolean.TRUE.equals(executeInTransaction(() -> {
+            int paymentUpdated = paymentMapper.updatePendingToClosed(paymentNo);
+            if (paymentUpdated != 1) {
+                return false;
+            }
+            int orderUpdated = orderMapper.updatePendingToClosed(payment.getOrderNo(), LocalDateTime.now());
+            if (orderUpdated != 1) {
+                throw new ServiceException("取消支付时订单状态并发冲突");
+            }
+            refundOrderPoints(payment.getOrderNo());
+            return true;
+        }));
+        if (closed) {
+            handleOrderProductCanceled(order, paymentNo);
+        }
+    }
+
+    /**
+     * 执行订单取消后的业务释放处理。
+     *
+     * @param order 统一订单
+     * @param paymentNo 支付流水号
+     */
+    private void handleOrderProductCanceled(OshOrder order, String paymentNo) {
+        if (Objects.isNull(order)) {
+            log.warn("订单取消后置处理跳过，统一订单不存在, paymentNo={}", paymentNo);
+            return;
+        }
+        ProductTypeEnum productType = ProductTypeEnum.fromCode(order.getProductType());
+        if (Objects.isNull(productType)) {
+            log.warn("订单取消后置处理跳过，商品类型非法, orderNo={}, productType={}",
+                    order.getOrderNo(), order.getProductType());
+            return;
+        }
+        cancelHandlerRegistry.handleIfPresent(productType.getName(), order.getOrderNo(), paymentNo);
     }
 
     /**
@@ -655,8 +1009,39 @@ public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> impl
         OshPaymentNotifyLogDO notifyLog = new OshPaymentNotifyLogDO();
         notifyLog.setPaymentNo(paymentNo);
         notifyLog.setPlatformTradeNo(platformTradeNo);
-        notifyLog.setNotifyPayload(toJson(params));
+        notifyLog.setNotifyPayload(toJson(sanitizeLegacyNotify(params)));
         notifyLog.setSignValid(signValid ? SIGN_VALID : SIGN_INVALID);
+        notifyLog.setProcessStatus(NotifyProcessStatusEnum.RECEIVED.getCode());
+        notifyLog.setCreatedTime(new Date());
+        return notifyLog;
+    }
+
+    private Map<String, String> sanitizeLegacyNotify(Map<String, String> params) {
+        Map<String, String> safe = new LinkedHashMap<>();
+        if (params == null) {
+            return safe;
+        }
+        copyIfPresent(params, safe, "out_trade_no");
+        copyIfPresent(params, safe, "trade_no");
+        copyIfPresent(params, safe, "trade_status");
+        copyIfPresent(params, safe, "type");
+        copyIfPresent(params, safe, "money");
+        copyIfPresent(params, safe, "pid");
+        return safe;
+    }
+
+    private void copyIfPresent(Map<String, String> source, Map<String, String> target, String key) {
+        if (source.containsKey(key)) {
+            target.put(key, source.get(key));
+        }
+    }
+
+    private OshPaymentNotifyLogDO buildVerifiedNotifyLog(VerifiedPaymentNotification notification) {
+        OshPaymentNotifyLogDO notifyLog = new OshPaymentNotifyLogDO();
+        notifyLog.setPaymentNo(notification.getPaymentNo());
+        notifyLog.setPlatformTradeNo(notification.getPlatformTradeNo());
+        notifyLog.setNotifyPayload(toJson(notification.getSafePayload()));
+        notifyLog.setSignValid(SIGN_VALID);
         notifyLog.setProcessStatus(NotifyProcessStatusEnum.RECEIVED.getCode());
         notifyLog.setCreatedTime(new Date());
         return notifyLog;
@@ -675,16 +1060,27 @@ public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> impl
                                        String platformTradeNo,
                                        OshPayment payment,
                                        OshPaymentNotifyLogDO notifyLog) {
+        return completePaidNotify(paymentNo, platformTradeNo, payment, notifyLog, null);
+    }
+
+    private boolean completePaidNotify(String paymentNo,
+                                       String platformTradeNo,
+                                       OshPayment payment,
+                                       OshPaymentNotifyLogDO notifyLog,
+                                       Integer channel) {
         LocalDateTime paidTime = LocalDateTime.now();
 
         // 更新支付流水，避免重复回调重复推进
-        int paymentUpdated = paymentMapper.updatePendingToSuccess(paymentNo, platformTradeNo, paidTime);
+        int paymentUpdated = paymentMapper.updatePendingToSuccess(paymentNo, platformTradeNo, paidTime, channel);
         if (paymentUpdated == 0) {
             return handlePaymentUpdateConflict(paymentNo, notifyLog);
         }
 
         // 同步推进订单状态和回调处理结果
-        orderMapper.updatePendingToPaid(payment.getOrderNo(), paidTime);
+        int orderUpdated = orderMapper.updatePendingToPaid(payment.getOrderNo(), paidTime);
+        if (orderUpdated != 1) {
+            throw new ServiceException("支付回调更新订单时发生并发冲突");
+        }
         markNotifyLog(notifyLog, SIGN_VALID, NotifyProcessStatusEnum.SUCCESS.getCode(), null);
 
         // 根据商品类型发放权益
@@ -698,27 +1094,70 @@ public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> impl
      * @param orderNo 订单号
      */
     private void handleOrderProductPaid(String orderNo) {
+        boolean newTask = !entitlementTaskService.exists(orderNo);
+        entitlementTaskService.ensureTask(orderNo);
 
-        try {
-            PaySuccessMessage message = packgePaySuccessMessage(orderNo);
-            KafkaMessageUtil.sendMessage(
-                    KafkaConstants.PAY_SUCCESS_TOPIC,
-                    orderNo,
-                    JSON.toJSONString(message)
-            );
-            log.info("【支付】发送支付成功消息成功，orderNo={}, userId={}", orderNo,UserContextUtil.getCurrentUserId());
-        }catch (Exception e) {
-            log.info("【支付】发送支付成功消息失败，orderNo={}, userId={}", orderNo, UserContextUtil.getCurrentUserId());
-        }
+        Runnable paidTask = () -> {
+            if (entitlementTaskService.isTaskMode()) {
+                entitlementTaskService.processOrderSafely(orderNo);
+                return;
+            }
+            if (!newTask) {
+                return;
+            }
+            recordContributionRevenue(orderNo);
 
+            try {
+                paymentSuccessEventPublisher.publish(orderNo);
+                log.info("【支付】发送支付成功消息成功，orderNo={}, userId={}", orderNo, UserContextUtil.getCurrentUserId());
+            } catch (Exception e) {
+                log.info("【支付】发送支付成功消息失败，orderNo={}, userId={}", orderNo, UserContextUtil.getCurrentUserId());
+            }
+        };
+
+        registerAfterCommit(paidTask);
     }
 
-    private PaySuccessMessage packgePaySuccessMessage(String orderNo) {
-        PaySuccessMessage  message = new PaySuccessMessage();
-        message.setOrderNo(orderNo);
+    private void registerAfterCommit(Runnable task) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            task.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                task.run();
+            }
+        });
+    }
 
+    private void recordContributionRevenue(String orderNo) {
+        OshOrder order = orderMapper.selectByOrderNo(orderNo);
+        if (Objects.isNull(order)) {
+            return;
+        }
+        ProductTypeEnum productType = ProductTypeEnum.fromCode(order.getProductType());
+        if (Objects.isNull(productType) || !isContributionResource(productType)) {
+            return;
+        }
+        try {
+            contributionService.recordRevenue(
+                    productType.getName(),
+                    order.getProductId(),
+                    order.getId(),
+                    order.getOrderNo(),
+                    order.getUserId(),
+                    order.getPayableAmount(),
+                    order.getPointsAmount(),
+                    productType.getName()
+            );
+        } catch (Exception e) {
+            log.warn("record contribution revenue failed, orderNo={}, productType={}", orderNo, productType.getName(), e);
+        }
+    }
 
-        return message;
+    private boolean isContributionResource(ProductTypeEnum productType) {
+        return productType != null && ContributionResourceType.contributionTracked(productType.getName());
     }
 
     /**
@@ -1037,14 +1476,24 @@ public class OrderServiceImpl extends ServiceImpl<OshOrderMapper, OshOrder> impl
     }
 
     /**
-     * 解析支付渠道枚举，默认微信支付。
+     * 解析支付渠道枚举。新建订单统一走支付宝；旧前端传 wxpay/wechat/union 时也兜底为支付宝。
      *
      * @param channelValue 前端传入的渠道标识
      * @return 支付渠道枚举
      */
     private PayChannelEnum resolvePaymentChannel(String channelValue) {
-        PayChannelEnum channel = PayChannelEnum.fromValue(channelValue);
-        return Objects.nonNull(channel) ? channel : PayChannelEnum.WXPAY;
+        if (StringUtils.isBlank(channelValue)) {
+            return PayChannelEnum.ALIPAY;
+        }
+        String normalized = channelValue.trim().toLowerCase();
+        if (PayChannelEnum.WXPAY.getValue().equals(normalized)
+                || "wechat".equals(normalized)
+                || "union".equals(normalized)
+                || "unionpay".equals(normalized)) {
+            return PayChannelEnum.ALIPAY;
+        }
+        PayChannelEnum channel = PayChannelEnum.fromValue(normalized);
+        return Objects.nonNull(channel) ? channel : PayChannelEnum.ALIPAY;
     }
 
     /**

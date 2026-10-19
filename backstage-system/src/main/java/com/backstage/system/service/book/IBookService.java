@@ -82,6 +82,13 @@ public interface IBookService extends IService<BookDO> {
      */
     void deleteBook(Long id);
 
+    /**
+     * 恢复逻辑删除的电子书，仅创始人 level=6 可操作。
+     *
+     * @param id 电子书ID
+     */
+    void restoreBook(Long id);
+
 
     Page<BookListVO> getBookPageList(BookListReqVO reqVO);
 

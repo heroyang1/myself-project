@@ -42,27 +42,59 @@ public class EmailUtil {
      * @return 唯一标识
      */
     public String sendEmailGetUniqueId(String username, String email) throws MessagingException {
+        return sendEmailGetUniqueId(username, email, null, null);
+    }
+
+    public String sendEmailGetUniqueId(String username, String email, String redeemCode, String productName) throws MessagingException {
         checkEmail(email);
-        MimeMessage mimeMessage = javaMailSender.createMimeMessage();
-        MimeMessageHelper mimeMessageHelper = new MimeMessageHelper(mimeMessage, true);
         // 准备模板数据
         Context context = new Context();
         context.setVariable("username", username);
         context.setVariable("message", "欢迎使用我们的服务！");
+        context.setVariable("subtitle", redeemCode == null ? "感谢您注册开源助手 · 开启开源之旅" : "请完成注册，并在登录后手动核销您购买的资源");
         String uniqueId = UUID.randomUUID() + "-" + System.currentTimeMillis();
         context.setVariable("uniqueId", uniqueId);
-        // 通过模板引擎生成HTML内容
+        context.setVariable("redeemCode", redeemCode);
+        context.setVariable("productName", productName);
+        sendUniqueIdTemplate(subject, email, context);
+        return uniqueId;
+    }
+
+    public void sendAdminInviteEmail(String email, String roleName, String inviteLink, long expireDays, String expireTime, Long initialPoints) throws MessagingException {
+        checkEmail(email);
+        Context context = new Context();
+        context.setVariable("username", "受邀用户");
+        context.setVariable("subtitle", "您被邀请成为平台「" + roleName + "」");
+        context.setVariable("inviteLink", inviteLink);
+        context.setVariable("roleName", roleName);
+        context.setVariable("expireDays", expireDays);
+        context.setVariable("expireTime", expireTime);
+        context.setVariable("initialPoints", initialPoints);
+        sendUniqueIdTemplate("您被邀请成为平台" + roleName, email, context);
+    }
+
+    public void sendAdminInviteRegisterSuccessEmail(String username, String email, String uniqueId, String roleName) throws MessagingException {
+        checkEmail(email);
+        Context context = new Context();
+        context.setVariable("username", username);
+        context.setVariable("subtitle", "您已成功注册为平台「" + roleName + "」");
+        context.setVariable("uniqueId", uniqueId);
+        context.setVariable("roleName", roleName);
+        context.setVariable("adminInviteSuccess", true);
+        sendUniqueIdTemplate("注册成功通知", email, context);
+    }
+
+    private void sendUniqueIdTemplate(String mailSubject, String email, Context context) throws MessagingException {
+        MimeMessage mimeMessage = javaMailSender.createMimeMessage();
+        MimeMessageHelper mimeMessageHelper = new MimeMessageHelper(mimeMessage, true);
         String content = springTemplateEngine.process("GetUniqueId", context);
-        // 设置邮件内容
-        mimeMessageHelper.setSubject(subject);
+        mimeMessageHelper.setSubject(mailSubject);
         mimeMessageHelper.setText(content, true);
         mimeMessageHelper.setTo(email);
         mimeMessageHelper.setFrom(from);
-        //
         ClassPathResource imageResource = new ClassPathResource("static/open-source-helper.jpg");
         mimeMessageHelper.addInline("logoImage", imageResource);
         javaMailSender.send(mimeMessage);
-        return uniqueId;
     }
     /**
      * 发送普通邮件
@@ -142,5 +174,28 @@ public class EmailUtil {
         if (!email.matches(regex)) {
             throw new RuntimeException("邮箱格式错误");
         }
+    }
+    /**
+     * 发送普通邮件到单个收件人
+     * @param email 收件人邮箱
+     * @param subject 邮件主题
+     * @param content 邮件内容
+     */
+    public void sendEmailCommonTo(String email, String subject, String content) throws MessagingException {
+        checkEmail(email);
+        MimeMessage mimeMessage = javaMailSender.createMimeMessage();
+        MimeMessageHelper mimeMessageHelper = new MimeMessageHelper(mimeMessage, true);
+        Context context = new Context();
+        context.setVariable("subject", subject);
+        context.setVariable("content", content);
+        context.setVariable("sendTime", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        String html = springTemplateEngine.process("Common", context);
+        mimeMessageHelper.setSubject(subject);
+        mimeMessageHelper.setText(html, true);
+        mimeMessageHelper.setTo(email);
+        mimeMessageHelper.setFrom(from);
+        ClassPathResource imageResource = new ClassPathResource("static/open-source-helper.jpg");
+        mimeMessageHelper.addInline("logoImage", imageResource);
+        javaMailSender.send(mimeMessage);
     }
 }

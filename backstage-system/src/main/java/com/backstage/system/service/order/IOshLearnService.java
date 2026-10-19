@@ -43,19 +43,4 @@ public interface IOshLearnService
      */
     public int updateOshLearn(OshLearn oshLearn);
 
-    /**
-     * 批量删除立即学习
-     * 
-     * @param ids 需要删除的立即学习主键集合
-     * @return 结果
-     */
-    public int deleteOshLearnByIds(Long[] ids);
-
-    /**
-     * 删除立即学习信息
-     * 
-     * @param id 立即学习主键
-     * @return 结果
-     */
-    public int deleteOshLearnById(Long id);
 }
