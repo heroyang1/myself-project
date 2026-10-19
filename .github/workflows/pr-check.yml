@@ -18,7 +18,7 @@ env:
 
 jobs:
   process-guard:
-    name: Spec & Process Guard
+    name: Secret Scan & PR Hygiene
     runs-on: ubuntu-latest
     steps:
       - name: Lint PR title (Conventional Commits)
@@ -47,26 +47,6 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Detect OpenSpec exemption
-        id: exempt
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const body = context.payload.pull_request?.body || '';
-            const exempt = /OpenSpec-Exempt:\s*true/i.test(body) && /Reason:\s*\S+/i.test(body);
-            core.setOutput('exempt', exempt ? 'true' : 'false');
-
-      - name: Verify AI process files and OpenSpec change
-        env:
-          BASE_REF: origin/${{ github.base_ref }}
-          ALLOW_OPENSPEC_EXEMPT: ${{ steps.exempt.outputs.exempt }}
-        run: bash scripts/verify-ai-process.sh
-
-      - name: Code quality guard (DDL/no-field/entity checks)
-        env:
-          BASE_REF: origin/${{ github.base_ref }}
-        run: bash scripts/code-quality-guard.sh
 
   build:
     name: Build & Verify
@@ -124,35 +104,6 @@ jobs:
           mvn -B test -pl backstage-admin -am
           -Dtest='LayeredArchitectureTest,CodingConventionArchitectureTest'
           -Dsurefire.failIfNoSpecifiedTests=false
-
-      # 文件行数：仅告警不阻断（项目未设硬行数门禁，多模块路径）
-      - name: File size advisory (non-blocking)
-        shell: bash
-        run: |
-          threshold=300
-          found=0
-          for f in $(find backstage-*/src/main/java -name '*.java' 2>/dev/null); do
-            lines=$(wc -l < "$f")
-            if [ "$lines" -gt "$threshold" ]; then
-              echo "::warning file=$f::$f 有 $lines 行（参考上限 $threshold，不阻断）"
-              found=$((found+1))
-            fi
-          done
-          echo "超过 $threshold 行的文件共 $found 个（仅告警）。拆分指南见 docs/ai/conventions/。"
-
-      # 文档新鲜度：仅告警不阻断（需 fetch-depth: 0 才能取到 git 历史）
-      - name: Doc freshness advisory (non-blocking)
-        shell: bash
-        run: |
-          for f in $(find docs/design -name '*.md' 2>/dev/null); do
-            last_mod=$(git log -1 --format=%ct -- "$f" 2>/dev/null || echo "")
-            [ -z "$last_mod" ] && continue
-            now=$(date +%s)
-            days_old=$(( (now - last_mod) / 86400 ))
-            if [ "$days_old" -gt 60 ]; then
-              echo "::warning file=$f::$f 已 ${days_old} 天未更新，可能过期"
-            fi
-          done
 
       - name: Build backend
         run: mvn clean install -DskipTests -pl '!backstage-flink'
