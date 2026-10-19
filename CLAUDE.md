@@ -28,16 +28,18 @@ created: 2026-10-18
 ## 第 2 层 · 核心约束（critical 红线 · 命中即停先问人，违例 = PR fail）
 
 > 只收可判定且有机器抓手的 critical；红线写进文档 ≠ 被拦截，生效以 CI 实跑为准。
+>
+> ⚠️ **个人维护模式（迁移后现状）**：R2/R3/R7（OpenSpec 门禁）与 R6（DDL 守卫）已从 `pr-check.yml` 移除，**不再是 CI 门禁**——R2/R3/R7 仅 `bash scripts/verify-ai-process.sh` 手动可跑，R6 仅本地 pre-commit 钩子。真正仍由 CI 强制的是 R1（gitleaks）、R4/R5/R9（ArchUnit）、R8（PR 标题）与构建+核心测试。
 
 | # | 红线 | 检查语句（CI 抓手） |
 |---|---|---|
 | R1 | token/密码/私钥/日志产物不许进仓 | pr-check.yml 的 gitleaks job |
-| R2 | 触碰 `pom.xml`、`sql/`、`application*.yml\|properties` 必须带非空 `openspec/changes/<id>/` 四件套，**不可豁免** | `bash scripts/verify-ai-process.sh` |
-| R3 | 中大型或影响行为/接口/权限/数据的改动同样须带四件套；豁免须 PR 正文 `OpenSpec-Exempt: true` + 非空 `Reason:` | 同上 |
+| R2 | 触碰 `pom.xml`、`sql/`、`application*.yml\|properties` 建议带非空 `openspec/changes/<id>/` 四件套（**个人仓已从 CI 移除，不再强制**） | ~~pr-check.yml~~ 仅手动 `bash scripts/verify-ai-process.sh` |
+| R3 | 中大型或影响行为/接口/权限/数据的改动建议带四件套（个人仓已非强制；如需恢复门禁，重跑 verify-ai-process.sh） | 同上（已移出 CI） |
 | R4 | **依赖方向红线**四条：① 分层只许 Controller→Service→Mapper 单向，common 不许反向；② 禁反向依赖三形态——Mapper 调 Service、Entity 注入 Service、Service/Entity 反向调用 Controller；③ 跨域取数只走对方 Service 接口，不得注入其他域的 Mapper（Controller 直连 Mapper 同禁），跨域反向通知走领域事件/outbox、禁反向回写；④ 禁经 static 工具类 `SpringUtils.getBean` 运行时取 Bean（编译期看不见、静态扫描最难抓，最危险形态） | ①②：`mvn test -pl backstage-admin -Dtest=LayeredArchitectureTest`；④：`-Dtest=CodingConventionArchitectureTest` 冻结强制（存量 14 处入基线只拦新增）；③：无稳定域包锚点，暂评审拦截+import 台账(≥207)，ArchUnit 化待前置包规整化 change |
 | R5 | 禁 `e.printStackTrace()`；裸 `System.out.println` / 裸 HTTP 禁新增（存量冻结） | `mvn test -pl backstage-admin -Dtest=CodingConventionArchitectureTest` |
-| R6 | 改表必须同步 DDL/ALTER/Entity/VO 四层一致 | `bash scripts/code-quality-guard.sh` |
-| R7 | `openspec/changes/archive/` 只读——改/删已归档内容被拦，修正历史须新建 change | verify-ai-process.sh 归档守卫 |
+| R6 | 改表必须同步 DDL/ALTER/Entity/VO 四层一致 | 个人仓已移出 CI；仅本地 pre-commit 钩子 `code-quality-guard.sh` |
+| R7 | `openspec/changes/archive/` 只读——修正历史须新建 change（个人仓已移出 CI） | ~~pr-check.yml~~ 仅手动 verify-ai-process.sh 归档守卫 |
 | R8 | PR 标题必须满足 Conventional Commits `<type>(<scope>)?: <subject>` | pr-check.yml 标题 lint |
 | R9 | ArchUnit 两测试文件与 `backstage-admin/archunit-store/` 必须在 git 索引内，缺一即门禁静默失效 | "Assert ArchUnit test files present" 步骤 |
 
